@@ -1,78 +1,55 @@
-import textwrap, random, os
+import textwrap, random
 from gtts import gTTS
-from moviepy.editor import *
+from moviepy.editor import AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 
-# 1. VI AL SCRIPTS WITH HOOK
-viral_scripts = [
-    "WAIT! Apple is making a foldable iPhone! Yes, leaks say it will have NO CREASE. It will launch in 2026 for 2000 dollars. The screen will be bigger than iPad mini. Would you buy it?",
-    "STOP SCROLLING! Your phone is listening to you! This hidden setting in Android stops Google from tracking you. Go to Settings, Privacy, and turn off Ads Personalization right now!",
-    "This AI trick will blow your mind! Your phone can now remove any object from photos in one tap. Just open Google Photos, tap Eraser, and magic! No Photoshop needed!"
+scripts = [
+    "WAIT Apple is making a foldable iPhone! Leaks say it will have NO CREASE. It will launch in 2026 for 2000 dollars. Would you buy it?",
+    "STOP SCROLLING Your phone is listening to you! Go to Settings Privacy and turn off Ads Personalization right now to stop tracking!",
+    "This AI trick will blow your mind! Your phone can remove any object from photos in one tap. Just open Google Photos and tap Eraser!"
 ]
 
-full_text = random.choice(viral_scripts)
+full_text = random.choice(scripts)
 sentences = full_text.split('. ')
-print(f"Script: {full_text}")
+print(full_text)
 
-# Colors for every 2 sec change
-bg_colors = [(10,10,25), (90,0,30), (0,70,50), (30,0,90), (80,50,0)]
+bg_colors = [(10,10,25), (90,0,30), (0,70,50), (30,0,90)]
 
 clips = []
-audio_clips = []
-start = 0
-
 for i, sentence in enumerate(sentences):
-    if not sentence.strip():
+    if len(sentence.strip()) < 3:
         continue
-
-    # Voice for this sentence
     tts = gTTS(text=sentence, lang='en', tld='us')
-    temp_mp3 = f"voice_{i}.mp3"
-    tts.save(temp_mp3)
-    audio = AudioFileClip(temp_mp3)
-    audio_clips.append(audio)
+    mp3 = f"v{i}.mp3"
+    tts.save(mp3)
+    audio = AudioFileClip(mp3)
 
-    # Image for this sentence - changes every time
     W, H = 1080, 1920
-    color = bg_colors[i % len(bg_colors)]
-    img = Image.new('RGB', (W, H), color=color)
+    img = Image.new('RGB', (W, H), color=bg_colors[i % len(bg_colors)])
     draw = ImageDraw.Draw(img)
-
-    # Border glow
-    draw.rectangle([40, 40, W-40, H-40], outline=(255,255,255), width=4)
-
-    # Font
+    
+    # Safe font
+    font = ImageFont.load_default()
     try:
-        font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 75)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 45)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
     except:
-        font_big = ImageFont.load_default()
-        font_small = font_big
+        pass
 
-    # If first sentence -> Add HOOK
+    # Hook for first
     if i == 0:
-        draw.text((W//2, 300), "WAIT!! 😳", font=font_big, fill=(255,255,0), anchor="mm")
+        draw.text((100, 250), "WAIT!!", fill=(255,255,0), font=font)
 
-    wrapped = textwrap.fill(sentence.upper(), width=20)
-    bbox = draw.multiline_textbbox((0,0), wrapped, font=font_big)
-    tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-    draw.multiline_text(((W-tw)//2, (H-th)//2), wrapped, font=font_big, fill=(255,255,255), align="center", spacing=12, stroke_width=2, stroke_fill=(0,0,0))
+    wrapped = textwrap.fill(sentence.upper(), width=22)
+    draw.multiline_text((80, 700), wrapped, fill=(255,255,255), font=font, spacing=10)
 
-    draw.text((W//2, H-150), "Tech Operation Theatre", font=font_small, fill=(255,255,255), anchor="mm")
+    draw.text((80, 1700), "Tech Operation Theatre", fill=(200,200,200), font=font)
 
-    img_path = f"bg_{i}.png"
-    img.save(img_path)
+    path = f"b{i}.png"
+    img.save(path)
 
-    # Create clip with ZOOM animation
-    img_clip = ImageClip(img_path).set_duration(audio.duration)
-    img_clip = img_clip.resize(lambda t: 1 + 0.05*t) # Zoom effect
-    img_clip = img_clip.set_audio(audio)
-    img_clip = img_clip.set_start(start)
-    clips.append(img_clip)
-    start += audio.duration
+    ic = ImageClip(path).set_duration(audio.duration)
+    ic = ic.set_audio(audio)
+    clips.append(ic)
 
-# Final video - concatenate all small clips
-final = CompositeVideoClip(clips, size=(1080,1920))
-final = final.set_duration(start)
+final = concatenate_videoclips(clips)
 final.write_videofile("final_shorts.mp4", fps=24, codec='libx264', audio_codec='aac')
-print("PRO Video Ready!")

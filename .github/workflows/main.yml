@@ -1,7 +1,7 @@
 name: US Tech Shorts Bot
 on:
   schedule:
-    - cron: '0 14 * * *'
+    - cron: '0 12-23,0 * * *'
   workflow_dispatch:
 jobs:
   build:
@@ -18,5 +18,5 @@ jobs:
       - name: Upload video for review
         uses: actions/upload-artifact@v4
         with:
-          name: final-shorts-video
+          name: final-shorts-video-${{ github.run_number }}
           path: final_shorts.mp4

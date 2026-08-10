@@ -1,9 +1,8 @@
-name: US Tech Shorts Bot
+name: Tech Shorts US Time
 on:
   schedule:
-    - cron: '30 12 * * *'
+    - cron: '0 14 * * *'
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,12 +11,5 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Generate Video
-        run: python bot.py
-      - name: Upload Video
-        uses: actions/upload-artifact@v4
-        with:
-          name: todays-shorts
-          path: final_shorts.mp4
+      - run: pip install -r requirements.txt
+      - run: python bot.py

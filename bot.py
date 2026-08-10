@@ -1,109 +1,107 @@
-import textwrap, random, numpy as np
+import random, requests, textwrap, numpy as np, feedparser
+from io import BytesIO
 from gtts import gTTS
-from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
+from moviepy.editor import AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 
-scripts = [
-    {"text": "WAIT! Apple is making a foldable iPhone with NO CREASE! It will cost 2000 dollars and launch in 2026. Would you buy it?", "mood": "shock"},
-    {"text": "STOP! Your phone is spying on you! This one setting stops Google tracking. Go to Settings Privacy Turn off Ads Personalization NOW!", "mood": "angry"},
-    {"text": "This AI trick is INSANE! Remove any person from your photo in one tap. Open Google Photos tap Tools Magic Eraser and BOOM!", "mood": "happy"}
-]
+# --- TRENDING + EVERGREEN LOGIC ---
+print("Checking topic...")
+TRENDING_TOPIC = None
+KEYWORD = "technology"
+SCRIPT_TEXT = ""
 
-item = random.choice(scripts)
-full_text = item["text"]
-mood = item["mood"]
-sentences = [s for s in full_text.replace('! ','. ').split('. ') if len(s.strip())>2]
+try:
+    rss = "https://news.google.com/rss/search?q=tech+AI+iPhone&hl=en-US&gl=US&ceid=US:en"
+    feed = feedparser.parse(rss)
+    if feed.entries:
+        TRENDING_TOPIC = feed.entries[0].title
+        KEYWORD = "iphone" if "iPhone" in TRENDING_TOPIC or "Apple" in TRENDING_TOPIC else "AI" if "AI" in TRENDING_TOPIC else "technology"
+        SCRIPT_TEXT = f"BREAKING! {TRENDING_TOPIC}. This is huge update. Follow for more tech news!"
+        print(f"TRENDING: {TRENDING_TOPIC}")
+except:
+    pass
 
-HIGHLIGHTS = ["APPLE","IPHONE","FOLDABLE","2000","DOLLARS","NO CREASE","2026","SPYING","AI","INSANE"]
+if not TRENDING_TOPIC:
+    evergreen = [
+        {"text": "Apple is making a foldable iPhone with NO CREASE! It will cost 2000 dollars and launch in 2026.", "kw": "iphone"},
+        {"text": "Turn off this setting to stop Google tracking your phone. Go to Settings Privacy now.", "kw": "mobile phone"},
+    ]
+    pick = random.choice(evergreen)
+    SCRIPT_TEXT = pick["text"]
+    KEYWORD = pick["kw"]
+    print(f"EVERGREEN: {SCRIPT_TEXT}")
 
-def draw_character(base_img, mood):
-    W,H = base_img.size
-    draw = ImageDraw.Draw(base_img)
-    # Character position - niche center
-    cx, cy = W//2, 1650
+sentences = [s.strip() for s in SCRIPT_TEXT.split('.') if len(s.strip())>2]
+HIGHLIGHTS = ["BREAKING","APPLE","IPHONE","2000","DOLLARS","NO CREASE","2026","GOOGLE","AI"]
 
-    # Body color by mood
-    if mood=="shock": body_col=(255,235,59)
-    elif mood=="angry": body_col=(255,80,80)
-    else: body_col=(80,200,255)
-
-    # Body
-    draw.ellipse([cx-120, cy-100, cx+120, cy+150], fill=body_col, outline="black", width=6)
-    # Head
-    draw.ellipse([cx-90, cy-200, cx+90, cy-20], fill=(255,220,180), outline="black", width=6)
-    # Eyes
-    if mood=="shock":
-        draw.ellipse([cx-50, cy-150, cx-25, cy-120], fill="white", outline="black", width=3)
-        draw.ellipse([cx+25, cy-150, cx+50, cy-120], fill="white", outline="black", width=3)
-        draw.ellipse([cx-42, cy-140, cx-33, cy-130], fill="black")
-        draw.ellipse([cx+33, cy-140, cx+42, cy-130], fill="black")
-        draw.ellipse([cx-20, cy-80, cx+20, cy-50], fill="black") # open mouth
-    else:
-        draw.arc([cx-50, cy-140, cx-15, cy-110], 0, 180, fill="black", width=4)
-        draw.arc([cx+15, cy-140, cx+50, cy-110], 0, 180, fill="black", width=4)
-        draw.arc([cx-25, cy-80, cx+25, cy-60], 0, 180, fill="black", width=4)
-
-    # Hands by mood
-    if mood=="shock":
-        draw.ellipse([cx-180, cy-80, cx-120, cy-20], fill=(255,220,180), outline="black", width=5) # hands up
-        draw.ellipse([cx+120, cy-80, cx+180, cy-20], fill=(255,220,180), outline="black", width=5)
-    else:
-        draw.ellipse([cx-150, cy+0, cx-90, cy+60], fill=(255,220,180), outline="black", width=5) # pointing
-        draw.ellipse([cx+90, cy+0, cx+150, cy+60], fill=(255,220,180), outline="black", width=5)
-
-    return base_img
+# Avatar download
+HAS_AVATAR=False
+try:
+    r=requests.get("https://api.dicebear.com/7.x/avataaars/png?seed=TechOp&backgroundColor=b6e3f4", timeout=10)
+    open("avatar.png","wb").write(r.content)
+    HAS_AVATAR=True
+except:
+    pass
 
 clips=[]
 for i, sentence in enumerate(sentences):
     tts = gTTS(text=sentence, lang='en', tld='us')
-    mp3=f"v{i}.mp3"
-    tts.save(mp3)
-    audio=AudioFileClip(mp3)
+    tts.save(f"v{i}.mp3")
+    audio = AudioFileClip(f"v{i}.mp3")
 
     W,H=1080,1920
-    c1,c2=(15,15,45),(80,20,120)
-    img=Image.new('RGB',(W,H),c1)
-    d=ImageDraw.Draw(img)
-    for y in range(H):
-        r=int(c1[0]+(c2[0]-c1[0])*y/H)
-        g=int(c1[1]+(c2[1]-c1[1])*y/H)
-        b=int(c1[2]+(c2[2]-c1[2])*y/H)
-        d.line([(0,y),(W,y)],fill=(r,g,b))
+    # Related image
+    try:
+        url = f"https://loremflickr.com/{W}/{H}/{KEYWORD}?lock={random.randint(1,9999)}"
+        resp = requests.get(url, timeout=25)
+        img = Image.open(BytesIO(resp.content)).convert("RGB").resize((W,H))
+    except:
+        img = Image.new('RGB', (W,H), (15,15,45))
 
-    # Character add
-    img = draw_character(img, mood)
+    img = Image.blend(img, Image.new('RGB', (W,H), (0,0,0)), 0.45)
+    draw = ImageDraw.Draw(img)
 
     try:
-        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",68)
-        font_s=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",34)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 68)
+        font_s = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
     except:
         font=ImageFont.load_default()
         font_s=font
 
-    # Caption niche centre se thoda up - character ke upar
-    words=sentence.upper().split()
-    lines=[]; curr=""
-    for w in words:
-        if len(curr+" "+w)<18:
-            curr=curr+" "+w if curr else w
-        else:
-            lines.append(curr); curr=w
-    if curr: lines.append(curr)
+    # Caption professional - niche centre se thoda up
+    wrapped = textwrap.fill(sentence.upper(), width=18)
+    y = 1080
+    for line in wrapped.split('\n'):
+        words=line.split()
+        line_w=sum([draw.textbbox((0,0), w+" ", font=font)[2] for w in words])
+        x=(W-line_w)//2
+        for w in words:
+            col=(255,230,0) if any(h in w for h in HIGHLIGHTS) else (255,255,255)
+            draw.text((x,y), w+" ", fill=col, font=font, stroke_width=7, stroke_fill="black")
+            x+=draw.textbbox((0,0), w+" ", font=font)[2]
+        y+=85
 
-    y_start=850
-    for line in lines:
-        l_words=line.split()
-        total_w=sum([d.textbbox((0,0),w+" ",font=font)[2] for w in l_words])
-        curr_x=(W-total_w)//2
-        for w in l_words:
-            col=(255,235,59) if any(h in w for h in HIGHLIGHTS) else (255,255,255)
-            d.text((curr_x,y_start),w+" ",fill=col,font=font,stroke_width=6,stroke_fill="black")
-            curr_x+=d.textbbox((0,0),w+" ",font=font)[2]
-        y_start+=80
+    if TRENDING_TOPIC and i==0:
+        draw.text((40,140), "🔥 TRENDING", fill=(255,60,60), font=font_s, stroke_width=4, stroke_fill="black")
 
-    d.text((30,1850),"Tech Operation Theatre",fill="white",font=font_s,stroke_width=3,stroke_fill="black")
-    ic=ImageClip(np.array(img)).set_duration(audio.duration).set_audio(audio)
-    clips.append(ic)
+    draw.text((30,1850), "Tech Operation Theatre", fill="white", font=font_s, stroke_width=3, stroke_fill="black")
 
-final=concatenate_videoclips(clips,method="compose")
-final.write_videofile("final_shorts.mp4",fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=1)
+    base = ImageClip(np.array(img)).set_duration(audio.duration)
+
+    if HAS_AVATAR:
+        try:
+            av = Image.open("avatar.png").convert("RGBA").resize((300,300))
+            mask = Image.new('L', (300,300), 0)
+            ImageDraw.Draw(mask).ellipse([0,0,300,300], fill=255)
+            av.putalpha(mask)
+            a_clip = ImageClip(np.array(av)).set_duration(audio.duration).set_position((720, 1450))
+            comp = CompositeVideoClip([base, a_clip]).set_audio(audio)
+            clips.append(comp)
+            continue
+        except:
+            pass
+    clips.append(base.set_audio(audio))
+
+final = concatenate_videoclips(clips, method="compose")
+final.write_videofile("final_shorts.mp4", fps=24, codec='libx264', audio_codec='aac', threads=1, preset='ultrafast')
+print("Video Done")

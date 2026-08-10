@@ -1,4 +1,4 @@
-name: Tech Shorts US Time
+name: US Tech Shorts Bot
 on:
   schedule:
     - cron: '0 14 * * *'
@@ -11,5 +11,12 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - run: pip install -r requirements.txt
-      - run: python bot.py
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run bot
+        run: python bot.py
+      - name: Upload video for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-shorts-video
+          path: final_shorts.mp4

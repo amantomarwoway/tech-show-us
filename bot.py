@@ -1,107 +1,66 @@
-import random, requests, textwrap, numpy as np, feedparser
+import random, requests, textwrap, asyncio, numpy as np, feedparser, edge_tts
 from io import BytesIO
-from gtts import gTTS
 from moviepy.editor import AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 
-# --- TRENDING + EVERGREEN LOGIC ---
-print("Checking topic...")
-TRENDING_TOPIC = None
-KEYWORD = "technology"
-SCRIPT_TEXT = ""
+print("Finding valuable topic...")
 
+# --- 100% VALUE CONTENT ---
+KNOWLEDGE_BANK = [
+    {"title": "iPhone Battery Secret", "text": "Your iPhone battery is dying fast because of this one setting. Go to Settings, Battery, turn off Background App Refresh. Your battery will last 2 hours more daily.", "kw": "iphone"},
+    {"title": "Hidden Google Trick", "text": "This Google hidden trick will save you 10 hours a month. Type site colon reddit dot com before any search to get real answers, not ads.", "kw": "laptop"},
+    {"title": "Apple Foldable Leaked", "text": "Apple's first foldable iPhone will have zero crease and cost 2000 dollars. Samsung paid 10 million for this technology but Apple made it better.", "kw": "iphone"},
+]
+
+# Try trending for value
 try:
-    rss = "https://news.google.com/rss/search?q=tech+AI+iPhone&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(rss)
-    if feed.entries:
-        TRENDING_TOPIC = feed.entries[0].title
-        KEYWORD = "iphone" if "iPhone" in TRENDING_TOPIC or "Apple" in TRENDING_TOPIC else "AI" if "AI" in TRENDING_TOPIC else "technology"
-        SCRIPT_TEXT = f"BREAKING! {TRENDING_TOPIC}. This is huge update. Follow for more tech news!"
-        print(f"TRENDING: {TRENDING_TOPIC}")
+    feed = feedparser.parse("https://news.google.com/rss/search?q=tech+tips+AI+Apple&hl=en-US&gl=US&ceid=US:en")
+    if feed.entries and random.random() > 0.5:
+        topic = feed.entries[0].title
+        selected = {"title": topic, "text": f"Breaking tech news! {topic}. Here is what it means for you and how you can use it to save money.", "kw": "technology"}
+    else:
+        selected = random.choice(KNOWLEDGE_BANK)
 except:
-    pass
+    selected = random.choice(KNOWLEDGE_BANK)
 
-if not TRENDING_TOPIC:
-    evergreen = [
-        {"text": "Apple is making a foldable iPhone with NO CREASE! It will cost 2000 dollars and launch in 2026.", "kw": "iphone"},
-        {"text": "Turn off this setting to stop Google tracking your phone. Go to Settings Privacy now.", "kw": "mobile phone"},
-    ]
-    pick = random.choice(evergreen)
-    SCRIPT_TEXT = pick["text"]
-    KEYWORD = pick["kw"]
-    print(f"EVERGREEN: {SCRIPT_TEXT}")
-
+SCRIPT_TEXT = selected["text"]
+KEYWORD = selected["kw"]
 sentences = [s.strip() for s in SCRIPT_TEXT.split('.') if len(s.strip())>2]
-HIGHLIGHTS = ["BREAKING","APPLE","IPHONE","2000","DOLLARS","NO CREASE","2026","GOOGLE","AI"]
 
-# Avatar download
-HAS_AVATAR=False
-try:
-    r=requests.get("https://api.dicebear.com/7.x/avataaars/png?seed=TechOp&backgroundColor=b6e3f4", timeout=10)
-    open("avatar.png","wb").write(r.content)
-    HAS_AVATAR=True
-except:
-    pass
+# --- NATIVE AMERICAN VOICE (FAST & NATURAL) ---
+async def make_voice(text, file):
+    # en-US-GuyNeural = Real American Male voice, fast and confident
+    await edge_tts.Communicate(text, "en-US-GuyNeural", rate="+20%").save(file)
 
 clips=[]
 for i, sentence in enumerate(sentences):
-    tts = gTTS(text=sentence, lang='en', tld='us')
-    tts.save(f"v{i}.mp3")
+    asyncio.run(make_voice(sentence, f"v{i}.mp3"))
     audio = AudioFileClip(f"v{i}.mp3")
 
     W,H=1080,1920
-    # Related image
     try:
-        url = f"https://loremflickr.com/{W}/{H}/{KEYWORD}?lock={random.randint(1,9999)}"
-        resp = requests.get(url, timeout=25)
-        img = Image.open(BytesIO(resp.content)).convert("RGB").resize((W,H))
+        url=f"https://loremflickr.com/{W}/{H}/{KEYWORD}?lock={random.randint(1,9999)}"
+        img=Image.open(BytesIO(requests.get(url, timeout=20).content)).convert("RGB").resize((W,H))
     except:
-        img = Image.new('RGB', (W,H), (15,15,45))
-
-    img = Image.blend(img, Image.new('RGB', (W,H), (0,0,0)), 0.45)
-    draw = ImageDraw.Draw(img)
-
+        img=Image.new('RGB',(W,H),(10,10,40))
+    img=Image.blend(img, Image.new('RGB',(W,H),(0,0,0)), 0.5)
+    draw=ImageDraw.Draw(img)
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 68)
-        font_s = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
     except:
         font=ImageFont.load_default()
-        font_s=font
 
-    # Caption professional - niche centre se thoda up
-    wrapped = textwrap.fill(sentence.upper(), width=18)
-    y = 1080
+    wrapped=textwrap.fill(sentence.upper(), width=20)
+    y=1050
     for line in wrapped.split('\n'):
-        words=line.split()
-        line_w=sum([draw.textbbox((0,0), w+" ", font=font)[2] for w in words])
-        x=(W-line_w)//2
-        for w in words:
-            col=(255,230,0) if any(h in w for h in HIGHLIGHTS) else (255,255,255)
-            draw.text((x,y), w+" ", fill=col, font=font, stroke_width=7, stroke_fill="black")
-            x+=draw.textbbox((0,0), w+" ", font=font)[2]
-        y+=85
+        bbox=draw.textbbox((0,0), line, font=font)
+        draw.text(((W-(bbox[2]-bbox[0]))//2, y), line, fill="white", font=font, stroke_width=8, stroke_fill="black")
+        y+=80
 
-    if TRENDING_TOPIC and i==0:
-        draw.text((40,140), "🔥 TRENDING", fill=(255,60,60), font=font_s, stroke_width=4, stroke_fill="black")
+    draw.text((40,80), selected["title"].upper(), fill=(255,230,0), font=font, stroke_width=5, stroke_fill="black")
+    clip=ImageClip(np.array(img)).set_duration(audio.duration).set_audio(audio)
+    clips.append(clip)
 
-    draw.text((30,1850), "Tech Operation Theatre", fill="white", font=font_s, stroke_width=3, stroke_fill="black")
-
-    base = ImageClip(np.array(img)).set_duration(audio.duration)
-
-    if HAS_AVATAR:
-        try:
-            av = Image.open("avatar.png").convert("RGBA").resize((300,300))
-            mask = Image.new('L', (300,300), 0)
-            ImageDraw.Draw(mask).ellipse([0,0,300,300], fill=255)
-            av.putalpha(mask)
-            a_clip = ImageClip(np.array(av)).set_duration(audio.duration).set_position((720, 1450))
-            comp = CompositeVideoClip([base, a_clip]).set_audio(audio)
-            clips.append(comp)
-            continue
-        except:
-            pass
-    clips.append(base.set_audio(audio))
-
-final = concatenate_videoclips(clips, method="compose")
-final.write_videofile("final_shorts.mp4", fps=24, codec='libx264', audio_codec='aac', threads=1, preset='ultrafast')
-print("Video Done")
+final=concatenate_videoclips(clips, method="compose")
+final.write_videofile("final_shorts.mp4", fps=24, codec='libx264', audio_codec='aac')
+print("Native US Video Done")

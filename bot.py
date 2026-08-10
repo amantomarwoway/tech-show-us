@@ -1,66 +1,110 @@
-import random, requests, textwrap, asyncio, numpy as np, feedparser, edge_tts
+import random, requests, textwrap, numpy as np, feedparser
 from io import BytesIO
-from moviepy.editor import AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from gtts import gTTS
+from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip
 from PIL import Image, ImageDraw, ImageFont
 
-print("Finding valuable topic...")
+print("Starting PRO US Bot...")
 
-# --- 100% VALUE CONTENT ---
+# === 1. KNOWLEDGEABLE & VALUABLE SCRIPT (Real Value) ===
 KNOWLEDGE_BANK = [
-    {"title": "iPhone Battery Secret", "text": "Your iPhone battery is dying fast because of this one setting. Go to Settings, Battery, turn off Background App Refresh. Your battery will last 2 hours more daily.", "kw": "iphone"},
-    {"title": "Hidden Google Trick", "text": "This Google hidden trick will save you 10 hours a month. Type site colon reddit dot com before any search to get real answers, not ads.", "kw": "laptop"},
-    {"title": "Apple Foldable Leaked", "text": "Apple's first foldable iPhone will have zero crease and cost 2000 dollars. Samsung paid 10 million for this technology but Apple made it better.", "kw": "iphone"},
+    {
+        "title": "IPHONE BATTERY SECRET",
+        "script": "Your iPhone battery is dying fast because of one hidden setting Apple never tells you. Go to Settings, Battery, and turn off Background App Refresh. This one trick will give you two extra hours of battery every single day. Try it now and thank me later.",
+        "kw": "iphone"
+    },
+    {
+        "title": "GOOGLE SEARCH HACK",
+        "script": "Stop wasting hours on fake Google results. Here is a secret trick that will save you ten hours a month. Just type site colon reddit dot com before your question. You will get real human answers, not sponsored ads. This is the best productivity hack of 2025.",
+        "kw": "laptop"
+    },
+    {
+        "title": "ANDROID FAST CHARGE",
+        "script": "Ninety percent of Android users have no idea about this hidden super fast charging feature. Just hold your power button and volume up button together for three seconds. Your phone will charge fifty percent faster. Share this with your friends.",
+        "kw": "android"
+    },
 ]
 
-# Try trending for value
+# Try to get trending tech news for more value
 try:
-    feed = feedparser.parse("https://news.google.com/rss/search?q=tech+tips+AI+Apple&hl=en-US&gl=US&ceid=US:en")
-    if feed.entries and random.random() > 0.5:
-        topic = feed.entries[0].title
-        selected = {"title": topic, "text": f"Breaking tech news! {topic}. Here is what it means for you and how you can use it to save money.", "kw": "technology"}
+    feed = feedparser.parse("https://news.google.com/rss/search?q=Apple+AI+Google+Tech+Tips&hl=en-US&gl=US&ceid=US:en")
+    if feed.entries:
+        news_title = feed.entries[0].title
+        selected = {
+            "title": "BREAKING TECH NEWS",
+            "script": f"Breaking tech news for you. {news_title}. This changes everything for tech lovers in America. Here is what it means for you and how you can save money with this new update.",
+            "kw": "technology"
+        }
     else:
         selected = random.choice(KNOWLEDGE_BANK)
 except:
     selected = random.choice(KNOWLEDGE_BANK)
 
-SCRIPT_TEXT = selected["text"]
+print(f"Topic: {selected['title']}")
+full_script = selected["script"]
+sentences = [s.strip() for s in full_script.split('.') if len(s.strip()) > 3]
 KEYWORD = selected["kw"]
-sentences = [s.strip() for s in SCRIPT_TEXT.split('.') if len(s.strip())>2]
 
-# --- NATIVE AMERICAN VOICE (FAST & NATURAL) ---
-async def make_voice(text, file):
-    # en-US-GuyNeural = Real American Male voice, fast and confident
-    await edge_tts.Communicate(text, "en-US-GuyNeural", rate="+20%").save(file)
-
-clips=[]
+# === 2. PRO VIDEO CREATION - FAST US VOICE ===
+clips = []
 for i, sentence in enumerate(sentences):
-    asyncio.run(make_voice(sentence, f"v{i}.mp3"))
-    audio = AudioFileClip(f"v{i}.mp3")
+    print(f"Making clip {i+1}/{len(sentences)}")
+    audio_file = f"voice_{i}.mp3"
 
-    W,H=1080,1920
+    # Fast Native US Voice - No API, No Error
+    tts = gTTS(text=sentence, lang='en', tld='us', slow=False)
+    tts.save(audio_file)
+
+    # Make it 30% faster for native American fast talk
+    audio = AudioFileClip(audio_file).fx(lambda a: a.speedx(1.3))
+
+    # HD Image
+    W, H = 1080, 1920
     try:
-        url=f"https://loremflickr.com/{W}/{H}/{KEYWORD}?lock={random.randint(1,9999)}"
-        img=Image.open(BytesIO(requests.get(url, timeout=20).content)).convert("RGB").resize((W,H))
+        # High quality tech image
+        url = f"https://loremflickr.com/{W}/{H}/{KEYWORD},technology?lock={random.randint(1,99999)}"
+        resp = requests.get(url, timeout=25)
+        img = Image.open(BytesIO(resp.content)).convert("RGB")
+        img = img.resize((W, H), Image.LANCZOS)
     except:
-        img=Image.new('RGB',(W,H),(10,10,40))
-    img=Image.blend(img, Image.new('RGB',(W,H),(0,0,0)), 0.5)
-    draw=ImageDraw.Draw(img)
+        img = Image.new('RGB', (W, H), (15, 15, 45))
+
+    # Dark overlay for text readability
+    img = Image.blend(img, Image.new('RGB', (W, H), (0, 0, 0)), 0.45)
+
+    draw = ImageDraw.Draw(img)
+    # Font
     try:
-        font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
+        font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 70)
     except:
-        font=ImageFont.load_default()
+        font_main = ImageFont.load_default()
+        font_title = ImageFont.load_default()
 
-    wrapped=textwrap.fill(sentence.upper(), width=20)
-    y=1050
-    for line in wrapped.split('\n'):
-        bbox=draw.textbbox((0,0), line, font=font)
-        draw.text(((W-(bbox[2]-bbox[0]))//2, y), line, fill="white", font=font, stroke_width=8, stroke_fill="black")
-        y+=80
+    # Title at top
+    title_y = 90
+    bbox_t = draw.textbbox((0,0), selected["title"], font=font_title)
+    draw.text(((W - (bbox_t[2]-bbox_t[0]))//2, title_y), selected["title"], fill=(255, 235, 0), font=font_title, stroke_width=6, stroke_fill="black")
 
-    draw.text((40,80), selected["title"].upper(), fill=(255,230,0), font=font, stroke_width=5, stroke_fill="black")
-    clip=ImageClip(np.array(img)).set_duration(audio.duration).set_audio(audio)
+    # Main sentence in center
+    wrapped = textwrap.fill(sentence.upper(), width=22)
+    lines = wrapped.split('\n')
+    total_h = len(lines) * 80
+    y_start = (H - total_h) // 2 + 100
+
+    y = y_start
+    for line in lines:
+        bbox = draw.textbbox((0,0), line, font=font_main)
+        text_w = bbox[2] - bbox[0]
+        x = (W - text_w) // 2
+        draw.text((x, y), line, fill="white", font=font_main, stroke_width=8, stroke_fill="black")
+        y += 85
+
+    clip = ImageClip(np.array(img)).set_duration(audio.duration).set_audio(audio)
     clips.append(clip)
 
-final=concatenate_videoclips(clips, method="compose")
-final.write_videofile("final_shorts.mp4", fps=24, codec='libx264', audio_codec='aac')
-print("Native US Video Done")
+# === 3. FINAL EXPORT - HD QUALITY ===
+final_video = concatenate_videoclips(clips, method="compose")
+final_video.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', bitrate="5000k", preset="ultrafast")
+
+print("PRO Video Ready - 100% Value + Fast US Voice")

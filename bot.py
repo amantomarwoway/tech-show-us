@@ -132,3 +132,5 @@ while final.duration < 30:
 
 final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', bitrate="8000k")
 print(f"DONE - Topic Wise Images - {final.duration} sec")
+from upload_youtube import upload_video
+upload_video("final_shorts.mp4", "Tech News Today")

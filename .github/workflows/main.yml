@@ -1,26 +1,33 @@
-name: US Tech Shorts Bot
+name: 6 Shorts USA Time
+
 on:
   schedule:
-    - cron: '0 12,14,16,18,20,22 * * *'
+    - cron: '0 11 * * *'  # 6 AM EST - 11 AM UTC
+    - cron: '0 14 * * *'  # 9 AM EST - 2 PM UTC
+    - cron: '0 17 * * *'  # 12 PM EST - 5 PM UTC
+    - cron: '0 20 * * *'  # 3 PM EST - 8 PM UTC
+    - cron: '0 23 * * *'  # 6 PM EST - 11 PM UTC
+    - cron: '0 2 * * *'   # 9 PM EST - 2 AM UTC (next day)
   workflow_dispatch:
+
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run bot
-        env:
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        run: python bot.py
-      - name: Upload video for review
-        uses: actions/upload-artifact@v4
-        with:
-          name: final-shorts-video-${{ github.run_number }}
-          path: final_shorts.mp4
+          python-version: '3.10'
+      - run: |
+          pip install -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y fonts-dejavu-core ffmpeg
+      - run: echo '${{ secrets.TOKEN_JSON }}' > token.json
+      - run: python bot.py
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add posted.txt || true
+          git commit -m "update posted" || true
+          git push || true

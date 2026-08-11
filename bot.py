@@ -1,4 +1,4 @@
-import random, requests, textwrap, numpy as np, feedparser, re, os
+import random, requests, textwrap, numpy as np, feedparser, re, os, time
 from io import BytesIO
 from gtts import gTTS
 from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip, concatenate_audioclips
@@ -33,7 +33,6 @@ def get_viral_from_big_creator():
     if not all_videos:
         return None
 
-    # Latest viral
     viral = random.choice(all_videos)
     print(f"VIRAL FOUND: {viral.title} from {viral.author}")
     return viral
@@ -52,12 +51,8 @@ if viral_video:
     original_title = viral_video.title
     original_desc = viral_video.get('summary','')[:300]
     original_author = viral_video.get('author','Big Creator')
-
-    # SAME TITLE - thoda sa twist ke saath taaki copyright na lage
     viral_title = f"{original_title} | FIRST TIME IN USA 🇺🇸"
     if len(viral_title) > 95: viral_title = original_title[:92]
-
-    # SAME DESCRIPTION + Tere Links + Channel Name
     viral_desc = f"""{original_title}
 
 {original_desc}
@@ -78,7 +73,6 @@ Original Topic: {original_title}
     viral_tags = [original_title.split()[0].lower(), "viral shorts", "first time in america", "usa tech news", "trending usa", original_author.lower()] + re.findall(r'\b\w+\b', original_title.lower())[:8]
     script_source_title = original_title
 else:
-    # Fallback agar bade creator ki video na mile
     news = get_own_news_fallback()
     viral_title = f"FIRST TIME IN AMERICA: {news.title[:50]}! 🤯"
     viral_desc = f"{news.title}\n\nSubscribe: {CHANNEL_LINK}"
@@ -91,11 +85,37 @@ print(f"FINAL TITLE: {viral_title}")
 # --- SCRIPT FOR VOICE ---
 script = f"Breaking! {script_source_title}. This video is viral on YouTube right now by {original_author}. Everyone in America is talking about this. I will explain this first time in America for you. Subscribe to {CHANNEL_NAME} for more viral updates."
 
+# --- NEW: ROBUST IMAGE FETCH WITH RETRY ---
+def fetch_image_bytes(url, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            print(f"Fetching image attempt {attempt+1}: {url[:80]}...")
+            resp = requests.get(url, timeout=60)
+            if resp.status_code == 200 and len(resp.content) > 5000:
+                return resp.content
+            else:
+                print(f"Bad status {resp.status_code} or small content, retrying...")
+        except Exception as e:
+            print(f"Image fetch failed attempt {attempt+1}: {e}")
+        sleep_time = (attempt+1)*5
+        print(f"Waiting {sleep_time}s before retry...")
+        time.sleep(sleep_time)
+    print("All retries failed for image, using fallback color")
+    return None
+
 # --- VIDEO GENERATION - TOP CREATOR STYLE ---
 def get_clip(sentence, duration, idx):
     prompt = requests.utils.quote(f"{sentence}, viral tech, usa, cinematic, vibrant, HDR, 8k, colorful")
     url = f"https://image.pollinations.ai/prompt/{prompt}?width=1080&height=1920&nologo=true&seed={random.randint(1,999999)}"
-    img = Image.open(BytesIO(requests.get(url, timeout=30).content)).convert("RGB").resize((1080,1920))
+    img_bytes = fetch_image_bytes(url, max_retries=5)
+    if img_bytes is None:
+        # Fallback solid image
+        img = Image.new("RGB", (1080,1920), (20,20,40))
+    else:
+        try:
+            img = Image.open(BytesIO(img_bytes)).convert("RGB").resize((1080,1920))
+        except:
+            img = Image.new("RGB", (1080,1920), (20,20,40))
     img = ImageEnhance.Color(img).enhance(2.0)
     img = ImageEnhance.Contrast(img).enhance(1.4)
     clip = ImageClip(np.array(img)).set_duration(duration)
@@ -105,8 +125,11 @@ def get_clip(sentence, duration, idx):
 sentences = [s.strip() for s in script.split('.') if len(s.strip()) > 3]
 
 try:
-    av_data = requests.get(f"https://randomuser.me/api/portraits/men/{random.randint(10,70)}.jpg", timeout=10).content
-    avatar_pil = Image.open(BytesIO(av_data)).convert("RGBA").resize((280,280))
+    av_data = fetch_image_bytes(f"https://randomuser.me/api/portraits/men/{random.randint(10,70)}.jpg", max_retries=3)
+    if av_data:
+        avatar_pil = Image.open(BytesIO(av_data)).convert("RGBA").resize((280,280))
+    else:
+        raise Exception("no avatar")
     mask = Image.new("L", (280,280), 0)
     ImageDraw.Draw(mask).ellipse((0,0,280,280), fill=255)
     avatar_pil.putalpha(mask)

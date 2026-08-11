@@ -1,136 +1,162 @@
-import random, requests, textwrap, numpy as np, feedparser
+import random, requests, textwrap, numpy as np, feedparser, re, os
 from io import BytesIO
 from gtts import gTTS
-from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip
+from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip, concatenate_audioclips
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
-print("Starting TOPIC-WISE REAL Bot...")
+print("Starting VIRAL CLONE Bot...")
 
-BANK = [
-    {"title": "IPHONE BATTERY SECRET", "script": "Stop scrolling! Your iPhone battery is dying fast because of one secret setting Apple never tells you about. Go to Settings, then Battery, and turn off Background App Refresh right now. This hidden trick stops 20 apps from draining your battery in the background. Boom! You just got 2 extra hours of battery every single day.", "kw": "iphone"},
-    {"title": "VIRAL GOOGLE HACK 2025", "script": "This viral Google trick is blowing up in America right now and it will save you 10 hours every month. Stop wasting time on fake sponsored results. Just type site colon reddit dot com before your question in Google. You will get real human answers from real people, not ads.", "kw": "google"},
-    {"title": "ANDROID SUPER FAST CHARGE", "script": "This insane Android trick broke the internet in the US! Ninety percent of Android users have no idea about this hidden super fast charging mode. Just hold your power button and volume up button together for 3 seconds until you see the logo. Your phone will now charge fifty percent faster than normal.", "kw": "android"},
+CHANNEL_LINK = "https://www.youtube.com/@amantomarwoway"
+CHANNEL_NAME = "Aman Tomar Wow Way"
+OLD_SHORTS = "https://www.youtube.com/@amantomarwoway/shorts"
+
+# --- BADE CREATORS JINKI VIDEO CLONE KARNI HAI ---
+BIG_CREATORS = [
+    "UCBJycsmduvYEL83R_U4JriQ", # MKBHD
+    "UCMiJRAwDNSNzuYeN2uWa0pA", # Mrwhosetheboss
+    "UCXuqSBlHAE6Xw-yeJA0Tunw", # Linus Tech Tips
+    "UCsTcErHg8oDvUnTzoqsYeNw", # Unbox Therapy
+    "UC3S0BHgGj0CVo72N3mU3M5A", # ThioJoe - US Tech
 ]
 
-def get_prompt_from_sentence(sentence):
-    # Sentence se hi prompt banega - 100% topic related
-    s = sentence.lower()
-    if "battery" in s:
-        return "iphone battery settings ultra realistic 8k closeup, american hand holding iphone battery screen"
-    elif "settings" in s or "background" in s:
-        return "iphone settings background app refresh screen ultra realistic 8k"
-    elif "google" in s or "search" in s or "reddit" in s:
-        return "google search on laptop reddit results ultra realistic 8k, american person searching"
-    elif "charge" in s or "power" in s or "volume" in s:
-        return "android phone fast charging cable ultra realistic 8k, american person"
-    elif "stop scrolling" in s or "omg" in s or "breaking" in s:
-        return "shocked american tech youtuber face ultra realistic 8k, breaking news background"
-    else:
-        return f"{sentence} ultra realistic 8k tech, cinematic"
+def get_viral_from_big_creator():
+    print("Bade creators ki viral video dhoond raha hu...")
+    all_videos = []
+    for channel_id in BIG_CREATORS:
+        try:
+            feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:3]:
+                all_videos.append(entry)
+        except: pass
+
+    if not all_videos:
+        return None
+
+    # Latest viral
+    viral = random.choice(all_videos)
+    print(f"VIRAL FOUND: {viral.title} from {viral.author}")
+    return viral
+
+def get_own_news_fallback():
+    try:
+        feed = feedparser.parse("https://techcrunch.com/feed/")
+        return feed.entries[0]
+    except:
+        return None
+
+# --- STEP 1: VIRAL CLONE YA OWN NEWS ---
+viral_video = get_viral_from_big_creator()
+
+if viral_video:
+    original_title = viral_video.title
+    original_desc = viral_video.get('summary','')[:300]
+    original_author = viral_video.get('author','Big Creator')
+
+    # SAME TITLE - thoda sa twist ke saath taaki copyright na lage
+    viral_title = f"{original_title} | FIRST TIME IN USA 🇺🇸"
+    if len(viral_title) > 95: viral_title = original_title[:92]
+
+    # SAME DESCRIPTION + Tere Links + Channel Name
+    viral_desc = f"""{original_title}
+
+{original_desc}
+
+This topic is currently VIRAL on YouTube by {original_author}. Full breakdown in this Shorts.
+
+🔥 This is trending in USA right now and first time explained for American audience.
+
+👉 Watch More Viral US Tech Shorts: {OLD_SHORTS}
+👉 Subscribe to {CHANNEL_NAME}: {CHANNEL_LINK}
+
+Credit: Inspired by {original_author} viral video - {viral_video.link}
+
+#viral #trending #usanews #firsttimeinamerica #usatech #{re.sub('[^a-zA-Z0-9]','',original_title.split()[0].lower())}
+
+Original Topic: {original_title}
+"""
+    viral_tags = [original_title.split()[0].lower(), "viral shorts", "first time in america", "usa tech news", "trending usa", original_author.lower()] + re.findall(r'\b\w+\b', original_title.lower())[:8]
+    script_source_title = original_title
+else:
+    # Fallback agar bade creator ki video na mile
+    news = get_own_news_fallback()
+    viral_title = f"FIRST TIME IN AMERICA: {news.title[:50]}! 🤯"
+    viral_desc = f"{news.title}\n\nSubscribe: {CHANNEL_LINK}"
+    viral_tags = ["usa news", "first time in america"]
+    script_source_title = news.title
+    original_author = "US News"
+
+print(f"FINAL TITLE: {viral_title}")
+
+# --- SCRIPT FOR VOICE ---
+script = f"Breaking! {script_source_title}. This video is viral on YouTube right now by {original_author}. Everyone in America is talking about this. I will explain this first time in America for you. Subscribe to {CHANNEL_NAME} for more viral updates."
+
+# --- VIDEO GENERATION - TOP CREATOR STYLE ---
+def get_clip(sentence, duration, idx):
+    prompt = requests.utils.quote(f"{sentence}, viral tech, usa, cinematic, vibrant, HDR, 8k, colorful")
+    url = f"https://image.pollinations.ai/prompt/{prompt}?width=1080&height=1920&nologo=true&seed={random.randint(1,999999)}"
+    img = Image.open(BytesIO(requests.get(url, timeout=30).content)).convert("RGB").resize((1080,1920))
+    img = ImageEnhance.Color(img).enhance(2.0)
+    img = ImageEnhance.Contrast(img).enhance(1.4)
+    clip = ImageClip(np.array(img)).set_duration(duration)
+    clip = clip.resize(lambda t: 1 + 0.15 * t / duration)
+    return clip.set_position(('center','center'))
+
+sentences = [s.strip() for s in script.split('.') if len(s.strip()) > 3]
 
 try:
-    feed = feedparser.parse("https://news.google.com/rss/search?q=Apple+iPhone+AI+trending&hl=en-US&gl=US&ceid=US:en")
-    if feed.entries and len(feed.entries[0].title) > 20:
-        selected = {"title": "OMG! BREAKING NEWS", "script": f"OMG! Breaking tech news is trending right now. {feed.entries[0].title}. This changes everything for iPhone and Android users in America. Experts say this update will affect millions of users.", "kw": "breaking"}
-    else:
-        selected = random.choice(BANK)
-except:
-    selected = random.choice(BANK)
-
-sentences = [s.strip() for s in selected["script"].split('.') if len(s.strip()) > 5]
-print(f"Topic: {selected['title']}")
-
-# Stable American Avatar
-try:
-    av_url = f"https://randomuser.me/api/portraits/men/{random.randint(10,70)}.jpg"
-    av_data = requests.get(av_url, timeout=15).content
-    avatar_pil = Image.open(BytesIO(av_data)).convert("RGBA").resize((300,300))
-    mask = Image.new("L", (300,300), 0)
-    ImageDraw.Draw(mask).ellipse((0,0,300,300), fill=255)
+    av_data = requests.get(f"https://randomuser.me/api/portraits/men/{random.randint(10,70)}.jpg", timeout=10).content
+    avatar_pil = Image.open(BytesIO(av_data)).convert("RGBA").resize((280,280))
+    mask = Image.new("L", (280,280), 0)
+    ImageDraw.Draw(mask).ellipse((0,0,280,280), fill=255)
     avatar_pil.putalpha(mask)
-    border = Image.new("RGBA", (320,320), (0,0,0,0))
-    ImageDraw.Draw(border).ellipse((0,0,320,320), fill=(255,235,0))
-    border.paste(avatar_pil, (10,10), avatar_pil)
-    avatar_np = np.array(border)
+    avatar_np = np.array(avatar_pil)
 except:
-    avatar_np = np.array(Image.new('RGB', (300,300), (255,235,0)))
+    avatar_np = np.array(Image.new('RGB', (280,280), (255,235,0)))
 
 clips=[]
+idx=0
 for i, sentence in enumerate(sentences):
     gTTS(text=sentence, lang='en', tld='us', slow=False).save(f"v{i}.mp3")
     audio = AudioFileClip(f"v{i}.mp3")
-
-    W,H = 1080,1920
-    # TOPIC WISE IMAGE - Har sentence ka alag image
-    try:
-        ai_prompt = get_prompt_from_sentence(sentence)
-        print(f"Generating for: {sentence[:30]} -> {ai_prompt}")
-        prompt_enc = requests.utils.quote(ai_prompt + ", highly detailed, ultra premium, attractive, meta ai generated")
-        url = f"https://image.pollinations.ai/prompt/{prompt_enc}?width=1080&height=1920&nologo=true&seed={random.randint(1,99999)}"
-        img_bytes = requests.get(url, timeout=45).content
-        img = Image.open(BytesIO(img_bytes)).convert("RGB").resize((W,H))
-        img = ImageEnhance.Color(img).enhance(1.25)
-        img = ImageEnhance.Contrast(img).enhance(1.15)
-    except Exception as e:
-        print(f"AI fail {e}")
-        try:
-            url = f"https://picsum.photos/1080/1920?random={random.randint(1,99999)}"
-            img = Image.open(BytesIO(requests.get(url, timeout=10).content)).convert("RGB").resize((W,H))
-        except:
-            img = Image.new('RGB', (W,H), (15,15,30))
-
-    # Word by Word - 3 words max
     words = sentence.split()
-    chunks = [' '.join(words[j:j+3]) for j in range(0, len(words), 3)]
-    if not chunks:
-        chunks = [sentence]
-    chunk_duration = audio.duration / len(chunks)
-
-    for k, chunk_text in enumerate(chunks):
-        frame_img = img.copy()
-        draw = ImageDraw.Draw(frame_img, 'RGBA')
-        draw.rectangle((0,0,W,300), fill=(0,0,0,110))
+    chunk_duration = audio.duration / len(words) if words else 0.5
+    for w_idx, word in enumerate(words):
+        bg_clip = get_clip(sentence, chunk_duration, idx); idx+=1
+        W,H = 1080,1920
+        text_img = Image.new('RGBA', (W,H), (0,0,0,0))
+        draw = ImageDraw.Draw(text_img, 'RGBA')
+        if i==0 and w_idx<2:
+            draw.rectangle((0,0,W,300), fill=(255,0,0,220))
+            try: font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 75)
+            except: font_big = ImageFont.load_default()
+            draw.text((40,90), "🔥 VIRAL IN USA!", fill="white", font=font_big, stroke_width=5, stroke_fill="black")
         draw.rectangle((0,1350,W,H), fill=(0,0,0,190))
-
-        try:
-            font_cap = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 68)
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 70)
-        except:
-            font_cap = ImageFont.load_default()
-            font_title = font_cap
-
-        draw.text((30,70), "🔥 " + selected["title"], fill=(255,235,0), font=font_title, stroke_width=5, stroke_fill="black")
-
-        display_text = chunk_text.upper()
-        wrapped = textwrap.fill(display_text, width=18)
-        y = 1420
-        for line in wrapped.split('\n'):
-            bbox = draw.textbbox((0,0), line, font=font_cap)
+        try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 78)
+        except: font = ImageFont.load_default()
+        y=1450
+        full_line = " ".join(words[max(0,w_idx-2):w_idx+3])
+        for line in textwrap.fill(full_line.upper(), width=16).split('\n'):
+            bbox = draw.textbbox((0,0), line, font=font)
             x = (W - (bbox[2]-bbox[0]))//2
-            draw.text((x,y), line, fill="white", font=font_cap, stroke_width=8, stroke_fill="black")
-            y+=80
-
-        base = ImageClip(np.array(frame_img)).set_duration(chunk_duration)
-        animated = base.resize(lambda t: 1.05 + 0.04*t) # Stable animation
-        avatar_clip = ImageClip(avatar_np).set_duration(chunk_duration).set_position((700, 1050)) # Stable avatar
-
-        final_c = CompositeVideoClip([animated, avatar_clip], size=(W,H))
+            color = (255,235,0) if word.upper() in line else (255,255,255)
+            draw.text((x,y), line, fill=color, font=font, stroke_width=8, stroke_fill="black")
+            y+=95
+            break
+        text_clip = ImageClip(np.array(text_img)).set_duration(chunk_duration)
+        avatar_clip = ImageClip(avatar_np).set_duration(chunk_duration).set_position((750, 1050))
+        final_c = CompositeVideoClip([bg_clip, text_clip, avatar_clip], size=(W,H))
         clips.append(final_c)
 
-# Final audio sync
-from moviepy.editor import concatenate_audioclips
 all_audio = [AudioFileClip(f"v{j}.mp3") for j in range(len(sentences))]
 full_audio = concatenate_audioclips(all_audio)
-
-final_video_temp = concatenate_videoclips(clips, method="compose")
-final_video_temp = final_video_temp.set_duration(full_audio.duration).set_audio(full_audio)
-
-final = final_video_temp
-while final.duration < 30:
-    final = concatenate_videoclips([final, final_video_temp], method="compose")
+final_video = concatenate_videoclips(clips, method="compose").set_duration(full_audio.duration).set_audio(full_audio)
+final = final_video
+while final.duration < 32:
+    final = concatenate_videoclips([final, final_video], method="compose")
     if final.duration > 36: break
+final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac')
+print(f"DONE {final.duration}s")
 
-final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', bitrate="8000k")
-print(f"DONE - Topic Wise Images - {final.duration} sec")
 from upload_youtube import upload_video
-upload_video("final_shorts.mp4", "Tech News Today")
+upload_video("final_shorts.mp4", viral_title, viral_desc, viral_tags[:15])

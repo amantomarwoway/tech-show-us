@@ -1,8 +1,8 @@
 feedparser
 requests
 gtts
+Pillow==9.5.0
 moviepy==1.0.3
-Pillow
 numpy
 google-api-python-client
 google-auth

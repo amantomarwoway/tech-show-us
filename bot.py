@@ -6,9 +6,9 @@ import numpy as np
 
 print("Starting VIRAL CLONER 30s FIXED Bot...")
 
-CHANNEL_LINK = "https://www.youtube.com/@amantomarwoway"
-CHANNEL_NAME = "Aman Tomar Wow Way"
-OLD_SHORTS = "https://www.youtube.com/@amantomarwoway/shorts"
+CHANNEL_LINK = "https://www.youtube.com/@techoperationtheatre"
+CHANNEL_NAME = "Tech Operation Theatre"
+OLD_SHORTS = "https://www.youtube.com/@techoperationtheatre/shorts"
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
 # --- BIG CREATORS LIST - INKI VIRAL SHORTS CLONE HOGI ---

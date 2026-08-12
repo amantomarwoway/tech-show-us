@@ -1,185 +1,198 @@
-import random, requests, textwrap, numpy as np, feedparser, re, os, time
-from io import BytesIO
+import random, requests, feedparser, re, os, time, textwrap
 from gtts import gTTS
-from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips, CompositeVideoClip, concatenate_audioclips
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
-print("Starting VIRAL CLONE Bot...")
+print("Starting VIRAL CLONER + MIX TECH Bot...")
 
 CHANNEL_LINK = "https://www.youtube.com/@amantomarwoway"
 CHANNEL_NAME = "Aman Tomar Wow Way"
 OLD_SHORTS = "https://www.youtube.com/@amantomarwoway/shorts"
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-# --- BADE CREATORS JINKI VIDEO CLONE KARNI HAI ---
+# --- BIG CREATORS LIST - INKI VIRAL SHORTS CLONE HOGI ---
 BIG_CREATORS = [
-    "UCBJycsmduvYEL83R_U4JriQ", # MKBHD
-    "UCMiJRAwDNSNzuYeN2uWa0pA", # Mrwhosetheboss
-    "UCXuqSBlHAE6Xw-yeJA0Tunw", # Linus Tech Tips
-    "UCsTcErHg8oDvUnTzoqsYeNw", # Unbox Therapy
-    "UC3S0BHgGj0CVo72N3mU3M5A", # ThioJoe - US Tech
+    # Channel ID : Name (Tech / Innovation niche ke bade creators)
+    {"id": "UC6-F5tO8uklgE9Zy8IvbdFw", "name": "Marques Brownlee", "handle": "@MKBHD"}, # MKBHD
+    {"id": "UCBJycsmduvYEL83R_U4JriQ", "name": "Mrwhosetheboss", "handle": "@Mrwhosetheboss"},
+    {"id": "UCsTcErHg8oDvUnTzoqsYeNw", "name": "Unbox Therapy", "handle": "@UnboxTherapy"},
+    {"id": "UCXuqSBlHAE6Xw-yeJA0Tunw", "name": "Linus Tech Tips", "handle": "@LinusTechTips"},
+    {"id": "UCW5OrZ_CJ6GdY4Slc8Rbjyg", "name": "Tech Burner", "handle": "@TechBurner"},
+    {"id": "UCqwUrSlWBP7mTfbArq8F9hg", "name": "Gadgets 360", "handle": "@Gadgets360"},
+]
+
+# --- BACKUP 50 MIX TOPICS (Agar cloning fail ho to) ---
+BACKUP_TOPICS = [
+    {"query": "smartphone close up tech", "title": "Secret Android setting you should turn on", "search": "android secret setting"},
+    {"query": "iphone screen technology", "title": "iPhone hidden feature nobody knows", "search": "iphone secret trick"},
+    {"query": "laptop keyboard technology", "title": "Secret laptop setting that boosts speed 2x", "search": "laptop speed setting"},
+    {"query": "windows 11 laptop screen", "title": "Hidden Windows 11 feature you missed", "search": "windows 11 secret"},
+    {"query": "luxury van seat rotation", "title": "Revolutionary car seat technology from China", "search": "adjustable car seat"},
+    {"query": "electric car tesla interior", "title": "Tesla's new feature is mind blowing", "search": "tesla new feature"},
+    {"query": "robot technology future", "title": "This robot can do everything", "search": "future robot tech"},
+    {"query": "ai artificial intelligence chip", "title": "New AI chip changes everything", "search": "ai chip technology"},
 ]
 
 def get_viral_from_big_creator():
-    print("Bade creators ki viral video dhoond raha hu...")
-    all_videos = []
-    for channel_id in BIG_CREATORS:
+    """Bade creator ki latest viral video nikalta hai"""
+    print("Big creators ki viral shorts check kar raha hu...")
+    random.shuffle(BIG_CREATORS)
+    for creator in BIG_CREATORS[:3]: # 3 creators try karega
         try:
-            feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+            feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={creator['id']}"
             feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:3]:
-                all_videos.append(entry)
-        except: pass
-
-    if not all_videos:
-        return None
-
-    viral = random.choice(all_videos)
-    print(f"VIRAL FOUND: {viral.title} from {viral.author}")
-    return viral
-
-def get_own_news_fallback():
-    try:
-        feed = feedparser.parse("https://techcrunch.com/feed/")
-        return feed.entries[0]
-    except:
-        return None
-
-# --- STEP 1: VIRAL CLONE YA OWN NEWS ---
-viral_video = get_viral_from_big_creator()
-
-if viral_video:
-    original_title = viral_video.title
-    original_desc = viral_video.get('summary','')[:300]
-    original_author = viral_video.get('author','Big Creator')
-    viral_title = f"{original_title} | FIRST TIME IN USA 🇺🇸"
-    if len(viral_title) > 95: viral_title = original_title[:92]
-    viral_desc = f"""{original_title}
-
-{original_desc}
-
-This topic is currently VIRAL on YouTube by {original_author}. Full breakdown in this Shorts.
-
-🔥 This is trending in USA right now and first time explained for American audience.
-
-👉 Watch More Viral US Tech Shorts: {OLD_SHORTS}
-👉 Subscribe to {CHANNEL_NAME}: {CHANNEL_LINK}
-
-Credit: Inspired by {original_author} viral video - {viral_video.link}
-
-#viral #trending #usanews #firsttimeinamerica #usatech #{re.sub('[^a-zA-Z0-9]','',original_title.split()[0].lower())}
-
-Original Topic: {original_title}
-"""
-    viral_tags = [original_title.split()[0].lower(), "viral shorts", "first time in america", "usa tech news", "trending usa", original_author.lower()] + re.findall(r'\b\w+\b', original_title.lower())[:8]
-    script_source_title = original_title
-else:
-    news = get_own_news_fallback()
-    viral_title = f"FIRST TIME IN AMERICA: {news.title[:50]}! 🤯"
-    viral_desc = f"{news.title}\n\nSubscribe: {CHANNEL_LINK}"
-    viral_tags = ["usa news", "first time in america"]
-    script_source_title = news.title
-    original_author = "US News"
-
-print(f"FINAL TITLE: {viral_title}")
-
-# --- SCRIPT FOR VOICE ---
-script = f"Breaking! {script_source_title}. This video is viral on YouTube right now by {original_author}. Everyone in America is talking about this. I will explain this first time in America for you. Subscribe to {CHANNEL_NAME} for more viral updates."
-
-# --- NEW: ROBUST IMAGE FETCH WITH RETRY ---
-def fetch_image_bytes(url, max_retries=5):
-    for attempt in range(max_retries):
-        try:
-            print(f"Fetching image attempt {attempt+1}: {url[:80]}...")
-            resp = requests.get(url, timeout=60)
-            if resp.status_code == 200 and len(resp.content) > 5000:
-                return resp.content
-            else:
-                print(f"Bad status {resp.status_code} or small content, retrying...")
+            if not feed.entries: continue
+            # Latest video jo Short hai (title chhota hota hai shorts ka)
+            latest = feed.entries[0]
+            title = latest.title
+            description = latest.get('summary', '') or latest.get('description', '')
+            link = latest.link
+            
+            # Check if title looks viral (short title = likely short)
+            if len(title) < 100 and len(title) > 10:
+                print(f"VIRAL FOUND from {creator['name']}: {title}")
+                # Extract keywords for Pexels search
+                keywords = re.sub(r'[^a-zA-Z0-9 ]', '', title).lower()
+                # Pexels query = first 3 words
+                pexels_query = ' '.join(keywords.split()[:4])
+                return {
+                    "original_title": title,
+                    "original_desc": description,
+                    "original_link": link,
+                    "creator_name": creator['name'],
+                    "pexels_query": pexels_query,
+                    "search": keywords[:30]
+                }
         except Exception as e:
-            print(f"Image fetch failed attempt {attempt+1}: {e}")
-        sleep_time = (attempt+1)*5
-        print(f"Waiting {sleep_time}s before retry...")
-        time.sleep(sleep_time)
-    print("All retries failed for image, using fallback color")
+            print(f"Error fetching {creator['name']}: {e}")
+            continue
+    print("No viral found, using backup topic")
     return None
 
-# --- VIDEO GENERATION - TOP CREATOR STYLE ---
-def get_clip(sentence, duration, idx):
-    prompt = requests.utils.quote(f"{sentence}, viral tech, usa, cinematic, vibrant, HDR, 8k, colorful")
-    url = f"https://image.pollinations.ai/prompt/{prompt}?width=1080&height=1920&nologo=true&seed={random.randint(1,999999)}"
-    img_bytes = fetch_image_bytes(url, max_retries=5)
-    if img_bytes is None:
-        # Fallback solid image
-        img = Image.new("RGB", (1080,1920), (20,20,40))
+def get_pexels_video(query):
+    print(f"Pexels search: {query}")
+    try:
+        if not PEXELS_API_KEY:
+            print("No API key")
+            return None
+        url = f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=5&orientation=portrait&size=medium"
+        headers = {"Authorization": PEXELS_API_KEY}
+        resp = requests.get(url, headers=headers, timeout=20)
+        if resp.status_code != 200:
+            print(f"Pexels Error {resp.status_code}")
+            return None
+        videos = resp.json().get('videos', [])
+        if not videos: return None
+        video = random.choice(videos)
+        files = sorted(video['video_files'], key=lambda x: x['width'], reverse=True)
+        best = next((f for f in files if f['width'] >= 720), files[0])
+        r = requests.get(best['link'], stream=True, timeout=60)
+        with open("bg_video.mp4", "wb") as out:
+            for chunk in r.iter_content(chunk_size=1024*1024):
+                out.write(chunk)
+        return "bg_video.mp4"
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+# --- STEP 1: TRY VIRAL CLONING ---
+viral = get_viral_from_big_creator()
+
+if viral:
+    # Cloned topic
+    topic_title = viral["original_title"]
+    topic_search = viral["search"]
+    pexels_q = viral["pexels_query"]
+    cloned_desc = viral["original_desc"]
+    cloned_link = viral["original_link"]
+    print(f"CLONING MODE: {topic_title}")
+else:
+    # Fallback to backup
+    fallback = random.choice(BACKUP_TOPICS)
+    topic_title = fallback["title"]
+    topic_search = fallback["search"]
+    pexels_q = fallback["query"]
+    cloned_desc = ""
+    cloned_link = ""
+    print(f"BACKUP MODE: {topic_title}")
+
+bg_path = get_pexels_video(pexels_q or topic_search)
+if not bg_path:
+    bg_path = get_pexels_video(topic_search)
+
+# --- Voice ---
+script_text = f"{topic_title}. This viral technology is trending now. {topic_search}. Secret trick you must know. Subscribe."
+gTTS(text=script_text, lang='en', tld='us', slow=False).save("voice.mp3")
+audio = AudioFileClip("voice.mp3")
+
+W, H = 1080, 1920
+if bg_path and os.path.exists(bg_path):
+    bg_clip = VideoFileClip(bg_path).without_audio()
+    bg_clip = bg_clip.resize(height=H)
+    if bg_clip.w > W:
+        bg_clip = bg_clip.crop(x1=(bg_clip.w-W)//2, x2=(bg_clip.w-W)//2 + W, y1=0, y2=H)
+    if bg_clip.duration < audio.duration:
+        bg_clip = bg_clip.loop(duration=audio.duration)
     else:
-        try:
-            img = Image.open(BytesIO(img_bytes)).convert("RGB").resize((1080,1920))
-        except:
-            img = Image.new("RGB", (1080,1920), (20,20,40))
-    img = ImageEnhance.Color(img).enhance(2.0)
-    img = ImageEnhance.Contrast(img).enhance(1.4)
-    clip = ImageClip(np.array(img)).set_duration(duration)
-    clip = clip.resize(lambda t: 1 + 0.15 * t / duration)
-    return clip.set_position(('center','center'))
+        bg_clip = bg_clip.subclip(0, audio.duration)
+else:
+    img = Image.new("RGB", (W,H), (10,10,40))
+    bg_clip = ImageClip(np.array(img)).set_duration(audio.duration)
 
-sentences = [s.strip() for s in script.split('.') if len(s.strip()) > 3]
+def create_overlay(duration, title, search):
+    overlay = Image.new('RGBA', (W,H), (0,0,0,0))
+    draw = ImageDraw.Draw(overlay, 'RGBA')
+    try: font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 50)
+    except: font_big = ImageFont.load_default()
+    try: font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+    except: font_small = ImageFont.load_default()
 
-try:
-    av_data = fetch_image_bytes(f"https://randomuser.me/api/portraits/men/{random.randint(10,70)}.jpg", max_retries=3)
-    if av_data:
-        avatar_pil = Image.open(BytesIO(av_data)).convert("RGBA").resize((280,280))
-    else:
-        raise Exception("no avatar")
-    mask = Image.new("L", (280,280), 0)
-    ImageDraw.Draw(mask).ellipse((0,0,280,280), fill=255)
-    avatar_pil.putalpha(mask)
-    avatar_np = np.array(avatar_pil)
-except:
-    avatar_np = np.array(Image.new('RGB', (280,280), (255,235,0)))
+    draw.rounded_rectangle((50, 1160, W-50, 1230), radius=35, fill=(255,255,255,240))
+    draw.text((95, 1175), f'Search "{search[:25]}"', fill=(60,60,60), font=font_small)
+    draw.rectangle((0, 1300, W, H), fill=(0,0,0,190))
+    y = 1330
+    for line in textwrap.wrap(title + " #tech #shorts #viral", width=28):
+        draw.text((35, y), line.upper(), fill="white", font=font_big, stroke_width=5, stroke_fill="black")
+        y+=62
+        if y>1650: break
+    draw.text((35, 1700), f"@{CHANNEL_NAME} • Subscribe", fill=(200,200,200), font=font_small)
+    return ImageClip(np.array(overlay)).set_duration(duration)
 
-clips=[]
-idx=0
-for i, sentence in enumerate(sentences):
-    gTTS(text=sentence, lang='en', tld='us', slow=False).save(f"v{i}.mp3")
-    audio = AudioFileClip(f"v{i}.mp3")
-    words = sentence.split()
-    chunk_duration = audio.duration / len(words) if words else 0.5
-    for w_idx, word in enumerate(words):
-        bg_clip = get_clip(sentence, chunk_duration, idx); idx+=1
-        W,H = 1080,1920
-        text_img = Image.new('RGBA', (W,H), (0,0,0,0))
-        draw = ImageDraw.Draw(text_img, 'RGBA')
-        if i==0 and w_idx<2:
-            draw.rectangle((0,0,W,300), fill=(255,0,0,220))
-            try: font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 75)
-            except: font_big = ImageFont.load_default()
-            draw.text((40,90), "🔥 VIRAL IN USA!", fill="white", font=font_big, stroke_width=5, stroke_fill="black")
-        draw.rectangle((0,1350,W,H), fill=(0,0,0,190))
-        try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 78)
-        except: font = ImageFont.load_default()
-        y=1450
-        full_line = " ".join(words[max(0,w_idx-2):w_idx+3])
-        for line in textwrap.fill(full_line.upper(), width=16).split('\n'):
-            bbox = draw.textbbox((0,0), line, font=font)
-            x = (W - (bbox[2]-bbox[0]))//2
-            color = (255,235,0) if word.upper() in line else (255,255,255)
-            draw.text((x,y), line, fill=color, font=font, stroke_width=8, stroke_fill="black")
-            y+=95
-            break
-        text_clip = ImageClip(np.array(text_img)).set_duration(chunk_duration)
-        avatar_clip = ImageClip(avatar_np).set_duration(chunk_duration).set_position((750, 1050))
-        final_c = CompositeVideoClip([bg_clip, text_clip, avatar_clip], size=(W,H))
-        clips.append(final_c)
-
-all_audio = [AudioFileClip(f"v{j}.mp3") for j in range(len(sentences))]
-full_audio = concatenate_audioclips(all_audio)
-final_video = concatenate_videoclips(clips, method="compose").set_duration(full_audio.duration).set_audio(full_audio)
-final = final_video
-while final.duration < 32:
-    final = concatenate_videoclips([final, final_video], method="compose")
-    if final.duration > 36: break
+overlay_clip = create_overlay(audio.duration, topic_title, topic_search)
+final = CompositeVideoClip([bg_clip, overlay_clip], size=(W,H)).set_audio(audio)
+if final.duration < 25:
+    final = final.loop(duration=26)
 final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac')
 print(f"DONE {final.duration}s")
 
+# --- UPLOAD WITH CLONED DESCRIPTION + TAGS ---
 from upload_youtube import upload_video
-upload_video("final_shorts.mp4", viral_title, viral_desc, viral_tags[:15])
+
+if viral:
+    # Same title as viral creator + twist
+    final_title = f"{viral['original_title']} 🔥"
+    # Same description pattern + your links
+    final_desc = f"""{viral['original_title']}
+
+{cloned_desc[:300]}
+
+This is similar to video by {viral['creator_name']} - {cloned_link}
+
+👉 Watch More: {OLD_SHORTS}
+👉 Subscribe: {CHANNEL_LINK}
+
+Original Inspiration: {viral['creator_name']} {viral['original_link']}
+
+#viral #tech #shorts #trending #firsttimeinusa #{topic_search.replace(' ','')} #{viral['creator_name'].replace(' ','')}
+
+Credit: Pexels Stock
+"""
+    final_tags = [topic_search, viral['creator_name'], "tech shorts", "viral tech", "first time in usa", "cloned viral", "trending"]
+else:
+    final_title = f"{topic_title} 🔥 | First Time in USA"
+    final_desc = f"{topic_title}\n\nSearch: {topic_search}\n\n👉 Watch More: {OLD_SHORTS}\n👉 Subscribe: {CHANNEL_LINK}\n\n#tech #shorts #viral"
+    final_tags = [topic_search, "tech tips", "viral"]
+
+upload_video("final_shorts.mp4", final_title[:95], final_desc, final_tags[:15])
+print(f"Uploaded CLONED VIRAL: {final_title}")

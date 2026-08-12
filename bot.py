@@ -1,10 +1,10 @@
 import random, requests, feedparser, re, os, time, textwrap
 from gtts import gTTS
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_audioclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-print("Starting VIRAL CLONER + MIX TECH Bot...")
+print("Starting VIRAL CLONER 30s FIXED Bot...")
 
 CHANNEL_LINK = "https://www.youtube.com/@amantomarwoway"
 CHANNEL_NAME = "Aman Tomar Wow Way"
@@ -13,8 +13,7 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
 # --- BIG CREATORS LIST - INKI VIRAL SHORTS CLONE HOGI ---
 BIG_CREATORS = [
-    # Channel ID : Name (Tech / Innovation niche ke bade creators)
-    {"id": "UC6-F5tO8uklgE9Zy8IvbdFw", "name": "Marques Brownlee", "handle": "@MKBHD"}, # MKBHD
+    {"id": "UC6-F5tO8uklgE9Zy8IvbdFw", "name": "Marques Brownlee", "handle": "@MKBHD"},
     {"id": "UCBJycsmduvYEL83R_U4JriQ", "name": "Mrwhosetheboss", "handle": "@Mrwhosetheboss"},
     {"id": "UCsTcErHg8oDvUnTzoqsYeNw", "name": "Unbox Therapy", "handle": "@UnboxTherapy"},
     {"id": "UCXuqSBlHAE6Xw-yeJA0Tunw", "name": "Linus Tech Tips", "handle": "@LinusTechTips"},
@@ -22,7 +21,7 @@ BIG_CREATORS = [
     {"id": "UCqwUrSlWBP7mTfbArq8F9hg", "name": "Gadgets 360", "handle": "@Gadgets360"},
 ]
 
-# --- BACKUP 50 MIX TOPICS (Agar cloning fail ho to) ---
+# --- BACKUP 50 MIX TOPICS ---
 BACKUP_TOPICS = [
     {"query": "smartphone close up tech", "title": "Secret Android setting you should turn on", "search": "android secret setting"},
     {"query": "iphone screen technology", "title": "iPhone hidden feature nobody knows", "search": "iphone secret trick"},
@@ -35,26 +34,20 @@ BACKUP_TOPICS = [
 ]
 
 def get_viral_from_big_creator():
-    """Bade creator ki latest viral video nikalta hai"""
     print("Big creators ki viral shorts check kar raha hu...")
     random.shuffle(BIG_CREATORS)
-    for creator in BIG_CREATORS[:3]: # 3 creators try karega
+    for creator in BIG_CREATORS[:3]:
         try:
             feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={creator['id']}"
             feed = feedparser.parse(feed_url)
             if not feed.entries: continue
-            # Latest video jo Short hai (title chhota hota hai shorts ka)
             latest = feed.entries[0]
             title = latest.title
             description = latest.get('summary', '') or latest.get('description', '')
             link = latest.link
-            
-            # Check if title looks viral (short title = likely short)
             if len(title) < 100 and len(title) > 10:
                 print(f"VIRAL FOUND from {creator['name']}: {title}")
-                # Extract keywords for Pexels search
                 keywords = re.sub(r'[^a-zA-Z0-9 ]', '', title).lower()
-                # Pexels query = first 3 words
                 pexels_query = ' '.join(keywords.split()[:4])
                 return {
                     "original_title": title,
@@ -96,11 +89,9 @@ def get_pexels_video(query):
         print(f"Error: {e}")
         return None
 
-# --- STEP 1: TRY VIRAL CLONING ---
 viral = get_viral_from_big_creator()
 
 if viral:
-    # Cloned topic
     topic_title = viral["original_title"]
     topic_search = viral["search"]
     pexels_q = viral["pexels_query"]
@@ -108,7 +99,6 @@ if viral:
     cloned_link = viral["original_link"]
     print(f"CLONING MODE: {topic_title}")
 else:
-    # Fallback to backup
     fallback = random.choice(BACKUP_TOPICS)
     topic_title = fallback["title"]
     topic_search = fallback["search"]
@@ -121,10 +111,35 @@ bg_path = get_pexels_video(pexels_q or topic_search)
 if not bg_path:
     bg_path = get_pexels_video(topic_search)
 
-# --- Voice ---
-script_text = f"{topic_title}. This viral technology is trending now. {topic_search}. Secret trick you must know. Subscribe."
+# --- FIXED + 30 SEC VOICE ---
+# Pehle wala script chhota tha, ab bada kar diya 30 sec ke liye
+if viral:
+    script_text = f"{topic_title}. {cloned_desc[:150]} This viral technology is trending in USA right now. {topic_search} is something everyone is searching. Here is the secret trick you must know to make it work. This will save your time and money. Subscribe for more viral tech shorts."
+else:
+    script_text = f"{topic_title}. This is a secret trick about {topic_search}. Most people don't know this hidden feature. If you enable this one setting, your device will become twice as fast. This is trending in USA and going viral. Let me show you how it works step by step. Subscribe to {CHANNEL_NAME} for more."
+
+print(f"TTS: {script_text}")
 gTTS(text=script_text, lang='en', tld='us', slow=False).save("voice.mp3")
+time.sleep(1) # file save wait - FIX for voice.mp3 error
+
 audio = AudioFileClip("voice.mp3")
+print(f"Original audio: {audio.duration} sec")
+
+# --- 30 SEC TARGET LOGIC ---
+TARGET = 30
+if audio.duration < TARGET:
+    # Audio ko loop karke 30 sec bana do
+    loop_times = int(TARGET // audio.duration) + 2
+    audio = concatenate_audioclips([audio]*loop_times).subclip(0, TARGET)
+    audio.write_audiofile("voice_30.mp3")
+    audio = AudioFileClip("voice_30.mp3")
+    print(f"Looped audio to: {audio.duration} sec")
+else:
+    audio = audio.subclip(0, TARGET)
+
+# FIX: safe_duration for audio mismatch error
+safe_duration = audio.duration
+print(f"Final safe_duration: {safe_duration}")
 
 W, H = 1080, 1920
 if bg_path and os.path.exists(bg_path):
@@ -132,13 +147,14 @@ if bg_path and os.path.exists(bg_path):
     bg_clip = bg_clip.resize(height=H)
     if bg_clip.w > W:
         bg_clip = bg_clip.crop(x1=(bg_clip.w-W)//2, x2=(bg_clip.w-W)//2 + W, y1=0, y2=H)
-    if bg_clip.duration < audio.duration:
-        bg_clip = bg_clip.loop(duration=audio.duration)
+    # FIX: video hamesha audio se bada ya barabar
+    if bg_clip.duration < safe_duration:
+        bg_clip = bg_clip.loop(duration=safe_duration)
     else:
-        bg_clip = bg_clip.subclip(0, audio.duration)
+        bg_clip = bg_clip.subclip(0, safe_duration)
 else:
     img = Image.new("RGB", (W,H), (10,10,40))
-    bg_clip = ImageClip(np.array(img)).set_duration(audio.duration)
+    bg_clip = ImageClip(np.array(img)).set_duration(safe_duration)
 
 def create_overlay(duration, title, search):
     overlay = Image.new('RGBA', (W,H), (0,0,0,0))
@@ -147,7 +163,6 @@ def create_overlay(duration, title, search):
     except: font_big = ImageFont.load_default()
     try: font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
     except: font_small = ImageFont.load_default()
-
     draw.rounded_rectangle((50, 1160, W-50, 1230), radius=35, fill=(255,255,255,240))
     draw.text((95, 1175), f'Search "{search[:25]}"', fill=(60,60,60), font=font_small)
     draw.rectangle((0, 1300, W, H), fill=(0,0,0,190))
@@ -159,20 +174,17 @@ def create_overlay(duration, title, search):
     draw.text((35, 1700), f"@{CHANNEL_NAME} • Subscribe", fill=(200,200,200), font=font_small)
     return ImageClip(np.array(overlay)).set_duration(duration)
 
-overlay_clip = create_overlay(audio.duration, topic_title, topic_search)
-final = CompositeVideoClip([bg_clip, overlay_clip], size=(W,H)).set_audio(audio)
-if final.duration < 25:
-    final = final.loop(duration=26)
-final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac')
+overlay_clip = create_overlay(safe_duration, topic_title, topic_search)
+
+# FIX: final duration = audio duration, no extra loop
+final = CompositeVideoClip([bg_clip, overlay_clip], size=(W,H)).set_duration(safe_duration).set_audio(audio)
+final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', threads=2)
 print(f"DONE {final.duration}s")
 
-# --- UPLOAD WITH CLONED DESCRIPTION + TAGS ---
 from upload_youtube import upload_video
 
 if viral:
-    # Same title as viral creator + twist
     final_title = f"{viral['original_title']} 🔥"
-    # Same description pattern + your links
     final_desc = f"""{viral['original_title']}
 
 {cloned_desc[:300]}
@@ -195,4 +207,4 @@ else:
     final_tags = [topic_search, "tech tips", "viral"]
 
 upload_video("final_shorts.mp4", final_title[:95], final_desc, final_tags[:15])
-print(f"Uploaded CLONED VIRAL: {final_title}")
+print(f"Uploaded CLONED VIRAL 30s: {final_title}")

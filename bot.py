@@ -2,10 +2,11 @@ import random, requests, feedparser, re, os, time, textwrap
 from gtts import gTTS
 from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_audioclips
 import moviepy.video.fx.all as vfx
+import moviepy.audio.fx.all as afx
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import numpy as np
 
-print("Starting FINAL VIRAL CLONER - All Fixed Bot...")
+print("Starting FINAL FIXED - No Error Bot...")
 
 if os.path.exists("bg_video.mp4"):
     os.remove("bg_video.mp4")
@@ -15,11 +16,9 @@ CHANNEL_NAME = "Tech Operation Theatre"
 OLD_SHORTS = "https://www.youtube.com/@techoperationtheatre/shorts"
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 
-BANNED_WORDS = ["jethalal", "bapuji", "taarak", "ooltah", "chashmah", "tmkoc", "bhabi", "kapil", "bigg boss", "anupama"]
+BANNED_WORDS = ["jethalal", "bapuji", "taarak", "ooltah", "chashmah", "tmkoc", "bhabi", "kapil", "bigg boss"]
 
-# Pexels pehle define kiya taki error na aaye
 def get_pexels_video(query):
-    print(f"Pexels search: {query}")
     try:
         if not PEXELS_API_KEY: return None
         url = f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=8&orientation=portrait&size=medium"
@@ -28,7 +27,6 @@ def get_pexels_video(query):
         if resp.status_code!= 200: return None
         videos = resp.json().get('videos', [])
         if not videos: return None
-        # Bright wala video chun lo
         video = random.choice(videos)
         files = sorted(video['video_files'], key=lambda x: x['width'], reverse=True)
         best = next((f for f in files if f['width'] >= 720), files[0])
@@ -36,9 +34,7 @@ def get_pexels_video(query):
         with open("bg_video.mp4", "wb") as out:
             for chunk in r.iter_content(chunk_size=1024*1024): out.write(chunk)
         return "bg_video.mp4"
-    except Exception as e:
-        print(f"Pexels Error: {e}")
-        return None
+    except: return None
 
 def get_ai_clip(query):
     try:
@@ -49,12 +45,9 @@ def get_ai_clip(query):
         r = requests.get(url, timeout=30)
         if r.status_code == 200:
             with open(img_path, 'wb') as f: f.write(r.content)
-            # Brightness badhao
             im = Image.open(img_path)
-            enhancer = ImageEnhance.Brightness(im)
-            im = enhancer.enhance(1.3)
-            enhancer2 = ImageEnhance.Color(im)
-            im = enhancer2.enhance(1.2)
+            im = ImageEnhance.Brightness(im).enhance(1.3)
+            im = ImageEnhance.Color(im).enhance(1.2)
             im.save(img_path)
             return img_path
         return None
@@ -62,8 +55,6 @@ def get_ai_clip(query):
 
 def get_human_face_clip(query):
     try:
-        # SCRIPT SE RELATED FACE - Ye fix hai
-        # Agar topic iphone hai to iphone wala banda ayega
         face_queries = [
             f"{query} with man tech youtuber studio bright light",
             f"american man explaining {query} bright studio",
@@ -71,10 +62,7 @@ def get_human_face_clip(query):
         ]
         for q in face_queries:
             vid = get_pexels_video(q)
-            if vid:
-                print(f"RELATED FACE MIL GAYA: {q}")
-                return vid, False
-        print("AI RELATED FACE")
+            if vid: return vid, False
         ai_url = f"https://loremflickr.com/1080/1920/american,man,{query.replace(' ',',')},tech,bright?lock={random.randint(1,999999)}"
         img_path = f"/tmp/face_{int(time.time())}.jpg"
         r = requests.get(ai_url, timeout=30)
@@ -82,13 +70,11 @@ def get_human_face_clip(query):
             with open(img_path, 'wb') as f: f.write(r.content)
             im = Image.open(img_path)
             im = ImageEnhance.Brightness(im).enhance(1.4)
-            im = ImageEnhance.Color(im).enhance(1.3)
             im.save(img_path)
             return img_path, True
         return None, False
     except: return None, False
 
-# FIXED CAPTION - WORD TO WORD SKY BLUE - PIL WALA 100% WORKING
 def create_skyblue_captions(full_text, audio_duration):
     try:
         words = full_text.split()
@@ -109,11 +95,8 @@ def create_skyblue_captions(full_text, audio_duration):
             clip = ImageClip(np.array(img)).set_duration(per_word).set_start(i * per_word)
             clip = clip.set_position(('center', 0.78), relative=True)
             clips.append(clip)
-        print(f"Caption Words: {len(clips)} Word to Word OK")
         return clips
-    except Exception as e:
-        print(f"Caption Error: {e}")
-        return []
+    except: return []
 
 BIG_CREATORS = [
     {"id": "UC6-F5tO8uklgE9Zy8IvbdFw", "name": "Marques Brownlee"},
@@ -124,7 +107,6 @@ BIG_CREATORS = [
 BACKUP_TOPICS = [
     {"query": "iphone 16 technology", "title": "Secret iPhone setting you should turn on", "search": "iphone secret trick"},
     {"query": "android secret setting", "title": "Secret Android setting you should turn on", "search": "android secret setting"},
-    {"query": "tesla technology", "title": "Tesla's new feature is mind blowing", "search": "tesla new feature"},
 ]
 
 def get_viral_from_big_creator():
@@ -136,9 +118,7 @@ def get_viral_from_big_creator():
             if not feed.entries: continue
             for entry in feed.entries[:6]:
                 title = entry.title
-                if any(b in title.lower() for b in BANNED_WORDS):
-                    print(f"SKIPPED: {title}")
-                    continue
+                if any(b in title.lower() for b in BANNED_WORDS): continue
                 if len(title) < 100 and len(title) > 10:
                     keywords = re.sub(r'[^a-zA-Z0-9 ]', '', title).lower()
                     pexels_query = ' '.join(keywords.split()[:4])
@@ -155,15 +135,12 @@ else:
     topic_title = fallback["title"]; topic_search = fallback["search"]; pexels_q = fallback["query"]
     cloned_desc = ""; cloned_link = ""
 
-# --- FINAL SCRIPT FIX ---
+# SCRIPT FIXED
 if viral:
     script_text = f"Hello friends, {topic_title}. {cloned_desc[:120]} This viral technology is trending in USA right now. {topic_search} is something everyone is searching. Here is the secret trick you must know. So subscribe my channel for more."
 else:
-    script_text = f"Hello friends, {topic_title}. This is a secret trick about {topic_search}. Most people don't know this hidden feature. If you enable this one setting, your device will become twice as fast. This is trending in USA. So subscribe my channel for more."
+    script_text = f"Hello friends, {topic_title}. This is a secret trick about {topic_search}. Most people don't know this hidden feature. This is trending in USA. So subscribe my channel for more."
 
-print(f"SCRIPT: {script_text}")
-
-# --- SOUND NUKILA TEZ CLEAR FIX ---
 gTTS(text=script_text, lang='en', tld='com', slow=False).save("voice.mp3")
 time.sleep(1)
 audio = AudioFileClip("voice.mp3")
@@ -175,8 +152,9 @@ if audio.duration < TARGET:
 else:
     audio = audio.subclip(0, TARGET)
 
-# Tez aur clear
-audio = audio.fx(vfx.audio_fadein, 0.1).fx(vfx.audio_fadeout, 0.2).volumex(1.6)
+# --- SOUND FIX - YAHAN GALTI THI, AB SAHI KIYA ---
+audio = audio.fx(afx.audio_fadein, 0.1).fx(afx.audio_fadeout, 0.2).fx(afx.volumex, 1.6)
+
 safe_duration = audio.duration
 W, H = 1080, 1920
 
@@ -195,8 +173,8 @@ if bg_path and os.path.exists(bg_path):
         bg_clip = VideoFileClip(bg_path).without_audio().resize(height=H)
         if bg_clip.w > W: bg_clip = bg_clip.crop(x1=(bg_clip.w-W)//2, x2=(bg_clip.w-W)//2 + W, y1=0, y2=H)
         bg_clip = bg_clip.loop(duration=safe_duration) if bg_clip.duration < safe_duration else bg_clip.subclip(0, safe_duration)
-        # LIGHTING FIX - Bright + Color
-        bg_clip = bg_clip.fx(vfx.colorx, 1.25).fx(vfx.lum_contrast, lum=10, contrast=0.2)
+        # Lighting bright
+        bg_clip = bg_clip.fx(vfx.colorx, 1.25)
 else:
     img = Image.new("RGB", (W,H), (10,10,40))
     bg_clip = ImageClip(np.array(img)).set_duration(safe_duration)
@@ -223,7 +201,6 @@ overlay_clip = create_overlay(safe_duration, topic_title, topic_search)
 caption_clips = create_skyblue_captions(script_text, safe_duration)
 final = CompositeVideoClip([bg_clip, overlay_clip, *caption_clips], size=(W,H)).set_duration(safe_duration).set_audio(audio)
 final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', threads=2)
-print(f"DONE {final.duration}s BRIGHT + RELATED FACE + TEZ SOUND")
 
 from upload_youtube import upload_video
 final_title = f"{topic_title} 🔥" if viral else f"{topic_title} 🔥 | First Time in USA"

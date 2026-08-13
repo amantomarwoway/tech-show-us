@@ -6,9 +6,8 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from googleapiclient.discovery import build
 from auto_music import fetch_music_for_video
-print("Starting FINAL BOT - USA ULTRA VIRAL - FULL SEO - NO ERROR...")
+print("Starting FINAL BOT - USA ULTRA VIRAL - FULL SEO - FIXED 3 PROBLEMS...")
 
-# --- EMOJI CTR BOOST LOGIC - USA VIRAL ---
 def get_feeling_emoji(title):
     title_low = title.lower()
     if any(w in title_low for w in ["iphone", "apple", "ios", "ipad"]):
@@ -63,7 +62,6 @@ def get_unique_title(title):
 
 def get_multi_clips(topic, total_duration):
     clips = []
-    # IMPROVEMENT 4: USA diversity - man + woman + NY + flag + tech
     activities = [
         f"american man using {topic} phone smiling",
         f"american woman with {topic} technology smiling",
@@ -102,7 +100,6 @@ def get_multi_clips(topic, total_duration):
                 try: clip = clip.resized(height=1920)
                 except: pass
             clips.append(clip)
-            print(f"CLIP {i+1} MILA: {q}")
         except Exception as e:
             print(f"Clip {i} skip: {e}")
             continue
@@ -138,7 +135,6 @@ def create_skyblue_captions(full_text, audio_duration):
     return clips
 
 def create_progress_bar(duration):
-    # IMPROVEMENT 2: Progress bar for retention - USA viral style
     try:
         bar = ColorClip(size=(1080, 12), color=(255, 0, 0)).set_duration(duration)
         bar = bar.set_position(('center', 'top'))
@@ -151,7 +147,6 @@ def get_trending_topic_triple():
     final_topic = None
     source = ""
     try:
-        print("Trying Google RSS USA...")
         r = requests.get("https://trends.google.com/trending/rss?geo=US", timeout=15)
         root = ET.fromstring(r.content)
         items = root.findall('.//item/title')
@@ -161,7 +156,6 @@ def get_trending_topic_triple():
             if len(topic) > 3:
                 final_topic = topic
                 source = "google_rss"
-                print(f"GOOGLE RSS SE FINAL: {topic}")
                 break
     except Exception as e:
         print(f"Google RSS error: {e}")
@@ -176,7 +170,6 @@ def get_trending_topic_triple():
                     if 5 < len(yt_title) < 90:
                         final_topic = re.sub(r'[^a-zA-Z0-9 ]', '', yt_title).strip()[:45]
                         source = "youtube"
-                        print(f"YOUTUBE SE FINAL: {yt_title}")
                         break
         except Exception as e:
             print(f"YouTube error: {e}")
@@ -189,12 +182,24 @@ def clean_news_text(raw):
     raw = re.sub('<[^<]+?>', '', raw)
     raw = raw.replace("&apos;", "'").replace("&quot;", '"').replace("&amp;", "&")
     raw = re.split(r'\s-\s[A-Z][a-z]+\s*$', raw)[0]
-    sentences = re.split(r'\.\s+', raw)
-    short = '. '.join(sentences[:2])[:250]
+    sentences = [s.strip() for s in re.split(r'\.\s+', raw) if len(s.strip()) > 10]
+    if not sentences:
+        return raw[:300].strip()
+    important_keywords = ["$", "pay", "billion", "million", "lawsuit", "sued", "fine", "%", "price", "launch"]
+    important_sent = []
+    for s in sentences[1:]:
+        if any(k in s.lower() for k in important_keywords):
+            important_sent.append(s)
+    final_sents = [sentences[0]]
+    if important_sent and important_sent[0] not in final_sents:
+        final_sents.append(important_sent[0])
+    for s in sentences[1:]:
+        if s not in final_sents and len(final_sents) < 3:
+            final_sents.append(s)
+    short = '. '.join(final_sents)[:350]
     return short.strip()
 
 def get_real_news_script(topic):
-    """No Repeat - USA Viral Style Script"""
     real_news_text = ""
     try:
         url = f"https://news.google.com/rss/search?q={requests.utils.quote(topic)}+when:1d&hl=en-US&gl=US&ceid=US:en"
@@ -206,28 +211,27 @@ def get_real_news_script(topic):
             desc = first_item.find('description').text if first_item.find('description') is not None else ""
             raw = f"{title_news}. {desc}"
             real_news_text = clean_news_text(raw)
-            print(f"REAL NEWS MILA: {real_news_text[:150]}")
     except Exception as e:
         print(f"News fetch error: {e}")
     if len(real_news_text) < 30:
         real_news_text = f"{topic} is trending number one in the USA right now with a big update"
     topic_clean = topic.replace("  ", " ").strip()
-    # IMPROVEMENT 1 & 3: USA slang + power words
     templates = [
-        f"Yo America, stop scrolling right now. {real_news_text}. This is insane and it just happened. This changes everything about {topic_clean}. You won't believe what happens next. Follow for more USA updates.",
-        f"What's up USA? {topic_clean} is breaking the internet right now. {real_news_text}. This is crazy viral news from today. Everyone in America is freaking out about this. Comment your thoughts and subscribe.",
-        f"Breaking news America. {real_news_text}. This is why it matters to you right now. If you missed this {topic_clean} update, you missed something huge. This will blow your mind. Watch till the end.",
-        f"Hey America, did you hear about {topic_clean}? {real_news_text}. This went insane viral in the USA today. Let me make it super simple, no BS, just real facts. Smash subscribe for more."
+        f"Hey America, stop scrolling. {real_news_text}. This just happened and it is a game changer for {topic_clean}. You need to see this right now. Hit subscribe for more USA updates.",
+        f"What's up USA? {topic_clean} is trending everywhere right now. {real_news_text}. This is major news from today. Everyone in America is talking about this. Let me know what you think.",
+        f"Breaking news America. {real_news_text}. This matters to you because it affects everyone in the USA. If you missed this {topic_clean} update, this is huge. Watch till the end for what to do next.",
+        f"Did you hear about {topic_clean}? {real_news_text}. This went viral across the USA today. I will explain it in simple words, just real facts for you. Hit that subscribe button for daily updates."
     ]
     final_script = random.choice(templates)
     words = final_script.split()
-    # IMPROVEMENT 5: Cap to 80 words = 32 sec sweet spot for USA shorts
-    if len(words) > 80:
-        final_script = ' '.join(words[:80]) + "."
+    if len(words) > 65:
+        first_part = ' '.join(words[:45])
+        last_part = ' '.join(words[-15:])
+        final_script = first_part + " " + last_part
+        final_script = ' '.join(final_script.split()[:65]) + "."
     return final_script
 
 def fetch_seo_keywords(topic):
-    """Direct SEO Base - YouTube autocomplete + Google"""
     keywords = []
     try:
         url = f"https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q={requests.utils.quote(topic)}"
@@ -256,7 +260,6 @@ def fetch_seo_keywords(topic):
     return keywords
 
 def seo_optimize(topic, script_text):
-    """Full Direct SEO - File Name + Title + Description + Tags + Hashtags"""
     keywords = fetch_seo_keywords(topic)
     base_title = topic.replace("#tech","").replace("#shorts","").strip()
     base_title = ' '.join(base_title.split()[:7])
@@ -266,68 +269,22 @@ def seo_optimize(topic, script_text):
         f"{emoji} {base_title} You Need To Know Today {emoji}",
         f"{emoji} {base_title} Viral in America Right Now {emoji}"
     ]
-    # FIXED: Syntax error fixed here - double bracket
     final_title = min(seo_titles, key=lambda x: abs(len(x)-58))[:90]
     kw_str = ", ".join(keywords[:5])
-    description = f"""{final_title}
-
-{script_text}
-
-Hello Americans! {topic} is trending number 1 in the USA today. This video covers full real news.
-
-In this video:
-- {topic} latest news today
-- Why {topic} is trending in America
-- What you should do about {topic}
-
-Related Searches: {kw_str}
-
-This video is based on Google Trends USA and YouTube Trending USA real-time data - 100% current news for {topic}.
-
-If this helped you, please SUBSCRIBE and comment your thoughts on {topic} below.
-
-Watch More: {OLD_SHORTS}
-Subscribe: {CHANNEL_LINK}
-
-#tech #shorts #shortsfeed #ytshorts #{topic.replace(' ', '')} #USTrending #{topic.replace(' ', '')}News #GoogleTrendsUSA #YouTubeTrendsUSA #USATechNews #ViralUSA #TechNews2026 #BreakingNewsUSA
-"""
-    tags = [
-        topic,
-        f"{topic} news",
-        f"{topic} USA",
-        f"{topic} today",
-        f"{topic} update 2026",
-        f"{topic} trending USA",
-        f"{topic} breaking news",
-        "USA trending today",
-        "Google Trends USA",
-        "YouTube Trending USA",
-        "US tech news today",
-        "viral tech USA",
-        "tech news 2026",
-        "breaking tech news USA",
-        f"{topic} explained",
-        "shorts",
-        "shorts feed",
-        "ytshorts"
-    ]
+    description = f"{final_title}\n\n{script_text}\n\nHello Americans! {topic} is trending number 1 in the USA today.\n\nIn this video:\n- {topic} latest news today\n- Why {topic} is trending in America\n- What you should do about {topic}\n\nRelated Searches: {kw_str}\n\nThis video is based on Google Trends USA and YouTube Trending USA real-time data.\n\nWatch More: {OLD_SHORTS}\nSubscribe: {CHANNEL_LINK}\n\n#tech #shorts #shortsfeed #ytshorts #{topic.replace(' ', '')} #USTrending #GoogleTrendsUSA #USATechNews #ViralUSA #TechNews2026 #BreakingNewsUSA\n"
+    tags = [topic, f"{topic} news", f"{topic} USA", f"{topic} today", f"{topic} update 2026", f"{topic} trending USA", f"{topic} breaking news", "USA trending today", "Google Trends USA", "YouTube Trending USA", "US tech news today", "viral tech USA", "tech news 2026", "breaking tech news USA", f"{topic} explained", "shorts", "shorts feed", "ytshorts"]
     for kw in keywords[:5]:
         if kw not in tags and len(tags) < 20:
             tags.append(kw)
     tags = list(dict.fromkeys(tags))[:18]
-    print(f"SEO TITLE: {final_title}")
-    print(f"SEO TAGS: {tags[:8]}")
     return final_title, description, tags
 
-# --- MAIN START ---
 topic_search, script_source = get_trending_topic_triple()
 topic_title = get_unique_title(f"{topic_search} You Didn't Know!")
 script_text = get_real_news_script(topic_search)
 print(f"FINAL TITLE: {topic_title}")
 print(f"FINAL SCRIPT: {script_text}")
-
 clean_script_for_voice = script_text.replace("#","").strip()
-# IMPROVEMENT 1: tld='us' for USA accent
 gTTS(text=clean_script_for_voice, lang='en', tld='us', slow=False).save("voice.mp3")
 time.sleep(1)
 audio = AudioFileClip("voice.mp3")
@@ -337,22 +294,14 @@ bg_music_path = fetch_music_for_video(topic_search)
 if bg_music_path:
     from moviepy.editor import AudioFileClip, CompositeAudioClip
     bg_music = AudioFileClip(bg_music_path).subclip(0, audio.duration)
-    bg_music = bg_music.volumex(0.12)  # Slight boost for USA energy
+    bg_music = bg_music.volumex(0.12)
     final_audio = CompositeAudioClip([audio, bg_music])
 else:
     final_audio = audio  
-
-# IMPROVEMENT 5: Cap duration to 34 sec max for USA shorts sweet spot
 max_duration = 34
 if final_audio.duration > max_duration:
-    print(f"Capping duration from {final_audio.duration} to {max_duration}")
-    try:
-        final_audio = final_audio.subclip(0, max_duration)
-    except:
-        final_audio = final_audio.with_end(max_duration)
-
-print(f"Final Voice Duration: {final_audio.duration} sec - USA optimized")
-
+    try: final_audio = final_audio.subclip(0, max_duration)
+    except: final_audio = final_audio.with_end(max_duration)
 W, H = 1080, 1920
 bg_clip = get_multi_clips(topic_search, final_audio.duration)
 if not bg_clip:
@@ -366,46 +315,31 @@ def create_overlay(duration, title, search):
     except: font_big = ImageFont.load_default()
     try: font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
     except: font_small = ImageFont.load_default()
-    # IMPROVEMENT: USA VIRAL badge instead of Search
     draw.rounded_rectangle((50, 1160, W-50, 1230), radius=35, fill=(255, 0, 0, 240))
     draw.text((95, 1175), f'USA VIRAL: {search[:20]}', fill=(255,255,255), font=font_small)
     draw.rectangle((0, 1300, W, H), fill=(0,0,0,190))
     y = 1330
     clean_title_raw = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#trending","").strip()
     clean_title_raw = ' '.join(clean_title_raw.split()[:8])
-    clean_title = clean_title_raw
-    for line in textwrap.wrap(clean_title, width=28):
+    for line in textwrap.wrap(clean_title_raw, width=28):
         draw.text((35, y), line.upper(), fill="white", font=font_big, stroke_width=5, stroke_fill="black")
         y+=60
         if y>1650: break
     return safe_set_duration(ImageClip(np.array(overlay)), duration)
 
-# --- FULL SEO DIRECT + INDIRECT + USA ULTRA ---
 from upload_youtube import upload_video
 final_yt_title, description, tags = seo_optimize(topic_search, script_text)
-
 seo_filename = re.sub(r'[^a-z0-9]+', '-', topic_search.lower()).strip('-')[:40]
 seo_filename = f"{seo_filename}-usa-news-2026.mp4"
-print(f"SEO FILE NAME: {seo_filename}")
-
 overlay_clip = create_overlay(final_audio.duration, final_yt_title, topic_search)
 caption_clips = create_skyblue_captions(script_text, final_audio.duration)
-
-# Build final layers
 layers = [bg_clip, overlay_clip, *caption_clips]
-
-# IMPROVEMENT 2: Add progress bar if available
 progress_bar = create_progress_bar(final_audio.duration)
 if progress_bar:
     layers.append(progress_bar)
-
 final = CompositeVideoClip(layers, size=(W,H))
 final = safe_set_duration(final, final_audio.duration)
 final = safe_set_audio(final, final_audio)
 final.write_videofile(seo_filename, fps=30, codec='libx264', audio_codec='aac', threads=2, logger=None)
-
-print(f"FINAL SEO DONE - USA ULTRA")
-print(f"Direct: File={seo_filename}, Title={final_yt_title}, Tags={len(tags)}")
-print(f"Indirect: Hook+Captions+FastCuts+ProgressBar+USA Slang")
-
+print(f"FINAL SEO DONE - 3 PROBLEMS FIXED")
 upload_video(seo_filename, final_yt_title, description, tags)

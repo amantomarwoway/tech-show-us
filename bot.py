@@ -13,11 +13,11 @@ for f in ["voice.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]
         try: os.remove(f)
         except: pass
 
-CHANNEL_LINK = "https://www.youtube.com/@techoperationtheatre"
-OLD_SHORTS = "https://www.youtube.com/@techoperationtheatre/shorts"
+CHANNEL_LINK = "https://www.youtube.com/@TECH4USA"
+OLD_SHORTS = "https://www.youtube.com/@TECH4USA/shorts"
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
-BANNED_WORDS = ["jethalal", "bapuji", "taarak", "ooltah", "chashmah", "tmkoc", "bhabi", "kapil", "bigg boss"]
+BANNED_WORDS = ["jethalal", "bapuji", "taarak", "ooltah", "chashmah", "tmkoc", "bhabi", "kapil", "bigg boss", "lottery"]
 
 def safe_set_duration(clip, d):
     try: return clip.set_duration(d)

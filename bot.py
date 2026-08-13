@@ -190,7 +190,7 @@ def get_trending_topic_triple():
         final_topic = "Tech News USA"
         source = "fallback"
 
-        return final_topic, source
+    return final_topic, source
 
 def get_real_news_script(topic):
     """Real News se simple 5th grade script banayega - No repeat"""

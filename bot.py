@@ -7,7 +7,7 @@ from pytrends.request import TrendReq
 import snscrape.modules.twitter as sntwitter
 from googleapiclient.discovery import build
 
-print("Starting FINAL BOT - NO REPEAT - AMERICA TOPIC ONLY...")
+print("Starting FINAL BOT - USA TOP TRENDING ONLY - NO REPEAT...")
 
 for f in ["voice.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]:
     if os.path.exists(f):
@@ -122,8 +122,6 @@ def get_trending_topic_triple():
     print("TRIPLE CHECK: Google USA -> YouTube USA -> Twitter USA")
     final_topic = None
     source = ""
-
-    # 1. GOOGLE TRENDS - USA TOP SEARCH
     try:
         pytrends = TrendReq(hl='en-US', tz=360)
         trending_df = pytrends.trending_searches(pn='united_states')
@@ -138,8 +136,6 @@ def get_trending_topic_triple():
                 break
     except Exception as e:
         print(f"Google error: {e}")
-
-    # 2. YOUTUBE TRENDING - USA
     if not final_topic:
         try:
             if YOUTUBE_API_KEY:
@@ -155,8 +151,6 @@ def get_trending_topic_triple():
                         break
         except Exception as e:
             print(f"YouTube error: {e}")
-
-    # 3. TWITTER TRENDING - USA
     if not final_topic:
         try:
             print("Twitter USA Trending...")
@@ -171,28 +165,24 @@ def get_trending_topic_triple():
                     break
         except Exception as e:
             print(f"Twitter error: {e}")
-
     return final_topic, source
 
 # --- MAIN START ---
 topic_search, script_source = get_trending_topic_triple()
-
 if not topic_search:
-    raise Exception("No trending topic found from USA - Stopping")
+    raise Exception("No USA trending topic found - Stopping as per user rule")
 
 topic_title = get_unique_title(f"{topic_search} You Didn't Know!")
 
-# SCRIPT - NO REPEAT - Hello Americans + Subscribe Fixed
-# Lamba script taaki 28-32 sec tak ek baar me bole, repeat na ho
+# NO REPEAT SCRIPT - Hello Americans + Subscribe Fixed
 script_text = f"Hello Americans, this {topic_search} is trending number one in the United States right now. Everyone in America is searching for it today. Here is the real update you need to know. First, this will save you a lot of time and money. Second, there is a hidden setting inside it that most Americans are missing. If you turn this on, your phone and life will be much easier. So watch till the end. Please subscribe and comment your thoughts below."
 
 print(f"FINAL TITLE: {topic_title}")
-print(f"FINAL SCRIPT: {script_text} | Source: {script_source}")
+print(f"FINAL SCRIPT: {script_text}")
 
-# VOICE - PURE AMERICAN - NO LOOP
+# VOICE - NO LOOP
 clean_script_for_voice = script_text.replace("#","").strip()
 gTTS(text=clean_script_for_voice, lang='en', tld='com', slow=False).save("voice.mp3")
-
 time.sleep(1)
 audio = AudioFileClip("voice.mp3")
 try: audio = audio.volumex(1.8)
@@ -230,5 +220,42 @@ final = safe_set_duration(final, audio.duration)
 final = safe_set_audio(final, audio)
 final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', threads=2, logger=None)
 
+# FULL DETAILED DESCRIPTION AND TAGS - TOPIC RELATED ONLY
+description = f"""{topic_title}
+
+Hello Americans! {topic_search} is currently trending Number 1 on Google Trends and YouTube Trends in the United States.
+
+In this video, I will explain why {topic_search} is viral in the USA today and what you must know about it. This information will save your time and money.
+
+What you will learn in this video:
+- Why {topic_search} is trending in America
+- Hidden details about {topic_search} most people don't know
+- How to use {topic_search} like a pro
+
+This topic is taken directly from USA Google Top Searches and YouTube Top Trending right now, so you are getting 100% current and real information.
+
+If you found this helpful, Please Subscribe and comment your thoughts below.
+
+Watch More Shorts: {OLD_SHORTS}
+Subscribe Here: {CHANNEL_LINK}
+
+#tech #shorts #{topic_search.replace(' ', '')} #USTrending #GoogleTrends #YouTubeTrends #USATech #TechNews #ViralTech
+"""
+
+tags = [
+    topic_search,
+    f"{topic_search} trending",
+    f"{topic_search} USA",
+    f"{topic_search} news",
+    "USA trending today",
+    "Google Trends USA",
+    "YouTube Trends USA",
+    "US tech news",
+    "trending tech USA",
+    "viral tech",
+    "tech shorts",
+    "USA top search"
+]
+
 from upload_youtube import upload_video
-upload_video("final_shorts.mp4", f"{topic_title}"[:95], f"{topic_title}\n\nWatch More: {OLD_SHORTS}\nSubscribe: {CHANNEL_LINK}\n#tech #shorts", [topic_search, "tech"])
+upload_video("final_shorts.mp4", f"{topic_title}"[:95], description, tags)

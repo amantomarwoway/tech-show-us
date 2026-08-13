@@ -5,7 +5,7 @@ from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVid
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from googleapiclient.discovery import build
-
+from auto_music import fetch_music_for_video
 print("Starting FINAL BOT - USA TOP TRENDING ONLY - NO REPEAT...")
 
 for f in ["voice.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]:
@@ -181,10 +181,19 @@ time.sleep(1)
 audio = AudioFileClip("voice.mp3")
 try: audio = audio.volumex(1.8)
 except: pass
-print(f"Final Voice Duration: {audio.duration} sec - Single Play, No Repeat")
+bg_music_path = fetch_music_for_video(topic_search)
+
+if bg_music_path:
+    from moviepy.editor import AudioFileClip, CompositeAudioClip
+    bg_music = AudioFileClip(bg_music_path).subclip(0, audio.duration)
+    bg_music = bg_music.volumex(0.10)  # <-- 10% volume final hai
+    final_audio = CompositeAudioClip([audio, bg_music])
+else:
+    final_audio = audio  
+print(f"Final Voice Duration: {final_audio.duration} sec - Single Play, No Repeat")
 
 W, H = 1080, 1920
-bg_clip = get_multi_clips(topic_search, audio.duration)
+bg_clip = get_multi_clips(topic_search, final_audio.duration)
 if not bg_clip:
     bg_clip = ImageClip(np.array(Image.new("RGB", (W,H), (10,10,40))))
     bg_clip = safe_set_duration(bg_clip, audio.duration)
@@ -207,11 +216,11 @@ def create_overlay(duration, title, search):
         if y>1650: break
     return safe_set_duration(ImageClip(np.array(overlay)), duration)
 
-overlay_clip = create_overlay(audio.duration, topic_title, topic_search)
-caption_clips = create_skyblue_captions(script_text, audio.duration)
+overlay_clip = create_overlay(final_audio.duration, topic_title, topic_search)
+caption_clips = create_skyblue_captions(script_text, final_audio.duration)
 final = CompositeVideoClip([bg_clip, overlay_clip, *caption_clips], size=(W,H))
-final = safe_set_duration(final, audio.duration)
-final = safe_set_audio(final, audio)
+final = safe_set_duration(final, final_audio.duration)
+final = safe_set_audio(final, final_audio)
 final.write_videofile("final_shorts.mp4", fps=30, codec='libx264', audio_codec='aac', threads=2, logger=None)
 
 # FULL DETAILED DESCRIPTION AND TAGS - TOPIC RELATED ONLY

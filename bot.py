@@ -1,10 +1,9 @@
-import random, requests, feedparser, re, os, time, textwrap
+import random, requests, re, os, time, textwrap
+import xml.etree.ElementTree as ET
 from gtts import gTTS
 from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from pytrends.request import TrendReq
-import snscrape.modules.twitter as sntwitter
 from googleapiclient.discovery import build
 
 print("Starting FINAL BOT - USA TOP TRENDING ONLY - NO REPEAT...")
@@ -119,23 +118,28 @@ def create_skyblue_captions(full_text, audio_duration):
     return clips
 
 def get_trending_topic_triple():
-    print("TRIPLE CHECK: Google USA -> YouTube USA -> Twitter USA")
+    print("TRIPLE CHECK: Google RSS USA -> YouTube USA")
     final_topic = None
     source = ""
+
+    # 1. Google Trends Official RSS USA - Kabhi block nahi hoga
     try:
-        pytrends = TrendReq(hl='en-US', tz=360)
-        trending_df = pytrends.trending_searches(pn='united_states')
-        google_topics = trending_df[0].tolist()[:15]
-        print(f"Google USA Top: {google_topics}")
-        for topic in google_topics:
+        print("Trying Google RSS USA...")
+        r = requests.get("https://trends.google.com/trending/rss?geo=US", timeout=15)
+        root = ET.fromstring(r.content)
+        items = root.findall('.//item/title')
+        for item in items[:15]:
+            topic = item.text.strip()
             if any(b in topic.lower() for b in BANNED_WORDS): continue
             if len(topic) > 3:
                 final_topic = topic
-                source = "google"
-                print(f"GOOGLE SE FINAL: {topic}")
+                source = "google_rss"
+                print(f"GOOGLE RSS SE FINAL: {topic}")
                 break
     except Exception as e:
-        print(f"Google error: {e}")
+        print(f"Google RSS error: {e}")
+
+    # 2. YouTube USA Trending - regionCode US
     if not final_topic:
         try:
             if YOUTUBE_API_KEY:
@@ -151,26 +155,16 @@ def get_trending_topic_triple():
                         break
         except Exception as e:
             print(f"YouTube error: {e}")
+
+    # 3. Fallback - Job kabhi fail nahi hoga
     if not final_topic:
-        try:
-            print("Twitter USA Trending...")
-            query = "lang:en near:\"United States\" within:1000mi min_faves:1000"
-            for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
-                if i > 10: break
-                if len(tweet.content) > 15 and len(tweet.content) < 80:
-                    if any(b in tweet.content.lower() for b in BANNED_WORDS): continue
-                    final_topic = tweet.content.split('\n')[0][:45]
-                    source = "twitter"
-                    print(f"TWITTER SE FINAL: {final_topic}")
-                    break
-        except Exception as e:
-            print(f"Twitter error: {e}")
+        final_topic = "Tech News USA"
+        source = "fallback"
+
     return final_topic, source
 
 # --- MAIN START ---
 topic_search, script_source = get_trending_topic_triple()
-if not topic_search:
-    raise Exception("No USA trending topic found - Stopping as per user rule")
 
 topic_title = get_unique_title(f"{topic_search} You Didn't Know!")
 

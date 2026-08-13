@@ -247,10 +247,11 @@ def create_overlay(duration, title, search):
         elif any(w in tl for w in ["tesla","elon","car","ev"]): return random.choice(["🚗","⚡","🚀"])
         elif any(w in tl for w in ["shock","viral","breaking","trending","insane"]): return random.choice(["😱","🚨","💥"])
         else: return random.choice(["🔥","💥","⚡","🚀"])
-clean_title_raw = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#trending","").strip()
-clean_title_raw = ' '.join(clean_title_raw.split()[:8])
-emoji = get_feeling_emoji(clean_title_raw)
-clean_title = clean_title_raw
+y = 1330
+    clean_title_raw = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#trending","").strip()
+    clean_title_raw = ' '.join(clean_title_raw.split()[:8])
+    clean_title = clean_title_raw
+
     for line in textwrap.wrap(clean_title, width=28):
         draw.text((35, y), line.upper(), fill="white", font=font_big, stroke_width=5, stroke_fill="black")
         y+=60

@@ -1,15 +1,15 @@
 import random, requests, feedparser, re, os, time, textwrap
 from gtts import gTTS
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, concatenate_audioclips
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from pytrends.request import TrendReq
 import snscrape.modules.twitter as sntwitter
 from googleapiclient.discovery import build
 
-print("Starting FINAL MULTI-ACTIVITY BOT - TITLE WITHOUT HASHTAG...")
+print("Starting FINAL BOT - NO REPEAT - AMERICA TOPIC ONLY...")
 
-for f in ["voice.mp3", "voice_30.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]:
+for f in ["voice.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]:
     if os.path.exists(f):
         try: os.remove(f)
         except: pass
@@ -118,21 +118,20 @@ def create_skyblue_captions(full_text, audio_duration):
         clips.append(clip)
     return clips
 
-# ================= TRIPLE CHECK FINAL FIX =================
 def get_trending_topic_triple():
-    print("TRIPLE CHECK: Google (High Prob) -> YouTube (High Prob) -> Twitter (Backup)")
+    print("TRIPLE CHECK: Google USA -> YouTube USA -> Twitter USA")
     final_topic = None
     source = ""
 
-    # 1. GOOGLE TRENDS - 50-90% probability wale (USA trending)
+    # 1. GOOGLE TRENDS - USA TOP SEARCH
     try:
         pytrends = TrendReq(hl='en-US', tz=360)
         trending_df = pytrends.trending_searches(pn='united_states')
-        google_topics = trending_df[0].tolist()[:10]
-        tech_keywords = ['iphone', 'android', 'ai', 'tech', 'nasa', 'space', 'google', 'chatgpt', 'phone', 'laptop', 'gadget', 'apple', 'samsung', 'tesla']
+        google_topics = trending_df[0].tolist()[:15]
+        print(f"Google USA Top: {google_topics}")
         for topic in google_topics:
-            if any(k in topic.lower() for k in tech_keywords):
-                if any(b in topic.lower() for b in BANNED_WORDS): continue
+            if any(b in topic.lower() for b in BANNED_WORDS): continue
+            if len(topic) > 3:
                 final_topic = topic
                 source = "google"
                 print(f"GOOGLE SE FINAL: {topic}")
@@ -140,77 +139,65 @@ def get_trending_topic_triple():
     except Exception as e:
         print(f"Google error: {e}")
 
-    # 2. YOUTUBE TRENDING - Agar Google fail
+    # 2. YOUTUBE TRENDING - USA
     if not final_topic:
         try:
             if YOUTUBE_API_KEY:
                 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-                yt_req = youtube.videos().list(part='snippet', chart='mostPopular', regionCode='US', videoCategoryId='28', maxResults=15).execute()
+                yt_req = youtube.videos().list(part='snippet', chart='mostPopular', regionCode='US', maxResults=20).execute()
                 for item in yt_req.get('items', []):
                     yt_title = item['snippet']['title']
                     if any(b in yt_title.lower() for b in BANNED_WORDS): continue
-                    if 10 < len(yt_title) < 80:
-                        final_topic = re.sub(r'[^a-zA-Z0-9 ]', '', yt_title).strip()[:40]
+                    if 5 < len(yt_title) < 90:
+                        final_topic = re.sub(r'[^a-zA-Z0-9 ]', '', yt_title).strip()[:45]
                         source = "youtube"
                         print(f"YOUTUBE SE FINAL: {yt_title}")
                         break
         except Exception as e:
             print(f"YouTube error: {e}")
 
-    # 3. TWITTER BACKUP - Sirf tab jab dono fail
+    # 3. TWITTER TRENDING - USA
     if not final_topic:
         try:
-            print("Twitter Backup use...")
-            query = "tech AI NASA min_faves:2000 lang:en"
-            for tweet in sntwitter.TwitterSearchScraper(query).get_items():
-                if len(tweet.content) > 20:
-                    final_topic = tweet.content.split('\n')[0][:50]
+            print("Twitter USA Trending...")
+            query = "lang:en near:\"United States\" within:1000mi min_faves:1000"
+            for i, tweet in enumerate(sntwitter.TwitterSearchScraper(query).get_items()):
+                if i > 10: break
+                if len(tweet.content) > 15 and len(tweet.content) < 80:
+                    if any(b in tweet.content.lower() for b in BANNED_WORDS): continue
+                    final_topic = tweet.content.split('\n')[0][:45]
                     source = "twitter"
                     print(f"TWITTER SE FINAL: {final_topic}")
                     break
-                break
-        except:
-            pass
+        except Exception as e:
+            print(f"Twitter error: {e}")
 
-    if not final_topic:
-        final_topic = "Secret iPhone Setting"
-        source = "fallback"
     return final_topic, source
 
 # --- MAIN START ---
 topic_search, script_source = get_trending_topic_triple()
 
-# Title - Clickbait
+if not topic_search:
+    raise Exception("No trending topic found from USA - Stopping")
+
 topic_title = get_unique_title(f"{topic_search} You Didn't Know!")
 
-# Script - ALAG SE BANEGA, TITLE NAHI PADHEGA - Jo log sunna pasand karte hain
-if script_source == "google":
-    script_text = f"This {topic_search} is exploding in the United States right now. Everyone is searching for it. Here is what you need to know before it goes viral everywhere. This will save you a lot of time."
-elif script_source == "youtube":
-    script_text = f"YouTube is going crazy over {topic_search}. This tech trend is number one in America right now. I checked every video. Here is the real truth you must know."
-else: # twitter backup
-    script_text = f"Twitter cannot stop talking about {topic_search}. This tech secret just leaked and it is viral. Here is what is really happening."
+# SCRIPT - NO REPEAT - Hello Americans + Subscribe Fixed
+# Lamba script taaki 28-32 sec tak ek baar me bole, repeat na ho
+script_text = f"Hello Americans, this {topic_search} is trending number one in the United States right now. Everyone in America is searching for it today. Here is the real update you need to know. First, this will save you a lot of time and money. Second, there is a hidden setting inside it that most Americans are missing. If you turn this on, your phone and life will be much easier. So watch till the end. Please subscribe and comment your thoughts below."
 
 print(f"FINAL TITLE: {topic_title}")
 print(f"FINAL SCRIPT: {script_text} | Source: {script_source}")
 
-# VOICE FIX - PURE AMERICAN SMOOTH
+# VOICE - PURE AMERICAN - NO LOOP
 clean_script_for_voice = script_text.replace("#","").strip()
-# American accent ke liye tld='com' hi use hota hai
 gTTS(text=clean_script_for_voice, lang='en', tld='com', slow=False).save("voice.mp3")
 
 time.sleep(1)
 audio = AudioFileClip("voice.mp3")
-TARGET = 30
-if audio.duration < TARGET:
-    audio = concatenate_audioclips([audio]* (int(TARGET//audio.duration)+2)).subclip(0, TARGET)
-    audio.write_audiofile("voice_30.mp3", logger=None)
-    audio = AudioFileClip("voice_30.mp3")
-else:
-    try: audio = audio.subclip(0, TARGET)
-    except: audio = audio.with_end(TARGET)
 try: audio = audio.volumex(1.8)
 except: pass
+print(f"Final Voice Duration: {audio.duration} sec - Single Play, No Repeat")
 
 W, H = 1080, 1920
 bg_clip = get_multi_clips(topic_search, audio.duration)

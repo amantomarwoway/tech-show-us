@@ -190,15 +190,55 @@ def get_trending_topic_triple():
         final_topic = "Tech News USA"
         source = "fallback"
 
-    return final_topic, source
+        return final_topic, source
+
+def get_real_news_script(topic):
+    """Real News se simple 5th grade script banayega - No repeat"""
+    real_news_text = ""
+    try:
+        # USA Google News se aaj ki real news
+        url = f"https://news.google.com/rss/search?q={requests.utils.quote(topic)}+when:1d&hl=en-US&gl=US&ceid=US:en"
+        r = requests.get(url, timeout=12)
+        root = ET.fromstring(r.content)
+        first_item = root.find('.//item')
+        if first_item is not None:
+            desc = first_item.find('description')
+            title_news = first_item.find('title')
+            raw = ""
+            if title_news is not None: raw += title_news.text + ". "
+            if desc is not None: raw += desc.text
+            # HTML tags clean
+            raw = re.sub('<[^<]+?>', '', raw)
+            raw = raw.replace(topic, topic).strip()
+            real_news_text = raw[:350]
+            print(f"REAL NEWS MILA: {real_news_text[:120]}")
+    except Exception as e:
+        print(f"News fetch error: {e}")
+
+    if len(real_news_text) < 30:
+        real_news_text = f"{topic} is trending in the USA today with a big update"
+
+    # Simple words templates - USA audience easy english
+    templates = [
+        f"Hello friends, big update on {topic}. {real_news_text}. This is important for you. In simple words, here is what happened and why it matters. First, this change will affect many people in America. Second, you can use this to save time and money. Watch till the end to know what to do next. Please subscribe for daily USA updates.",
+        f"Hello friends, listen to this. {real_news_text}. Yes, this is about {topic} and it is viral in America right now. I will explain in easy words. What is new, why it is useful, and how you can benefit from it. Stay till the end, this is very helpful. Please subscribe and comment.",
+        f"Hello friends, breaking news on {topic}. {real_news_text}. Many people in the USA are talking about this. Let me make it simple for you. I will tell you three easy points. One, what changed. Two, why you should care. Three, what is the next step. Watch full video, it will help you a lot."
+    ]
+    final_script = random.choice(templates)
+    # 90 words max for 35 sec shorts
+    words = final_script.split()
+    if len(words) > 95:
+        final_script = ' '.join(words[:95]) + "."
+    return final_script
 
 # --- MAIN START ---
+
 topic_search, script_source = get_trending_topic_triple()
 
 topic_title = get_unique_title(f"{topic_search} You Didn't Know!")
 
-# NO REPEAT SCRIPT - Hello Americans + Subscribe Fixed
-script_text = f"Hello Americans, this {topic_search} is trending number one in the United States right now. Everyone in America is searching for it today. Here is the real update you need to know. First, this will save you a lot of time and money. Second, there is a hidden setting inside it that most Americans are missing. If you turn this on, your phone and life will be much easier. So watch till the end. Please subscribe and comment your thoughts below."
+# --- REAL NEWS BASED SCRIPT - SIMPLE WORDS - NO REPEAT ---
+script_text = get_real_news_script(topic_search)
 
 print(f"FINAL TITLE: {topic_title}")
 print(f"FINAL SCRIPT: {script_text}")

@@ -7,7 +7,36 @@ import numpy as np
 from googleapiclient.discovery import build
 from auto_music import fetch_music_for_video
 print("Starting FINAL BOT - USA TOP TRENDING ONLY - NO REPEAT...")
+# --- EMOJI CTR BOOST LOGIC - 6x CTR ke liye ---
+def get_feeling_emoji(title):
+    title_low = title.lower()
+    if any(w in title_low for w in ["iphone", "apple", "ios", "ipad"]):
+        return random.choice(["📱", "🍎", "🔥"])
+    elif any(w in title_low for w in ["samsung", "android", "pixel"]):
+        return random.choice(["📱", "🤖", "⚡"])
+    elif any(w in title_low for w in ["ai", "chatgpt", "openai", "gemini"]):
+        return random.choice(["🤖", "🧠", "🚀"])
+    elif any(w in title_low for w in ["tesla", "elon", "car", "ev", "spacex"]):
+        return random.choice(["🚗", "⚡", "🚀"])
+    elif any(w in title_low for w in ["shock", "viral", "breaking", "trending", "insane"]):
+        return random.choice(["😱", "🚨", "💥", "🔥"])
+    elif any(w in title_low for w in ["launch", "new", "released", "update"]):
+        return random.choice(["✨", "🚀", "🆕"])
+    else:
+        return random.choice(["🔥", "💥", "⚡", "🚀"])
 
+def make_viral_title(title):
+    # 1. Clean Title (3x CTR)
+    clean = title
+    for tag in ["#tech", "#shorts", "#viral", "#trending", "#ai", "#usa"]:
+        clean = clean.replace(tag, "")
+    clean = ' '.join(clean.split()[:8]).strip() # USA ke liye 8 word se zyada nahi
+    
+    # 2. Emoji add (aur 2x CTR = Total 6x)
+    emoji = get_feeling_emoji(clean)
+    # Bada karne ke liye UPPER
+    final = f"{emoji} {clean.upper()} {emoji}"
+    return final
 for f in ["voice.mp3", "final_shorts.mp4"] + [f"clip_{i}.mp4" for i in range(5)]:
     if os.path.exists(f):
         try: os.remove(f)
@@ -209,7 +238,19 @@ def create_overlay(duration, title, search):
     draw.text((95, 1175), f'Search "{search[:25]}"', fill=(60,60,60), font=font_small)
     draw.rectangle((0, 1300, W, H), fill=(0,0,0,190))
     y = 1330
-    clean_title = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#","")
+    # --- USA VIRAL TITLE LOGIC - 6x CTR ---
+    def get_feeling_emoji(t):
+        tl = t.lower()
+        if any(w in tl for w in ["iphone","apple","ios"]): return random.choice(["📱","🍎","🔥"])
+        elif any(w in tl for w in ["samsung","android","pixel"]): return random.choice(["📱","🤖","⚡"])
+        elif any(w in tl for w in ["ai","chatgpt","openai","gemini"]): return random.choice(["🤖","🧠","🚀"])
+        elif any(w in tl for w in ["tesla","elon","car","ev"]): return random.choice(["🚗","⚡","🚀"])
+        elif any(w in tl for w in ["shock","viral","breaking","trending","insane"]): return random.choice(["😱","🚨","💥"])
+        else: return random.choice(["🔥","💥","⚡","🚀"])
+clean_title_raw = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#trending","").strip()
+clean_title_raw = ' '.join(clean_title_raw.split()[:8])
+emoji = get_feeling_emoji(clean_title_raw)
+clean_title = clean_title_raw
     for line in textwrap.wrap(clean_title, width=28):
         draw.text((35, y), line.upper(), fill="white", font=font_big, stroke_width=5, stroke_fill="black")
         y+=60
@@ -261,4 +302,18 @@ tags = [
 ]
 
 from upload_youtube import upload_video
-upload_video("final_shorts.mp4", f"{topic_title}"[:95], description, tags)
+# --- USA 6x CTR YOUTUBE TITLE ---
+def get_yt_emoji(t):
+    tl = t.lower()
+    if any(w in tl for w in ["iphone","apple","ios"]): return "📱"
+    elif any(w in tl for w in ["samsung","android","pixel"]): return "📱"
+    elif any(w in tl for w in ["ai","chatgpt","openai","gemini"]): return "🤖"
+    elif any(w in tl for w in ["tesla","elon","car","ev"]): return "🚗"
+    elif any(w in tl for w in ["shock","viral","breaking"]): return "😱"
+    else: return "🔥"
+
+yt_emoji = get_yt_emoji(topic_title)
+clean_yt_title = topic_title.replace("#tech","").replace("#shorts","").replace("#viral","").strip()
+final_yt_title = f"{yt_emoji} {clean_yt_title[:85]} {yt_emoji}"
+
+upload_video("final_shorts.mp4", final_yt_title, description, tags)

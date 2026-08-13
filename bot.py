@@ -238,20 +238,9 @@ def create_overlay(duration, title, search):
     draw.text((95, 1175), f'Search "{search[:25]}"', fill=(60,60,60), font=font_small)
     draw.rectangle((0, 1300, W, H), fill=(0,0,0,190))
     y = 1330
-    # --- USA VIRAL TITLE LOGIC - 6x CTR ---
-    def get_feeling_emoji(t):
-        tl = t.lower()
-        if any(w in tl for w in ["iphone","apple","ios"]): return random.choice(["📱","🍎","🔥"])
-        elif any(w in tl for w in ["samsung","android","pixel"]): return random.choice(["📱","🤖","⚡"])
-        elif any(w in tl for w in ["ai","chatgpt","openai","gemini"]): return random.choice(["🤖","🧠","🚀"])
-        elif any(w in tl for w in ["tesla","elon","car","ev"]): return random.choice(["🚗","⚡","🚀"])
-        elif any(w in tl for w in ["shock","viral","breaking","trending","insane"]): return random.choice(["😱","🚨","💥"])
-        else: return random.choice(["🔥","💥","⚡","🚀"])
-y = 1330
     clean_title_raw = title.replace("#tech","").replace("#shorts","").replace("#viral","").replace("#trending","").strip()
     clean_title_raw = ' '.join(clean_title_raw.split()[:8])
     clean_title = clean_title_raw
-
     for line in textwrap.wrap(clean_title, width=28):
         draw.text((35, y), line.upper(), fill="white", font=font_big, stroke_width=5, stroke_fill="black")
         y+=60

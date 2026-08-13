@@ -1,11 +1,8 @@
 Pillow==9.5.0
 moviepy==1.0.3
-requests
-feedparser
+request
 gtts
 numpy
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
-pytrends
-snscrape

@@ -174,8 +174,8 @@ def text_to_speech_piper_long(text, output_prefix="voice_long"):
     return audio_files
 
 def get_world_trending_long():
-    """World trending - Google World + YouTube World + Reddit World - Products + Big Machine + Army"""
-    print("WORLD TRENDING LONG CHECK: Google World + YouTube World + Reddit MachinePorn/TankPorn/technology")
+    """World trending - Google World + Big Machine + Army"""
+    print("WORLD TRENDING LONG CHECK: Google World + Reddit MachinePorn/TankPorn/technology")
     final_topic = None
     source = ""
     

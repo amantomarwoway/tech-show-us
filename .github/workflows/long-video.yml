@@ -1,4 +1,4 @@
-name: Long Video - USA Best Time - FINAL FIXED ALL ERRORS
+name: Long Video - USA Best Time - 4K FINAL
 on:
   workflow_dispatch:
   schedule:
@@ -6,55 +6,51 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Free Disk + 4GB SWAP
+      - name: Free Disk Space - 4K No SWAP
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo swapoff /swapfile || true
-          sudo swapoff /mnt/swapfile || true
-          sudo rm -f /swapfile || true
-          sudo rm -f /mnt/swapfile || true
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          df -h
           free -h
-      - name: Cache Piper
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+          df -h
+          free -h
+      - name: Cache Piper Model
         uses: actions/cache@v4
         id: cache-piper
         with:
           path: |
             en_US-lessac-medium.onnx
             en_US-lessac-medium.onnx.json
-          key: piper-v3-final
-      - name: Install System Deps - FIX Pillow JPEG Error
+          key: piper-lessac-4k-v1
+      - name: Install System Deps - 4K + JPEG Fix
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg espeak espeak-ng libjpeg-dev zlib1g-dev libpng-dev libfreetype6-dev
-      - name: Install Python Deps - FIX Pillow 9.5.0 Error
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev zlib1g-dev libpng-dev libfreetype6-dev fonts-dejavu-core
+      - name: Install Python Deps
         run: |
-          pip install --upgrade pip wheel
-          pip install "Pillow==10.4.0" requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
-          pip install "moviepy==1.0.3"
-          echo "✅ Pillow 10.4.0 installed - JPEG error fixed!"
+          python -m pip install --upgrade pip wheel
+          pip install "Pillow==10.4.0" "moviepy==1.0.3" requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts onnxruntime feedparser
       - name: Download Piper
         if: steps.cache-piper.outputs.cache-hit != 'true'
         run: |
-          curl -L --progress-bar --retry 5 -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          curl -L --progress-bar --retry 5 -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-      - name: Run Bot
+          curl -L --retry 5 --fail -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+          curl -L --retry 5 --fail -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+          ls -lh en_US-lessac-medium.onnx*
+      - name: Run Long Video Bot - 4K
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          FAST_MODE: "true"
+          FAST_MODE: "false"
           LOW_RAM: "true"
-        run: |
-          python bot_long_video.py
+          QUALITY: "4K"
+        run: python bot_long_video.py

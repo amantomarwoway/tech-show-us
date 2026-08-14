@@ -397,24 +397,35 @@ audio = AudioFileClip("voice.mp3")
 try: audio = audio.volumex(1.8)
 except: pass
 
-# ========== 5. TRENDING MUSIC 15% + FADE ==========
-bg_music_path = fetch_music_for_video(topic_search)
-if bg_music_path:
-    from moviepy.editor import AudioFileClip, CompositeAudioClip
+# ========== 5. TRENDING MUSIC 15% + FADE - CRASH PROOF FIX FOR PIXABAY JSON ERROR ==========
+bg_music_path = None
+try:
+    # This is where your screenshot error happens: auto_music -> Pixabay JSON parse
+    bg_music_path = fetch_music_for_video(topic_search)
+except Exception as music_err:
+    print(f"⚠️ MUSIC FETCH FAILED (Pixabay empty response) - Continuing without music: {music_err}")
+    bg_music_path = None
+
+final_audio = audio
+if bg_music_path and os.path.exists(bg_music_path):
     try:
-        bg_music = AudioFileClip(bg_music_path).subclip(0, audio.duration)
-    except:
-        bg_music = AudioFileClip(bg_music_path).with_end(audio.duration)
-    bg_music = bg_music.volumex(0.15)  # 15% as requested - perfect for Shorts
-    try:
-        bg_music = bg_music.audio_fadein(0.5).audio_fadeout(0.5)
-    except:
-        pass
-    print(f"TRENDING MUSIC ADDED at 15%: {bg_music_path}")
-    final_audio = CompositeAudioClip([audio, bg_music])
+        from moviepy.editor import AudioFileClip, CompositeAudioClip
+        try:
+            bg_music = AudioFileClip(bg_music_path).subclip(0, audio.duration)
+        except:
+            bg_music = AudioFileClip(bg_music_path).with_end(audio.duration)
+        bg_music = bg_music.volumex(0.15)  # 15% as requested
+        try:
+            bg_music = bg_music.audio_fadein(0.5).audio_fadeout(0.5)
+        except:
+            pass
+        print(f"TRENDING MUSIC ADDED at 15%: {bg_music_path}")
+        final_audio = CompositeAudioClip([audio, bg_music])
+    except Exception as e:
+        print(f"⚠️ MUSIC MIX FAILED - using voice only: {e}")
+        final_audio = audio
 else:
-    print("No music found - voice only")
-    final_audio = audio
+    print("No music found or fetch failed - using voice only (video will still upload)")
 
 # ========== 8. VIDEO LENGTH 15-20 SEC FOR RETENTION ==========
 max_duration = 20  # Short - better retention 50-60%

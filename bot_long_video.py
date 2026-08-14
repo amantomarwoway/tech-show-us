@@ -1,20 +1,33 @@
 import random, requests, re, os, time, textwrap, subprocess, xml.etree.ElementTree as ET, gc
-# ULTIMATE FIX - Teeno root cause fix - Reader None kabhi nahi ayega
 try:
     import imageio_ffmpeg
     os.environ['IMAGEIO_FFMPEG_EXE'] = imageio_ffmpeg.get_ffmpeg_exe()
     FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-    print(f"✅ Bundled FFmpeg: {FFMPEG}")
 except:
     FFMPEG = "ffmpeg"
-    print("Using system FFmpeg")
 
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
+# COMPATIBLE IMPORT - Fixes ModuleNotFoundError: No module named 'moviepy.editor'
+try:
+    from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
+    print("✅ Imported from moviepy.editor - moviepy 1.x style")
+except ImportError:
+    try:
+        from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
+        print("✅ Imported from moviepy - moviepy 2.x style")
+    except ImportError as e:
+        print(f"❌ MoviePy import failed: {e}")
+        import moviepy
+        print(f"MoviePy version: {moviepy.__version__}")
+        from moviepy.video.io.VideoFileClip import VideoFileClip
+        from moviepy.audio.io.AudioFileClip import AudioFileClip
+        from moviepy.video.VideoClip import ImageClip, ColorClip
+        from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+        from moviepy.video.compositing.concatenate import concatenate_videoclips, concatenate_audioclips
+
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-print("🔥 ULTIMATE BULLETPROOF 4K - Reader None Kabhi Nahi Ayega")
-
+print("🔥 ULTIMATE v2 - ModuleNotFoundError + Reader None Both Fixed")
 QUALITY=os.environ.get("QUALITY","4K")
 W,H=3840,2160
 MAX_DURATION=380
@@ -50,7 +63,6 @@ def fix_video_with_ffmpeg(input_path):
         cmd = [FFMPEG, "-y", "-i", input_path, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "scale=1280:720:force_original_aspect_ratio=decrease", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", fixed_path]
         subprocess.run(cmd, timeout=30, capture_output=True)
         if os.path.exists(fixed_path) and os.path.getsize(fixed_path) > 50000:
-            print(f"✅ FFmpeg fixed: {input_path} -> {fixed_path}")
             try: os.remove(input_path)
             except: pass
             os.rename(fixed_path, input_path)
@@ -60,7 +72,6 @@ def fix_video_with_ffmpeg(input_path):
             except: pass
             return input_path
     except Exception as e:
-        print(f"FFmpeg fix failed {input_path}: {e}")
         return input_path
 
 def safe_VideoFileClip(path, per_sentence=5):
@@ -71,9 +82,8 @@ def safe_VideoFileClip(path, per_sentence=5):
             clip = VideoFileClip(path)
             if clip.reader is None:
                 clip.close()
-                raise Exception(f"Reader None - FFmpeg failed to init for {path}")
-            try:
-                clip.get_frame(0)
+                raise Exception(f"Reader None for {path}")
+            try: clip.get_frame(0)
             except Exception as e:
                 clip.close()
                 raise Exception(f"get_frame failed: {e}")
@@ -81,11 +91,9 @@ def safe_VideoFileClip(path, per_sentence=5):
         except Exception as e:
             print(f"⚠️ Attempt {attempt+1} failed for {path}: {e}")
             if attempt < 2:
-                print(f"🔧 Fixing {path} with FFmpeg...")
                 fix_video_with_ffmpeg(path)
                 time.sleep(1)
             else:
-                print(f"❌ All attempts failed for {path} - using ColorClip fallback")
                 fallback = ColorClip(size=(W,H), color=(15,15,35))
                 fallback = safe_duration(fallback, per_sentence)
                 return fallback
@@ -178,7 +186,6 @@ def download_pexels_ultimate(query, prefix):
                     except: pass
                     continue
                 path = fix_video_with_ffmpeg(path)
-                print(f"✅ ULTIMATE CLIP READY: {path}")
                 out.append(path)
                 if len(out)>=2: break
             except: continue
@@ -209,7 +216,6 @@ def create_video_ultimate(sentences, total_duration, topic_main, clip_paths):
     final_files=[]
     per_sentence=total_duration/len(sentences) if sentences else 5
     per_sentence=max(3.0,min(per_sentence,6.0))
-    print(f"Creating ULTIMATE BULLETPROOF 4K - {len(sentences)} segments")
     for i,sent in enumerate(sentences[:8]):
         try:
             path=clip_paths[i % len(clip_paths)] if clip_paths else None
@@ -262,7 +268,6 @@ def create_video_ultimate(sentences, total_duration, topic_main, clip_paths):
             except: pass
             gc.collect()
         except Exception as e:
-            print(f"Segment {i} error: {e}")
             gc.collect();continue
     if not final_files:
         fallback=ColorClip(size=(W,H),color=(10,10,30))
@@ -290,7 +295,7 @@ def create_video_ultimate(sentences, total_duration, topic_main, clip_paths):
 if __name__=="__main__":
     trending_topic=get_trending()
     full_script,sentences,topic_main=generate_viral_script(trending_topic)
-    print(f"Topic: {topic_main} - ULTIMATE")
+    print(f"Topic: {topic_main} - ULTIMATE v2")
     audio_files=tts_piper(full_script)
     if not audio_files: exit(1)
     audio_clips=[AudioFileClip(p) for p in audio_files if os.path.exists(p) and os.path.getsize(p)>1000]
@@ -311,8 +316,8 @@ if __name__=="__main__":
     final_video=safe_duration(video_clip,final_audio.duration)
     final_video=safe_audio(final_video,final_audio)
     seo_name=re.sub(r'[^a-z0-9]+','-',topic_main.lower()).strip('-')[:40]
-    filename=f"{seo_name}-usa-girl-4k-ultimate.mp4"
-    print(f"Writing ULTIMATE {filename} {W}x{H}")
+    filename=f"{seo_name}-usa-girl-4k-ultimate-v2.mp4"
+    print(f"Writing ULTIMATE v2 {filename} {W}x{H}")
     final_video.write_videofile(filename,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None)
     for tf in temp_files:
         try: os.remove(tf)
@@ -321,9 +326,9 @@ if __name__=="__main__":
         try: os.remove(p)
         except: pass
     gc.collect()
-    print(f"✅ ULTIMATE DONE - {filename}")
+    print(f"✅ ULTIMATE v2 DONE - {filename}")
     try:
         from upload_youtube import upload_video
-        upload_video(filename,f"I Tested {topic_main} For 7 Days - 4K ULTIMATE!",f"4K ULTIMATE - {full_script[:500]}",[topic_main.lower(),"4k","viral"])
+        upload_video(filename,f"I Tested {topic_main} For 7 Days - 4K ULTIMATE v2!",f"4K ULTIMATE v2 - {full_script[:500]}",[topic_main.lower(),"4k","viral"])
     except Exception as e:
         print(f"Upload fail: {e}")

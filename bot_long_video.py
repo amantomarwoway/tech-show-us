@@ -6,13 +6,19 @@ try:
     from auto_music import fetch_music_for_video
 except:
     def fetch_music_for_video(t): return None
-print("🔥 VIRAL BOT - TECH BURNER THUMBNAIL STYLE")
+
+# === FIXED CONFIG - USA BEST TIME + FAST MODE + PIPER ===
+FAST_MODE = os.environ.get("FAST_MODE") == "true"
+MAX_DURATION = 400 if FAST_MODE else 520
+print(f"🔥 VIRAL BOT - PIPER USA GIRL + TECH BURNER THUMBNAIL - FAST_MODE={FAST_MODE} - MAX {MAX_DURATION/60:.1f} min")
+
 PEXELS_API_KEY=os.environ.get("PEXELS_API_KEY")
 CHANNEL_LINK="https://www.youtube.com/@TECH4USA"
 TECH_ALLOWED=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","military","abrams","f35","drone","ai","tesla","robot"]
 BANNED=["tyrod","taylor","mariners","yankees","oreo","brad pitt","pushpa","jethalal","tmkoc","bhabi","kapil","bigg boss","football","cricket","movie","election","biden","trump","modi"]
 VIRAL_TOPICS=["Caterpillar D9 Bulldozer","CMF Headphones by Nothing","Abrams M1A2 Tank","iPhone 16 Pro Max","F35 Fighter Jet","JCB 3CX Excavator","Samsung S24 Ultra","MQ9 Reaper Drone","Tesla Bot 2026","Liebherr Crane"]
 USA_GIRL_QUERIES=["beautiful american woman talking camera","american girl explaining shocking","beautiful blonde woman surprised face","american woman tech review talking","beautiful american girl pointing","american woman serious explaining","beautiful brunette woman happy","american girl vlogger closeup"]
+
 def safe_duration(c,d):
     try: return c.set_duration(d)
     except: return c.with_duration(d)
@@ -73,27 +79,35 @@ def generate_viral_script(topic):
             seen.add(s.lower());sents.append(s)
     full='. '.join(sents)+'.'
     words=full.split()
-    if len(words)>1300:
-        full=' '.join(words[:1300])+'.'
-        sents=full.split('.')[:12]
-    print(f"Viral script ready - {len(words)} words - {len(sents)} sentences")
+    max_words = 900 if FAST_MODE else 1100
+    if len(words)>max_words:
+        full=' '.join(words[:max_words])+'.'
+        sents=full.split('.')[:10 if FAST_MODE else 12]
+    print(f"Viral script ready - {len(words)} words - {len(sents)} sentences - FAST={FAST_MODE}")
     return full,sents,main
+
 def tts_piper(script):
     clean=clean_tts(script)
     words=clean.split()
     chunk_size=len(words)//3
     chunks=[' '.join(words[:chunk_size]),' '.join(words[chunk_size:chunk_size*2]),' '.join(words[chunk_size*2:])]
     chunks=[c for c in chunks if len(c.strip())>20]
-    files=[];model="en_US-lessac-medium.onnx";has_piper=os.path.exists(model)
+    files=[]
+    model="en_US-lessac-medium.onnx"
+    model_json=model+".json"
+    has_piper=os.path.exists(model) and os.path.exists(model_json)
+    print(f"TTS Check - Piper model exists: {has_piper}")
     for idx,chunk in enumerate(chunks):
-        out_wav=f"voice_{idx}.wav";out_mp3=f"voice_{idx}.mp3";ok=False
+        out_wav=f"voice_{idx}.wav"
+        out_mp3=f"voice_{idx}.mp3"
+        ok=False
         if has_piper:
             try:
                 safe=chunk.replace('"','').replace('`','').replace('$','').replace('&',' and ')
                 cmd=f'echo "{safe}" | piper --model {model} --output_file {out_wav} --length_scale 0.88 --sentence_silence 0.2'
-                subprocess.run(cmd,shell=True,timeout=80,capture_output=True)
+                result=subprocess.run(cmd,shell=True,timeout=90,capture_output=True,text=True)
                 if os.path.exists(out_wav) and os.path.getsize(out_wav)>2000:
-                    files.append(out_wav);ok=True;print(f"Piper {idx} ok")
+                    files.append(out_wav);ok=True;print(f"✅ Piper {idx} ok")
             except Exception as e: print(f"Piper fail {idx}: {e}")
         if not ok:
             try:
@@ -102,6 +116,7 @@ def tts_piper(script):
                 if os.path.exists(out_mp3) and os.path.getsize(out_mp3)>1000: files.append(out_mp3)
             except: pass
     return files
+
 def download_pexels_video(query,prefix,count=2):
     out=[]
     try:
@@ -121,6 +136,7 @@ def download_pexels_video(query,prefix,count=2):
             except: continue
     except: pass
     return out
+
 def download_pexels_image(query):
     try:
         url=f"https://api.pexels.com/v1/search?query={requests.utils.quote(query)}&per_page=5&orientation=landscape"
@@ -135,23 +151,30 @@ def download_pexels_image(query):
         with open(path,"wb") as f: f.write(resp.content)
         if os.path.exists(path): return path
     except: return None
+
 def get_girl_clips():
     clips=[];random.shuffle(USA_GIRL_QUERIES)
-    for q in USA_GIRL_QUERIES[:5]:
-        clips.extend(download_pexels_video(q,"girl",2))
-        if len(clips)>=10: break
-        time.sleep(0.8)
+    target = 6 if FAST_MODE else 8
+    per_query = 1 if FAST_MODE else 2
+    for q in USA_GIRL_QUERIES[:4 if FAST_MODE else 5]:
+        clips.extend(download_pexels_video(q,"girl",per_query))
+        if len(clips)>=target: break
+        time.sleep(0.5 if FAST_MODE else 0.8)
     return clips
+
 def get_broll(topic):
     clips=[];simple=[]
-    if any(w in topic.lower() for w in ["bulldozer","excavator","crane","jcb","caterpillar"]): simple=["bulldozer","excavator","construction machine","heavy equipment","construction site"]
-    elif any(w in topic.lower() for w in ["tank","fighter","drone","military","abrams","f35"]): simple=["military tank","fighter jet","army","military vehicle","war"]
-    else: simple=["headphones","iphone","phone","technology","gadget","airpods"]
-    for q in simple[:5]:
-        clips.extend(download_pexels_video(q,"broll",2))
-        if len(clips)>=12: break
-        time.sleep(0.8)
+    if any(w in topic.lower() for w in ["bulldozer","excavator","crane","jcb","caterpillar"]): simple=["bulldozer","excavator","construction machine"]
+    elif any(w in topic.lower() for w in ["tank","fighter","drone","military","abrams","f35"]): simple=["military tank","fighter jet","army"]
+    else: simple=["headphones","iphone","technology"]
+    target = 6 if FAST_MODE else 10
+    per_query = 1 if FAST_MODE else 2
+    for q in simple[:3 if FAST_MODE else 5]:
+        clips.extend(download_pexels_video(q,"broll",per_query))
+        if len(clips)>=target: break
+        time.sleep(0.5 if FAST_MODE else 0.8)
     return clips
+
 def create_viral_video(girl_paths,broll_paths,sentences,total_duration,topic_main):
     final_segments=[];per_sentence=total_duration/len(sentences) if sentences else total_duration/10
     if per_sentence<2.5: per_sentence=2.5
@@ -223,6 +246,7 @@ def create_viral_video(girl_paths,broll_paths,sentences,total_duration,topic_mai
         fallback=ColorClip(size=(1920,1080),color=(10,10,30));fallback=safe_duration(fallback,total_duration);return fallback
     final_video=concatenate_videoclips(final_segments,method="compose");final_video=safe_duration(final_video,total_duration)
     return final_video
+
 def create_thumb_tech_burner_style(topic):
     try:
         W,H=1280,720;thumb=Image.new('RGB',(W,H),(240,240,240));draw=ImageDraw.Draw(thumb)
@@ -266,10 +290,12 @@ def create_thumb_tech_burner_style(topic):
             except: font_huge=ImageFont.load_default()
             draw.text((30,20),f"{topic.split()[0].upper()}",fill="black",font=font_huge,stroke_width=6,stroke_fill="white");draw.text((30,120),f"{topic.split()[-1].upper()}?!",fill="#FF3300",font=font_huge,stroke_width=6,stroke_fill="white");thumb.save("thumbnail_long.jpg");return "thumbnail_long.jpg"
         except: return None
+
 def seo_viral(topic,script):
     title1=f"I Tested {topic} For 7 Days - SHOCKING Truth!";title2=f"{topic} - Don't Buy Before Watching This! USA Girl Review";final_title=title1[:90] if len(topic)<30 else title2[:90]
     desc=f"STOP! Don't buy {topic} before watching this!\n\nBeautiful American girl explains {topic}.\n\n{script[:700]}...\n\nSubscribe: {CHANNEL_LINK}\n"
     tags=[topic.lower(),f"{topic.lower()} review","usa girl explains","don't buy",f"{topic.lower()} worth it","tech review 2026","viral tech"];return final_title,desc,tags
+
 if __name__=="__main__":
     trending_topic=get_trending();full_script,sentences,topic_main=generate_viral_script(trending_topic);audio_files=tts_piper(full_script)
     if not audio_files: print("❌ No audio");exit(1)
@@ -287,11 +313,10 @@ if __name__=="__main__":
         if music_path and os.path.exists(music_path):
             bg=AudioFileClip(music_path).subclip(0,final_audio.duration);bg=bg.volumex(0.10);final_audio=CompositeAudioClip([final_audio,bg])
     except: pass
-    max_d=590
-    if final_audio.duration>max_d:
-        try: final_audio=final_audio.subclip(0,max_d)
-        except: final_audio=final_audio.with_end(max_d)
-    print(f"Audio duration: {final_audio.duration/60:.2f} min - Topic: {topic_main}")
+    if final_audio.duration>MAX_DURATION:
+        try: final_audio=final_audio.subclip(0,MAX_DURATION)
+        except: final_audio=final_audio.with_end(MAX_DURATION)
+    print(f"Audio duration: {final_audio.duration/60:.2f} min - Topic: {topic_main} - FAST={FAST_MODE}")
     print("Downloading USA girl clips...");girl_clips=get_girl_clips();print(f"Girl clips: {len(girl_clips)}")
     print(f"Downloading B-roll for {topic_main}...");broll_clips=get_broll(topic_main);print(f"B-roll clips: {len(broll_clips)}")
     if not girl_clips and not broll_clips:
@@ -300,7 +325,11 @@ if __name__=="__main__":
     final_title,description,tags=seo_viral(topic_main,full_script);thumb=create_thumb_tech_burner_style(topic_main)
     seo_name=re.sub(r'[^a-z0-9]+','-',topic_main.lower()).strip('-')[:50];filename=f"{seo_name}-usa-girl-viral-review.mp4"
     final_video=safe_duration(video_clip,final_audio.duration);final_video=safe_audio(final_video,final_audio)
-    print(f"Writing {filename}...");final_video.write_videofile(filename,fps=24,codec='libx264',audio_codec='aac',threads=2,logger=None)
+    print(f"Writing {filename}... FAST={FAST_MODE}")
+    if FAST_MODE:
+        final_video.write_videofile(filename, fps=24, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
+    else:
+        final_video.write_videofile(filename, fps=24, codec='libx264', audio_codec='aac', threads=2, logger=None)
     print(f"✅ DONE: {topic_main} - {filename}")
     try:
         from upload_youtube import upload_video

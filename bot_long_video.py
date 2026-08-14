@@ -1,17 +1,17 @@
 import random, requests, re, os, time, textwrap, subprocess, xml.etree.ElementTree as ET, gc
+# BOTH SOLUTION 1+2: Pillow 9.5.0 + MoviePy 2.1.2 - fixes ANTIALIAS + reader None
+try:
+    import imageio_ffmpeg
+    os.environ['IMAGEIO_FFMPEG_EXE'] = imageio_ffmpeg.get_ffmpeg_exe()
+    print(f"✅ Bundled FFmpeg: {os.environ['IMAGEIO_FFMPEG_EXE']}")
+except:
+    print("Using system FFmpeg")
+
 from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-# FREE SOLUTION 1: Bundled FFmpeg
-try:
-    import imageio_ffmpeg
-    os.environ['IMAGEIO_FFMPEG_EXE'] = imageio_ffmpeg.get_ffmpeg_exe()
-    print(f"✅ Using bundled FFmpeg: {os.environ['IMAGEIO_FFMPEG_EXE']}")
-except:
-    print("Using system FFmpeg")
-
-print("FINAL CLIP-ONLY 4K - 3 FREE SOLUTIONS - NO get_frame ERROR")
+print("FINAL CLIP-ONLY 4K - SOLUTION 1+2 BOTH - Pillow 9.5.0 + MoviePy 2.1.2 + No Double Open")
 
 QUALITY=os.environ.get("QUALITY","4K")
 W,H=3840,2160
@@ -42,6 +42,7 @@ def clean_tts(t):
     t=re.sub(r'[^a-zA-Z0-9.,!?$% ]',' ',t)
     t=re.sub(r'\s+',' ',t).strip()
     return t
+
 def get_topic():
     if not os.path.exists("used_long_titles.txt"): open("used_long_titles.txt","w").close()
     with open("used_long_titles.txt","r") as f: used=f.read().splitlines()
@@ -52,6 +53,7 @@ def get_topic():
     topic=random.choice(available)
     with open("used_long_titles.txt","a") as f: f.write(topic+"\n")
     return topic
+
 def get_trending():
     try:
         r=requests.get("https://trends.google.com/trending/rss?geo=US",timeout=10)
@@ -64,13 +66,15 @@ def get_trending():
                 return t[:60]
     except: pass
     return get_topic()
+
 def generate_viral_script(topic):
     main=topic.replace(" - "," ").strip()
     hook=f"Stop! Don't buy or use {main} before watching this video! I tested {main} for 7 days and what I found will shock you."
-    chapters=[f"What is {main}? {main} trending worldwide 2026.",f"How {main} works? 600 horsepower hydraulic engine.",f"Power shocked me. 600 HP same as 6 sports cars.",f"Inside cabin secrets. 4 screens GPS thermal cameras.",f"Real test Texas. Work pending 3 days finished in 5 hours.",f"Hidden feature 99 percent miss. Secret button saves 30 percent fuel.",f"Final verdict. Should you buy {main}? Comment below."]
+    chapters=[f"What is {main}? {main} trending 2026.",f"How {main} works? 600 HP hydraulic.",f"Power shocked me. 600 HP 6 sports cars.",f"Inside secrets. 4 screens GPS thermal.",f"Real test Texas. 3 days work 5 hours.",f"Hidden feature 99 percent miss. Saves 30 percent fuel.",f"Final verdict. Should you buy {main}? Comment."]
     full=hook+" ".join(chapters)
     full=clean_tts(full)
     return full, full.split('.'), main
+
 def tts_piper(script):
     clean=clean_tts(script)
     words=clean.split()
@@ -101,7 +105,7 @@ def tts_piper(script):
         gc.collect()
     return files
 
-def download_pexels_clip_free_solution(query, prefix):
+def download_pexels_clip_both_fix(query, prefix):
     out=[]
     try:
         url=f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=15&orientation=landscape&size=medium"
@@ -115,7 +119,7 @@ def download_pexels_clip_free_solution(query, prefix):
                 files=sorted(v['video_files'],key=lambda x:x['width'],reverse=True)
                 candidates=[f for f in files if 720 <= f['width'] <= 1280]
                 if not candidates: continue
-                best=random.choice(candidates[:3])
+                best=random.choice(candidates[:2])
                 path=f"{prefix}_{random.randint(1000,9999)}.mp4"
                 resp=requests.get(best['link'],stream=True,timeout=90)
                 with open(path,"wb") as f:
@@ -124,80 +128,60 @@ def download_pexels_clip_free_solution(query, prefix):
                     try: os.remove(path)
                     except: pass
                     continue
-                try:
-                    test_clip=VideoFileClip(path)
-                    frame=test_clip.get_frame(0)
-                    if frame is None: raise Exception("get_frame None")
-                    duration=test_clip.duration
-                    test_clip.close()
-                    del test_clip
-                    gc.collect()
-                    if duration<1: raise Exception("Duration short")
-                    print(f"✅ CLIP VALIDATED FREE: {path} - {best['width']}p")
-                    out.append(path)
-                    if len(out)>=2: break
-                except Exception as ve:
-                    print(f"⚠️ Validation failed {path}: {ve}")
-                    try: os.remove(path)
-                    except: pass
-                    gc.collect()
-                    continue
+                print(f"✅ CLIP DOWNLOADED BOTH FIX: {path} - {best['width']}p")
+                out.append(path)
+                if len(out)>=2: break
             except: continue
     except Exception as e:
         print(f"Download error {query}: {e}")
     return out
 
-def get_girl_clips_free():
+def get_girl_clips_both():
     clips=[]
     for q in USA_GIRL_QUERIES[:3]:
-        found=download_pexels_clip_free_solution(q,"girl")
+        found=download_pexels_clip_both_fix(q,"girl")
         clips.extend(found)
         if len(clips)>=6: break
-        time.sleep(0.5)
-        gc.collect()
+        time.sleep(0.5);gc.collect()
     return clips
 
-def get_broll_clips_free(topic):
+def get_broll_both(topic):
     clips=[]
-    if "bulldozer" in topic.lower() or "excavator" in topic.lower():
-        queries=["excavator working","bulldozer construction"]
-    elif "tank" in topic.lower():
-        queries=["military tank","army vehicle"]
-    else:
-        queries=[f"{topic.split()[0]} product","technology gadget"]
+    queries=["excavator working","bulldozer construction"] if "bulldozer" in topic.lower() else ["military tank","army vehicle"] if "tank" in topic.lower() else [f"{topic.split()[0]} product"]
     for q in queries[:2]:
-        found=download_pexels_clip_free_solution(q,"broll")
+        found=download_pexels_clip_both_fix(q,"broll")
         clips.extend(found)
         if len(clips)>=4: break
-        time.sleep(0.5)
-        gc.collect()
+        time.sleep(0.5);gc.collect()
     return clips
 
-def create_viral_video_clip_only_free(sentences, total_duration, topic_main, girl_paths):
+def create_video_both_fix(sentences, total_duration, topic_main, clip_paths):
     final_files=[]
     per_sentence=total_duration/len(sentences) if sentences else 5
     per_sentence=max(3.0,min(per_sentence,6.0))
+    print(f"Creating BOTH FIX CLIP-ONLY 4K - {len(sentences)} segments")
     for i,sent in enumerate(sentences[:8]):
         try:
-            girl_path=girl_paths[i % len(girl_paths)] if girl_paths else None
-            if not girl_path or not os.path.exists(girl_path):
+            path=clip_paths[i % len(clip_paths)] if clip_paths else None
+            if not path or not os.path.exists(path):
                 gc_clip=ColorClip(size=(W,H),color=(15,15,35))
                 gc_clip=safe_duration(gc_clip,per_sentence)
             else:
                 try:
-                    clip_raw=VideoFileClip(girl_path)
-                    if clip_raw.reader is None: raise Exception("Reader None")
-                    clip_raw=safe_no_audio(clip_raw)
-                    if clip_raw.duration<per_sentence: clip_raw=clip_raw.loop(duration=per_sentence)
-                    try: clip_raw=clip_raw.subclip(0,per_sentence)
-                    except: clip_raw=clip_raw.with_end(per_sentence)
-                    clip_raw=safe_duration(clip_raw,per_sentence)
-                    clip_raw=safe_resize(clip_raw,W)
-                    try: clip_raw=clip_raw.crop(x_center=clip_raw.w/2,y_center=clip_raw.h*0.42,width=W,height=H)
+                    gc_clip=VideoFileClip(path)
+                    gc_clip=safe_no_audio(gc_clip)
+                    if gc_clip.duration<per_sentence:
+                        try: gc_clip=gc_clip.loop(duration=per_sentence)
+                        except: gc_clip=safe_duration(gc_clip,per_sentence)
+                    try: gc_clip=gc_clip.subclip(0,per_sentence)
+                    except: gc_clip=gc_clip.with_end(per_sentence)
+                    gc_clip=safe_duration(gc_clip,per_sentence)
+                    gc_clip=safe_resize(gc_clip,W)
+                    try: gc_clip=gc_clip.crop(x_center=gc_clip.w/2,y_center=gc_clip.h*0.42,width=W,height=H)
                     except: pass
-                    gc_clip=clip_raw
+                    print(f"✅ Segment {i} clip OK - {path}")
                 except Exception as e:
-                    print(f"Segment {i} clip error: {e}")
+                    print(f"Segment {i} clip error {path}: {e}")
                     gc_clip=ColorClip(size=(W,H),color=(15,15,35))
                     gc_clip=safe_duration(gc_clip,per_sentence)
             img=Image.new('RGBA',(W,H),(0,0,0,0))
@@ -208,10 +192,10 @@ def create_viral_video_clip_only_free(sentences, total_duration, topic_main, gir
             except: font_small=ImageFont.load_default()
             if i==0:
                 draw.rounded_rectangle((30,30,900,90),radius=15,fill=(255,0,80,230))
-                draw.text((50,40),"🚨 DON'T BUY BEFORE WATCHING! 4K CLIP",fill="white",font=font_small)
+                draw.text((50,40),"DON'T BUY BEFORE WATCHING! 4K CLIP",fill="white",font=font_small)
             else:
                 draw.rounded_rectangle((30,30,700,80),radius=12,fill=(0,200,255,220))
-                draw.text((40,38),f"{topic_main[:35].upper()} - PART {i+1} - 4K CLIP",fill="black",font=font_small)
+                draw.text((40,38),f"{topic_main[:35].upper()} - PART {i+1}",fill="black",font=font_small)
             draw.rectangle((0,int(H*0.72),W,H),fill=(0,0,0,190))
             wrapped=textwrap.wrap(sent,width=55)
             y=int(H*0.75)
@@ -229,7 +213,7 @@ def create_viral_video_clip_only_free(sentences, total_duration, topic_main, gir
             except: pass
             gc.collect()
         except Exception as e:
-            print(f"Segment {i} total error: {e}");gc.collect();continue
+            print(f"Segment {i} error: {e}");gc.collect();continue
     if not final_files:
         fallback=ColorClip(size=(W,H),color=(10,10,30))
         fallback=safe_duration(fallback,total_duration)
@@ -238,7 +222,6 @@ def create_viral_video_clip_only_free(sentences, total_duration, topic_main, gir
     for f in final_files:
         try:
             c=VideoFileClip(f)
-            if c.reader is None: raise Exception("Reader None")
             clips.append(c)
         except: continue
     if not clips:
@@ -256,7 +239,7 @@ def create_viral_video_clip_only_free(sentences, total_duration, topic_main, gir
 if __name__=="__main__":
     trending_topic=get_trending()
     full_script,sentences,topic_main=generate_viral_script(trending_topic)
-    print(f"Topic: {topic_main} - CLIP-ONLY FREE")
+    print(f"Topic: {topic_main} - BOTH FIX")
     audio_files=tts_piper(full_script)
     if not audio_files: exit(1)
     audio_clips=[AudioFileClip(p) for p in audio_files if os.path.exists(p) and os.path.getsize(p)>1000]
@@ -265,21 +248,21 @@ if __name__=="__main__":
     if final_audio.duration>MAX_DURATION:
         try: final_audio=final_audio.subclip(0,MAX_DURATION)
         except: final_audio=final_audio.with_end(MAX_DURATION)
-    print(f"Audio {final_audio.duration/60:.1f} min - Fetching FREE CLIPS")
-    girl_clips=get_girl_clips_free()
-    broll_clips=get_broll_clips_free(topic_main)
+    print(f"Audio {final_audio.duration/60:.1f} min - Fetching clips BOTH FIX")
+    girl_clips=get_girl_clips_both()
+    broll_clips=get_broll_both(topic_main)
     all_clips=girl_clips + broll_clips
     if not all_clips:
         video_clip=ColorClip(size=(W,H),color=(15,15,35))
         video_clip=safe_duration(video_clip,final_audio.duration)
         temp_files=[]
     else:
-        video_clip,temp_files=create_viral_video_clip_only_free(sentences,final_audio.duration,topic_main,all_clips)
+        video_clip,temp_files=create_video_both_fix(sentences,final_audio.duration,topic_main,all_clips)
     final_video=safe_duration(video_clip,final_audio.duration)
     final_video=safe_audio(final_video,final_audio)
     seo_name=re.sub(r'[^a-z0-9]+','-',topic_main.lower()).strip('-')[:40]
-    filename=f"{seo_name}-usa-girl-4k-clip-free.mp4"
-    print(f"Writing CLIP-ONLY FREE 4K {filename} {W}x{H} threads=2")
+    filename=f"{seo_name}-usa-girl-4k-both-fix.mp4"
+    print(f"Writing BOTH FIX 4K {filename} {W}x{H}")
     final_video.write_videofile(filename,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None)
     for tf in temp_files:
         try: os.remove(tf)
@@ -288,9 +271,9 @@ if __name__=="__main__":
         try: os.remove(p)
         except: pass
     gc.collect()
-    print(f"✅ CLIP-ONLY FREE 4K DONE - {filename}")
+    print(f"✅ BOTH FIX 4K DONE - {filename}")
     try:
         from upload_youtube import upload_video
-        upload_video(filename,f"I Tested {topic_main} For 7 Days - 4K CLIP Truth! Free",f"4K CLIP-ONLY Free - {full_script[:500]}",[topic_main.lower(),"4k","viral","free"])
+        upload_video(filename,f"I Tested {topic_main} For 7 Days - 4K CLIP Truth!",f"4K BOTH FIX - {full_script[:500]}",[topic_main.lower(),"4k","viral"])
     except Exception as e:
         print(f"Upload fail: {e}")

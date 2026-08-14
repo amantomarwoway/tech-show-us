@@ -11,16 +11,15 @@ def get_youtube_service():
     creds = None
     if refresh_token and client_id and client_secret:
         try:
-            print(f"Using GitHub Secrets - {client_id[:10]}...")
+            print(f"Using Secrets - {client_id[:10]}...")
             creds = Credentials(None, refresh_token=refresh_token, token_uri="https://oauth2.googleapis.com/token", client_id=client_id, client_secret=client_secret, scopes=["https://www.googleapis.com/auth/youtube.upload"])
             creds.refresh(Request())
-            print("Credentials refreshed from Secrets")
+            print("Credentials refreshed")
         except Exception as e:
-            print(f"Secrets refresh failed: {e} - trying token.json")
+            print(f"Secrets refresh failed: {e}")
             creds = None
     if not creds and os.path.exists("token.json"):
         try:
-            print("Using token.json")
             creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/youtube.upload'])
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -28,7 +27,7 @@ def get_youtube_service():
             print(f"token.json failed: {e}")
             creds = None
     if not creds:
-        raise Exception("No credentials - Add YT_CLIENT_ID secrets or token.json")
+        raise Exception("No credentials - Add YT secrets or token.json")
     return build('youtube', 'v3', credentials=creds)
 
 def upload_video(file_path, title, description, tags, thumbnail_path=None):
@@ -45,9 +44,9 @@ def upload_video(file_path, title, description, tags, thumbnail_path=None):
         if len(t) >= 2:
             clean_tags.append(t)
     if len(clean_tags) < 3:
-        clean_tags = ["product review", "big machine", "army machine", "world trending", "tech review 2026"]
+        clean_tags = ["product review", "big machine", "army machine", "world trending", "tech review 2026 4k"]
     final_title = title[:95].strip()
-    print(f"Uploading - Category 28 Tech - Tags: {clean_tags[:3]}")
+    print(f"Uploading 4K - Category 28 - Tags: {clean_tags[:3]}")
     max_retries = 3
     response = None
     for attempt in range(max_retries):
@@ -55,34 +54,36 @@ def upload_video(file_path, title, description, tags, thumbnail_path=None):
             chunk_size = 10 * 1024 * 1024
             if file_size < 50 * 1024 * 1024:
                 chunk_size = -1
-            request = youtube.videos().insert(part="snippet,status", body={"snippet": {"title": final_title, "description": description[:4900], "tags": clean_tags, "categoryId": "28"}, "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}, media_body=MediaFileUpload(file_path, chunksize=chunk_size, resumable=True, mimetype='video/mp4'))
+            request = youtube.videos().insert(
+                part="snippet,status",
+                body={
+                    "snippet": {"title": final_title, "description": description[:4900], "tags": clean_tags, "categoryId": "28"},
+                    "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+                },
+                media_body=MediaFileUpload(file_path, chunksize=chunk_size, resumable=True, mimetype='video/mp4')
+            )
             print(f"Upload attempt {attempt+1}/{max_retries} - {file_size/(1024*1024):.1f} MB")
             response = request.execute()
             if response and 'id' in response:
                 video_id = response['id']
                 print(f"UPLOAD SUCCESS - Video ID: {video_id} - https://youtu.be/{video_id}")
                 break
-            else:
-                print(f"Upload response no ID - attempt {attempt+1}")
-                time.sleep(5)
         except Exception as e:
-            error_str = str(e).lower()
             print(f"Upload attempt {attempt+1} failed: {e}")
-            if "quota" in error_str:
-                print("Quota error - waiting 60 sec")
-                time.sleep(60)
-            elif "refresh" in error_str or "token" in error_str:
-                print("Token error - re-auth needed")
-                raise
-            else:
-                time.sleep(10)
+            time.sleep(10)
             if attempt == max_retries - 1:
-                print(f"All {max_retries} attempts failed")
                 raise
     if not response or 'id' not in response:
-        raise Exception("Upload failed - no video ID after retries")
+        raise Exception("Upload failed - no video ID")
     video_id = response['id']
-        if thumbnail_path:
-            print(f"Thumbnail not found: {thumbnail_path} - skipping OK for shorts")
-    print(f"FINAL SUCCESS - https://youtu.be/{video_id} - Title: {final_title}")
+    if thumbnail_path and os.path.exists(thumbnail_path):
+        try:
+            print(f"Uploading thumbnail: {thumbnail_path}")
+            youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(thumbnail_path, mimetype='image/jpeg')).execute()
+            print("Thumbnail uploaded")
+        except Exception as e:
+            print(f"Thumbnail upload failed (non-critical): {e}")
+    else:
+        print(f"Thumbnail not found: {thumbnail_path} - skipping OK for shorts")
+    print(f"FINAL SUCCESS 4K - https://youtu.be/{video_id}")
     return response

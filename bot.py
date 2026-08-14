@@ -375,11 +375,44 @@ def seo_optimize_ultimate(topic, script_text):
         holiday_text = "Apple Event just happened, "
     description = f"Best AI gadgets 2026 - {base_title} explained for USA.\nHow to use {topic} like a pro in 2026 - full breakdown.\n\n{script_text}\n\nHello Americans! In my opinion, I tested {topic} for 30 days. {topic} is trending number 1 in USA today - {holiday_text}Tech that helps humans.\n\nIn this video:\n- Why {topic} is trending in America (Problem-Solution)\n- Hidden details most people don't know\n- How to use {topic} to save time and money\n\nRelated Searches: {kw_str}\n\nThis video is based on Google Trends USA, YouTube Trending USA and Reddit r/technology real data. Human-curated Tech News for USA. Even TechCrunch and Verge are talking about this.\n\nWatch More: {OLD_SHORTS}\nSubscribe: {CHANNEL_LINK}\n\n#Shorts #Tech #{topic.replace(' ', '')} #USATech #AIGadgets2026 #HumanCurated\n"
     
-    tags = [topic, f"{topic} how to", f"{topic} USA 2026", f"{topic} battery fix", f"{topic} trending USA", "USA tech today", "Best AI gadgets 2026", "Tech that helps humans", "Human curated tech", "iPhone tricks USA", "AI tools 2026"]
+    # ========== FIX FOR YOUTUBE INVALID KEYWORDS ERROR ==========
+    # YouTube API rules: each tag <30 chars, total <500 chars, no < > " etc
+    def clean_tag(t):
+        # Remove invalid chars: keep only letters, numbers, space
+        t = re.sub(r'[<>"\'#]', '', t)  # Remove < > " ' #
+        t = re.sub(r'[^\w\s]', ' ', t)  # Replace special chars with space
+        t = ' '.join(t.split())  # Remove extra spaces
+        t = t.strip()[:25]  # Max 25 chars to be safe (limit is 30)
+        return t.lower()
+
+    raw_tags = [topic, f"{topic} how to", f"{topic} usa", f"{topic} battery", "usa tech today", "best ai gadgets 2026", "tech helps humans", "human curated tech", "iphone tricks usa", "ai tools 2026"]
+    # Add keywords but clean them
     for kw in keywords[:5]:
-        if kw not in tags and len(tags) < 18:
-            tags.append(kw)
-    tags = list(dict.fromkeys(tags))[:18]
+        raw_tags.append(kw)
+
+    cleaned = []
+    seen = set()
+    total_len = 0
+    for t in raw_tags:
+        ct = clean_tag(t)
+        if len(ct) < 2: continue  # Skip too short
+        if ct in seen: continue
+        if len(ct) > 25: continue  # YouTube rejects >30, we use 25 safe
+        # Check total length <400 safe
+        if total_len + len(ct) + 1 > 400:
+            break
+        cleaned.append(ct)
+        seen.add(ct)
+        total_len += len(ct) + 1
+        if len(cleaned) >= 12:  # Max 12 tags - safe limit
+            break
+
+    # Fallback if all tags invalid
+    if len(cleaned) < 3:
+        cleaned = ["tech usa", "ai gadgets", "iphone tricks", "usa tech", "tech news 2026"]
+
+    tags = cleaned
+    print(f"✅ CLEANED TAGS ({len(tags)}): {tags} - Total chars: {total_len} - SAFE FOR YOUTUBE API")
     return final_title, description, tags, title_a, title_b
 
 # ========== MAIN ULTIMATE ==========

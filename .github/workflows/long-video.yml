@@ -1,35 +1,41 @@
-name: Long Video USA - 4K ULTIMATE - All 3 Fixes
+name: Long Video USA - 4K ULTIMATE v2 - ModuleNotFoundError Fixed
 on:
   schedule:
-    - cron: '0 18 * * 1,4'
+    - cron: '0 6 * * *'
   workflow_dispatch:
 jobs:
   run-long-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Install System Deps - 4K + JPEG Fix + FFmpeg Reinstall
+      - name: Install System Deps - FFmpeg + JPEG + Espeak - v2 Fixed
         run: |
-          sudo apt-get update
-          sudo apt-get remove ffmpeg -y || true
-          sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev libpng-dev
+          sudo apt-get update -y
+          sudo apt-get remove -y ffmpeg || true
+          sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev libpng-dev libjpeg8-dev
           ffmpeg -version
-          python -m pip install --upgrade pip wheel
+          python3 -m pip install --upgrade pip wheel setuptools
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Python Deps - CORRECTED - All 3 Root Causes Fixed
+      - name: Install Python Deps - FIX ModuleNotFoundError
         run: |
-          pip install "Pillow==9.5.0" "moviepy==2.1.2" "imageio==2.34.1" "imageio-ffmpeg==0.5.1" requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib numpy
-          pip install piper-tts || true
+          pip install --no-cache-dir --upgrade pip wheel setuptools
+          pip install --no-cache-dir "Pillow==9.5.0" "numpy==1.26.4" "decorator==5.1.1" "tqdm==4.66.2" "imageio==2.34.1" "imageio-ffmpeg==0.5.1" "proglog==0.1.10"
+          pip install --no-cache-dir "moviepy==2.1.2"
+          pip install --no-cache-dir requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip install --no-cache-dir piper-tts || true
+          python3 -c "import moviepy; print(f'MoviePy version: {moviepy.__version__}'); from moviepy.editor import VideoFileClip; print('✅ moviepy.editor import OK')"
+          python3 -c "import PIL; print(f'Pillow version: {PIL.__version__}')"
       - name: Download Piper model
         run: |
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx || true
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json || true
-      - name: Run Long Video Bot - ULTIMATE BULLETPROOF
+          ls -lh *.onnx* || true
+      - name: Run Long Video Bot - ULTIMATE v2
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
@@ -42,5 +48,5 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add used_long_titles.txt || true
-          git commit -m "Update long titles" || true
+          git commit -m "Update long titles v2" || true
           git push || true

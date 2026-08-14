@@ -633,7 +633,13 @@ print(f"✅ 15-20 sec concept adapted for long: First 30 sec hook = shocking tex
 from upload_youtube import upload_video
 try:
     upload_video(seo_filename, final_title, description, tags, thumbnail_path=thumb)
-    print("✅ UPLOAD SUCCESS - Long video uploaded - Best video ever - 0.1% kharabi nahi")
+    print("✅ UPLOAD SUCCESS - Long video + THUMBNAIL uploaded - Best video ever")
 except Exception as e:
     print(f"⚠️ Upload failed but video file ready: {e} - File: {seo_filename}")
+    # Fallback without thumbnail if still fails
+    try:
+        upload_video(seo_filename, final_title, description, tags)
+        print("✅ UPLOAD SUCCESS - Video uploaded without thumbnail (fallback)")
+    except Exception as e2:
+        print(f"❌ Second try also failed: {e2}")
     # Don't crash workflow - video file is ready

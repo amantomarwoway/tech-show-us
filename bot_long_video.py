@@ -1,4 +1,4 @@
-import rsts, re, os, time, textwrap, datetime, subprocess
+import random, requests, re, os, time, textwrap, datetime, subprocess
 import xml.etree.ElementTree as ET
 from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, CompositeAudioClip, concatenate_audioclips
 from PIL import Image, ImageDraw, ImageFont

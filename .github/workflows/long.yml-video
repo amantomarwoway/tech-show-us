@@ -1,0 +1,67 @@
+name: Long Video USA Evergreen - Ultimate Best - 3x Week
+
+on:
+  schedule:
+    # Hafte me 3 baar - Monday, Wednesday, Friday 2 PM EST = 18:00 UTC = 11:30 PM IST
+    # Best time for USA audience - 2 PM EST is peak time
+    - cron: '0 18 * * 1,3,5'
+  workflow_dispatch:  # Manual trigger bhi kar sakte ho
+
+jobs:
+  long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Long video ko zyada time lagta hai
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+          
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install gTTS moviepy==1.0.3 Pillow==10.0.0 numpy==1.24.3 requests feedparser google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip list | grep -E "moviepy|gTTS|Pillow"
+          
+      - name: Run Long Video Bot - Ultimate Best - 3x Week
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          # YouTube OAuth - Same as shorts - support both naming
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: |
+          echo "Starting Long Video Bot - Ultimate Best - All 8 suggestions + Error free"
+          echo "Schedule: Monday, Wednesday, Friday - 2 PM EST (3x per week)"
+          echo "Using file: bot_LONG_VIDEO_ULTIMATE_BEST.py"
+          python bot_LONG_VIDEO_ULTIMATE_BEST.py
+          
+      - name: Upload logs if failed (debug)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: long-video-logs
+          path: |
+            *.log
+            ab_titles_long.txt
+            pinned_comment.txt
+            community_poll.txt
+            reply_logic.txt
+          retention-days: 7

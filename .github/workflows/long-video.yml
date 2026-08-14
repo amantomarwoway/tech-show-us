@@ -1,39 +1,61 @@
-name: Long Video USA Evergreen - 3x Week
+name: Long Video - USA Girl Viral
 
 on:
-  schedule:
-    - cron: '0 18 * * 1,3,5'
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # Daily 2 PM ETC
 
 jobs:
-  long:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install System Dependencies + Piper TTS
+
+      - name: Cache Piper Model
+        uses: actions/cache@v4
+        id: cache-piper
+        with:
+          path: |
+            en_US-lessac-medium.onnx
+            en_US-lessac-medium.onnx.json
+          key: piper-model-v1
+
+      - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg espeak espeak-ng
-          pip install -r requirements.txt
-          pip install gTTS moviepy==1.0.3 Pillow numpy requests feedparser google-api-python-client piper-tts
-          # Piper TTS - 100% offline, human emotional voice, no www.com error
-          echo "Downloading Piper TTS model - lessac medium - US male energetic"
-          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O en_US-lessac-medium.onnx
-          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O en_US-lessac-medium.onnx.json
-          ls -lh en_US-lessac-medium.onnx*
-          echo "Piper TTS ready - offline human voice"
-      - name: Run Long Video - Products + Big Machine + Army + World Trending
+          pip install --upgrade pip
+          pip install moviepy==1.0.3 Pillow==9.5.0 requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak
+
+      - name: Download Piper Model (if not cached)
+        if: steps.cache-piper.outputs.cache-hit!= 'true'
+        run: |
+          echo "Downloading Piper model - may take 2 min..."
+          wget --progress=bar:force https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O en_US-lessac-medium.onnx
+          wget --progress=bar:force https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O en_US-lessac-medium.onnx.json
+          ls -lh *.onnx*
+          echo "Piper model downloaded!"
+
+      - name: Verify Model Exists
+        run: |
+          if [ -f "en_US-lessac-medium.onnx" ]; then
+            echo "✅ Piper model found - using Piper"
+          else
+            echo "⚠️ Piper model not found - will use gTTS fallback"
+          fi
+
+      - name: Run Long Video Bot
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        run: python bot_long_video.py
+        run: |
+          python bot_long_video.py

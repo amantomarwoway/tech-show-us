@@ -1,4 +1,4 @@
-name: Long Video - USA Best Time - FINAL FIX - Error 137 & 143
+name: Long Video - USA Best Time - FINAL FIX
 on:
   workflow_dispatch:
   schedule:
@@ -18,14 +18,17 @@ jobs:
           free -h
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo rm -f /swapfile
+          sudo swapoff /swapfile || true
+          sudo swapoff /mnt/swapfile || true
+          sudo rm -f /swapfile || true
+          sudo rm -f /mnt/swapfile || true
           sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           free -h
-          echo "✅ 4GB SWAP added with dd - FIXED!"
-      - name: Cache Piper TTS Model
+          echo "✅ SWAP FIXED!"
+      - name: Cache Piper
         uses: actions/cache@v4
         id: cache-piper
         with:
@@ -33,18 +36,17 @@ jobs:
             en_US-lessac-medium.onnx
             en_US-lessac-medium.onnx.json
           key: piper-lessac-medium-v3-final
-      - name: Install Dependencies
+      - name: Install
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg espeak espeak-ng > /dev/null
-          pip install --upgrade pip
           pip install moviepy==1.0.3 Pillow==9.5.0 requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
-      - name: Download Piper Model
+      - name: Download Piper
         if: steps.cache-piper.outputs.cache-hit != 'true'
         run: |
           curl -L --progress-bar --retry 5 -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
           curl -L --progress-bar --retry 5 -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-      - name: Run Long Video Bot - LOW RAM + FAST MODE
+      - name: Run Bot
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}

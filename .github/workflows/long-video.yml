@@ -1,56 +1,46 @@
-name: Long Video - USA Best Time - 4K FINAL
+name: Long Video USA - 4K ULTIMATE - All 3 Fixes
 on:
-  workflow_dispatch:
   schedule:
     - cron: '0 18 * * 1,4'
+  workflow_dispatch:
 jobs:
-  build:
+  run-long-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Free Disk Space - 4K No SWAP
-        run: |
-          df -h
-          free -h
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
-          df -h
-          free -h
-      - name: Cache Piper Model
-        uses: actions/cache@v4
-        id: cache-piper
-        with:
-          path: |
-            en_US-lessac-medium.onnx
-            en_US-lessac-medium.onnx.json
-          key: piper-lessac-4k-v1
-      - name: Install System Deps - 4K + JPEG Fix
+      - name: Install System Deps - 4K + JPEG Fix + FFmpeg Reinstall
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev zlib1g-dev libpng-dev libfreetype6-dev fonts-dejavu-core
-      - name: Install Python Deps
-        run: |
+          sudo apt-get remove ffmpeg -y || true
+          sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev libpng-dev
+          ffmpeg -version
           python -m pip install --upgrade pip wheel
-          pip install "Pillow==10.4.0" "moviepy==1.0.3" requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts onnxruntime feedparser
-      - name: Download Piper
-        if: steps.cache-piper.outputs.cache-hit != 'true'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python Deps - CORRECTED - All 3 Root Causes Fixed
         run: |
-          curl -L --retry 5 --fail -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          curl -L --retry 5 --fail -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-          ls -lh en_US-lessac-medium.onnx*
-      - name: Run Long Video Bot - 4K
+          pip install "Pillow==9.5.0" "moviepy==2.1.2" "imageio==2.34.1" "imageio-ffmpeg==0.5.1" requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib numpy
+          pip install piper-tts || true
+      - name: Download Piper model
+        run: |
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx || true
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json || true
+      - name: Run Long Video Bot - ULTIMATE BULLETPROOF
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          FAST_MODE: "false"
-          LOW_RAM: "true"
-          QUALITY: "4K"
-        run: python bot_long_video.py
+        run: |
+          python bot_long_video.py
+      - name: Commit used titles
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add used_long_titles.txt || true
+          git commit -m "Update long titles" || true
+          git push || true

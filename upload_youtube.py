@@ -82,18 +82,6 @@ def upload_video(file_path, title, description, tags, thumbnail_path=None):
     if not response or 'id' not in response:
         raise Exception("Upload failed - no video ID after retries")
     video_id = response['id']
-    if thumbnail_path and os.path.exists(thumbnail_path):
-        try:
-            thumb_size = os.path.getsize(thumbnail_path)
-            if thumb_size > 1000:
-                print(f"Uploading thumbnail: {thumbnail_path} - {thumb_size/1024:.1f} KB")
-                youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(thumbnail_path, mimetype='image/jpeg')).execute()
-                print(f"Thumbnail uploaded: {thumbnail_path}")
-            else:
-                print(f"Thumbnail too small - skipping")
-        except Exception as e:
-            print(f"Thumbnail failed (video still uploaded): {e}")
-    else:
         if thumbnail_path:
             print(f"Thumbnail not found: {thumbnail_path} - skipping OK for shorts")
     print(f"FINAL SUCCESS - https://youtu.be/{video_id} - Title: {final_title}")

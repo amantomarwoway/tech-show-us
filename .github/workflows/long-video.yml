@@ -1,51 +1,127 @@
-name: Long Video - USA Prime Time - 2x Week - PIPER
-
+name: Long Video - USA Best Time - FINAL FIX - Error 137 & 143
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * 1,4'  # Monday & Thursday 2 PM EST (USA Best Time) = 6 PM UTC = 11:30 PM IST
-
+    - cron: '0 18 * * 1,4'
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Cache Piper Model
+      - name: Free Disk + 4GB SWAP - FIX Error 137
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          echo "✅ 4GB SWAP added - RAM 7GB -> 11GB - Error 137 fixed!"
+      - name: Cache Piper TTS Model - FIX Error 143 hang
         uses: actions/cache@v4
         id: cache-piper
         with:
           path: |
             en_US-lessac-medium.onnx
             en_US-lessac-medium.onnx.json
-          key: piper-lessac-medium-v3
-
+          key: piper-lessac-medium-v3-final
+          restore-keys: |
+            piper-lessac-medium-v3-final-
       - name: Install Dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg espeak espeak-ng > /dev/null
           pip install --upgrade pip
           pip install moviepy==1.0.3 Pillow==9.5.0 requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
-
-      - name: Download Piper Model with Retry
-        if: steps.cache-piper.outputs.cache-hit != 'true'
+      - name: Download Piper Model - with progress-bar - FIX Error 143
+        if: steps.cache-piper.outputs.cache-hit!= 'true'
         run: |
-          curl -L --progress-bar --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          curl -L --progress-bar --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+          curl -L --progress-bar --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+          curl -L --progress-bar --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
           ls -lh en_US-lessac-medium.onnx*
-
-      - name: Run Bot - USA Girl Piper Voice
+      - name: Verify Piper Model
+        run: |
+          if [ -f "en_US-lessac-medium.onnx" ]; then
+            echo "✅ PIPER FOUND - USA girl voice"
+            ls -lh en_US-lessac-medium.onnx*
+          else
+            echo "⚠️ Piper not found - will use gTTS fallback"
+          fi
+      - name: Run Long Video Bot - LOW RAM + FAST MODE - FIX Error 137 & 143
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          FAST_MODE: "true"
+          LOW_RAM: "true"
+        run: |
+          python bot_long_video.pyname: Long Video - USA Best Time - FINAL FIX - Error 137 & 143
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * 1,4'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Free Disk + 4GB SWAP - FIX Error 137
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          echo "✅ 4GB SWAP added - RAM 7GB -> 11GB - Error 137 fixed!"
+      - name: Cache Piper TTS Model - FIX Error 143 hang
+        uses: actions/cache@v4
+        id: cache-piper
+        with:
+          path: |
+            en_US-lessac-medium.onnx
+            en_US-lessac-medium.onnx.json
+          key: piper-lessac-medium-v3-final
+          restore-keys: |
+            piper-lessac-medium-v3-final-
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg espeak espeak-ng > /dev/null
+          pip install --upgrade pip
+          pip install moviepy==1.0.3 Pillow==9.5.0 requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
+      - name: Download Piper Model - with progress-bar - FIX Error 143
+        if: steps.cache-piper.outputs.cache-hit!= 'true'
+        run: |
+          curl -L --progress-bar --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+          curl -L --progress-bar --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --max-time 300 -o en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+          ls -lh en_US-lessac-medium.onnx*
+      - name: Verify Piper Model
+        run: |
+          if [ -f "en_US-lessac-medium.onnx" ]; then
+            echo "✅ PIPER FOUND - USA girl voice"
+            ls -lh en_US-lessac-medium.onnx*
+          else
+            echo "⚠️ Piper not found - will use gTTS fallback"
+          fi
+      - name: Run Long Video Bot - LOW RAM + FAST MODE - FIX Error 137 & 143
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          FAST_MODE: "true"
+          LOW_RAM: "true"
         run: |
           python bot_long_video.py

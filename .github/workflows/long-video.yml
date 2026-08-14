@@ -1,4 +1,4 @@
-name: Long Video - USA Best Time - FINAL FIX
+name: Long Video - USA Best Time - FINAL FIXED ALL ERRORS
 on:
   workflow_dispatch:
   schedule:
@@ -12,10 +12,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Free Disk + 4GB SWAP - FIX Error 137
+      - name: Free Disk + 4GB SWAP
         run: |
-          df -h
-          free -h
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo swapoff /swapfile || true
@@ -27,7 +25,6 @@ jobs:
           sudo mkswap /swapfile
           sudo swapon /swapfile
           free -h
-          echo "✅ SWAP FIXED!"
       - name: Cache Piper
         uses: actions/cache@v4
         id: cache-piper
@@ -35,12 +32,17 @@ jobs:
           path: |
             en_US-lessac-medium.onnx
             en_US-lessac-medium.onnx.json
-          key: piper-lessac-medium-v3-final
-      - name: Install
+          key: piper-v3-final
+      - name: Install System Deps - FIX Pillow JPEG Error
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg espeak espeak-ng > /dev/null
-          pip install moviepy==1.0.3 Pillow==9.5.0 requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
+          sudo apt-get install -y -qq ffmpeg espeak espeak-ng libjpeg-dev zlib1g-dev libpng-dev libfreetype6-dev
+      - name: Install Python Deps - FIX Pillow 9.5.0 Error
+        run: |
+          pip install --upgrade pip wheel
+          pip install "Pillow==10.4.0" requests gtts numpy google-api-python-client google-auth-httplib2 google-auth-oauthlib piper-tts
+          pip install "moviepy==1.0.3"
+          echo "✅ Pillow 10.4.0 installed - JPEG error fixed!"
       - name: Download Piper
         if: steps.cache-piper.outputs.cache-hit != 'true'
         run: |

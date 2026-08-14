@@ -103,20 +103,34 @@ def tts_piper(script):
 def download_pexels_video(query,prefix,count=1):
     out=[]
     try:
-        url=f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=5&orientation=landscape&size=large"
+        url=f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=10&orientation=landscape&size=medium"
         headers={"Authorization":PEXELS_API_KEY} if PEXELS_API_KEY else {}
         r=requests.get(url,headers=headers,timeout=15)
         if r.status_code!=200: return []
         for v in r.json().get('videos',[])[:count]:
-            try:
-                files=sorted(v['video_files'],key=lambda x:x['width'],reverse=True)
-                best=next((f for f in files if f['width']>=1920),files[0])
-                path=f"{prefix}_{random.randint(1000,9999)}.mp4"
-                resp=requests.get(best['link'],stream=True,timeout=60)
-                with open(path,"wb") as f:
-                    for chunk in resp.iter_content(chunk_size=512*1024): f.write(chunk)
-                if os.path.exists(path) and os.path.getsize(path)>30000: out.append(path)
-            except: continue
+            for attempt in range(3):
+                try:
+                    files=sorted(v['video_files'],key=lambda x:x['width'],reverse=True)
+                    best=next((f for f in files if 720 <= f['width'] <= 1280), files[0])
+                    path=f"{prefix}_{random.randint(1000,9999)}.mp4"
+                    resp=requests.get(best['link'],stream=True,timeout=60)
+                    with open(path,"wb") as f:
+                        for chunk in resp.iter_content(chunk_size=512*1024): f.write(chunk)
+                    if not os.path.exists(path) or os.path.getsize(path)<50000:
+                        continue
+                    try:
+                        test=VideoFileClip(path)
+                        _=test.get_frame(0)
+                        test.close()
+                        print(f"✅ Validated {path} - {best['width']}p")
+                        out.append(path)
+                        break
+                    except Exception as ve:
+                        print(f"⚠️ Validation failed {path}: {ve} - retry")
+                        try: os.remove(path)
+                        except: pass
+                        continue
+                except: continue
     except: pass
     return out
 def download_pexels_image(query):
@@ -157,6 +171,13 @@ def create_viral_video_LOW_RAM(girl_paths,broll_paths,sentences,total_duration,t
             girl_path=girl_paths[i%len(girl_paths)] if girl_paths else None
             if girl_path and os.path.exists(girl_path):
                 try:
+                    try:
+                        vt=VideoFileClip(girl_path)
+                        _=vt.get_frame(0)
+                        vt.close()
+                    except:
+                        print(f"Skip invalid clip {girl_path}")
+                        raise Exception("Invalid clip")
                     gc_clip=VideoFileClip(girl_path)
                     gc_clip=safe_no_audio(gc_clip)
                     if gc_clip.duration<per_sentence: gc_clip=gc_clip.loop(duration=per_sentence)

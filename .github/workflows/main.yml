@@ -1,9 +1,9 @@
 name: 6 Shorts USA Time - 4K FINAL
 on:
   schedule:
-    - cron: '0 14 * * *'
-    - cron: '0 20 * * *'
-    - cron: '0 2 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 23 * * *'
   workflow_dispatch:
 jobs:
   run-bot:

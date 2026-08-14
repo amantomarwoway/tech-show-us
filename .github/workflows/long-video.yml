@@ -14,11 +14,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install System Dependencies + Piper TTS
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg espeak espeak-ng
           pip install -r requirements.txt
-          pip install gTTS moviepy==1.0.3 Pillow numpy requests feedparser google-api-python-client
-      - name: Run Long Video
+          pip install gTTS moviepy==1.0.3 Pillow numpy requests feedparser google-api-python-client piper-tts
+          # Piper TTS - 100% offline, human emotional voice, no www.com error
+          echo "Downloading Piper TTS model - lessac medium - US male energetic"
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O en_US-lessac-medium.onnx
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O en_US-lessac-medium.onnx.json
+          ls -lh en_US-lessac-medium.onnx*
+          echo "Piper TTS ready - offline human voice"
+      - name: Run Long Video - Products + Big Machine + Army + World Trending
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}

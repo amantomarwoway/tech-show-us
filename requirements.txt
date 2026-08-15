@@ -11,3 +11,5 @@ google-auth-oauthlib
 feedparser
 piper-tts
 onnxruntime
+pytrends
+lxml

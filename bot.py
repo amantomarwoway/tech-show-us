@@ -1,5 +1,14 @@
 import random, requests, re, os, time, textwrap, subprocess, xml.etree.ElementTree as ET, gc
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, CompositeAudioClip
+try:
+    import imageio_ffmpeg
+    os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
+except:
+    pass
+try:
+    from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, CompositeAudioClip
+except ImportError:
+    from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, CompositeAudioClip
+
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from googleapiclient.discovery import build
@@ -12,12 +21,11 @@ QUALITY = os.environ.get("QUALITY","4K")
 W, H = 2160, 3840
 if QUALITY!= "4K":
     W, H = 1080, 1920
-print(f"SHORTS BOT 4K - W={W}x{H}")
+print(f"SHORTS BOT 4K - 4 TRENDING SOURCES - W={W}x{H}")
 
-TECH_ALLOWED=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","military","abrams","f35","drone","ai","tesla","robot"]
-CHANNEL_LINK="https://www.youtube.com/@TECH4USA"
+BANNED=["tyrod","taylor","mariners","yankees","oreo","brad pitt","pushpa","jethalal","tmkoc","bhabi","kapil","bigg boss","football","cricket","movie","election","biden","trump","modi"]
+TECH_ALLOWED=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","military","abrams","f35","drone","ai","tesla","robot","technology","tech"]
 PEXELS_API_KEY=os.environ.get("PEXELS_API_KEY")
-EVERGREEN_FALLBACK=["CMF Headphones Review 40 Hour Battery Test 4K","Caterpillar Excavator D9 - How This Big Machine Works 4K","Abrams Tank M1A2 - Army Machine Review Inside Power 4K"]
 
 def safe_set_duration(clip,d):
     try: return clip.set_duration(d)
@@ -50,6 +58,117 @@ def text_to_speech_piper(text, output_path="voice.wav"):
         gTTS(text=clean_text, lang='en', tld='us', slow=False).save("voice.mp3")
         return "voice.mp3"
     except: return None
+
+# === 4 TRENDING SOURCES - SHORTS ===
+def get_from_google_trends_pytrends():
+    try:
+        from pytrends.request import TrendReq
+        pytrends = TrendReq(hl='en-US', tz=360)
+        trending = pytrends.trending_searches(pn='united_states')
+        all_trends = trending[0].tolist()
+        filtered=[t for t in all_trends if not any(b in t.lower() for b in BANNED) and len(t)<90]
+        if filtered:
+            print(f"✅ Shorts Source1 pytrends: {len(filtered)} found")
+            return filtered
+    except Exception as e:
+        print(f"Shorts Source1 fail: {e}")
+    return []
+
+def get_from_youtube_trending():
+    try:
+        api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("YOUTUBE_CLIENT_ID") or ""
+        if not api_key:
+            return []
+        url = f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=25&key={api_key}"
+        r = requests.get(url, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            candidates=[item['snippet']['title'][:60] for item in data.get('items', []) if not any(b in item['snippet']['title'].lower() for b in BANNED)]
+            if candidates:
+                print(f"✅ Shorts Source2 YouTube: {len(candidates)} found")
+                return candidates
+    except Exception as e:
+        print(f"Shorts Source2 fail: {e}")
+    return []
+
+def get_from_reddit():
+    try:
+        candidates=[]
+        for sub in ["technology", "gadgets"]:
+            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=25"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code == 200:
+                data = r.json()
+                for post in data['data']['children']:
+                    title = post['data']['title']
+                    if 10 < len(title) < 90 and not any(b in title.lower() for b in BANNED):
+                        title = re.sub(r'[^a-zA-Z0-9 ]', ' ', title)
+                        candidates.append(title[:60].strip())
+        if candidates:
+            print(f"✅ Shorts Source3 Reddit: {len(candidates)} found")
+            return candidates
+    except Exception as e:
+        print(f"Shorts Source3 fail: {e}")
+    return []
+
+def get_from_google_news():
+    try:
+        urls = [
+            "https://news.google.com/rss/search?q=technology+gadget+review&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=iphone+samsung+pixel+tech&hl=en-US&gl=US&ceid=US:en"
+        ]
+        candidates=[]
+        for url in urls:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code == 200:
+                root = ET.fromstring(r.content)
+                for item in root.findall('.//item/title')[:15]:
+                    t = item.text.strip().split(' - ')[0]
+                    if 10 < len(t) < 90 and not any(b in t.lower() for b in BANNED):
+                        candidates.append(t[:60])
+        if candidates:
+            print(f"✅ Shorts Source4 Google News: {len(candidates)} found")
+            return candidates
+    except Exception as e:
+        print(f"Shorts Source4 fail: {e}")
+    return []
+
+def get_trending_world_tech():
+    print("🔍 SHORTS - Fetching from 4 TRENDING SOURCES...")
+    all_candidates=[]
+    all_candidates.extend(get_from_google_trends_pytrends())
+    all_candidates.extend(get_from_youtube_trending())
+    all_candidates.extend(get_from_reddit())
+    all_candidates.extend(get_from_google_news())
+    all_candidates = list(set([c.strip() for c in all_candidates if c.strip() and len(c.strip())>10]))
+    print(f"🔥 SHORTS Total candidates from 4 sources: {len(all_candidates)}")
+    if not all_candidates:
+        emergency=["iPhone 16 Pro Max Review 4K","Samsung S24 Ultra Test 4K","Tesla Bot 2026 Review 4K"]
+        chosen=random.choice(emergency)
+        return chosen, "emergency_4_trending"
+    used_file="used_titles.txt"
+    if not os.path.exists(used_file):
+        open(used_file,"w").close()
+    with open(used_file,"r") as f:
+        used=[line.strip().lower() for line in f.read().splitlines() if line.strip()]
+    fresh=[c for c in all_candidates if c.lower() not in used]
+    if not fresh:
+        open(used_file,"w").close()
+        fresh=all_candidates
+    chosen=random.choice(fresh)
+    print(f"🎯 SHORTS FINAL TRENDING (4 sources): {chosen}")
+    return chosen, "4_trending_combined"
+
+def get_emotional_script(topic):
+    templates=[
+        f"Oh my god! Paying 99 dollars for {topic}? I tested {topic} for 7 days in 4K and my face was shocked! Battery 40 hours! Beast lifts 50 tons! My hands shaking with excitement! Would you buy? Comment! Trending now from 4 sources!",
+        f"Stop! {topic} made me cry! 7 days test in 4K ultra HD! 40 hours battery! 50 tons power! My facial expression says everything! My hands moving with joy! Comment A yes B no! Trending!",
+        f"Guys I am shaking! {topic} is insane! Tested 7 days! 4K ultra HD! 40 hours! 50 tons! My shocked face! My excited hands! Would you pay 99 dollars? Comment now! Trending source!"
+    ]
+    return clean_for_tts(random.choice(templates))
+
 def get_fast_paced_clips(topic, total_duration):
     clips=[];queries=[f"{topic} product review 4k",f"{topic} big machine 4k",f"{topic} army machine 4k",f"american {topic} 4k"]
     random.shuffle(queries)
@@ -88,16 +207,12 @@ def get_fast_paced_clips(topic, total_duration):
     final_bg=concatenate_videoclips(clips,method="compose")
     final_bg=safe_set_duration(final_bg,total_duration)
     return final_bg
-def get_trending_world_tech():
-    return random.choice(EVERGREEN_FALLBACK),"evergreen_4k"
-def get_emotional_script(topic):
-    script=f"Paying 99 dollars for this? I tested {topic} for 7 days in 4K and I personally still love it. Battery lasts 40 hours. This beast lifts 50 tons. Shot in 4K ultra HD. Would you buy this? Comment A for yes B for no."
-    return clean_for_tts(script)
+
 def seo_optimize(topic, script_text):
     base_title=topic[:60]
-    final_title=f"{base_title} 4K Review - 7 Days Tested"[:65]
-    description=f"{base_title} honest review 4K ultra HD.\n\n{script_text}\n\nShot in 4K.\n\n#Shorts #4K"
-    tags=[topic.lower(),"4k review","product review","big machine","army machine","world trending","tech review 2026 4k"]
+    final_title=f"{base_title} 4K Review - Trending Now"[:65]
+    description=f"{base_title} honest review 4K ultra HD from 4 trending sources.\n\n{script_text}\n\nShot in 4K.\n\n#Shorts #4K #Trending"
+    tags=[topic.lower(),"4k review","trending now","product review","world trending","tech review 2026 4k"]
     return final_title,description,tags,final_title,final_title
 
 topic_search,src=get_trending_world_tech()
@@ -121,8 +236,8 @@ def create_overlay(duration,title,search):
     except: font_big=ImageFont.load_default()
     try: font_small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",int(W*0.02))
     except: font_small=ImageFont.load_default()
-    draw.rounded_rectangle((20,20,700,70),radius=20,fill=(0,200,255,240))
-    draw.text((35,28),"WORLD TRENDING - 4K - HUMAN CURATED",fill=(0,0,0),font=font_small)
+    draw.rounded_rectangle((20,20,750,70),radius=20,fill=(0,200,255,240))
+    draw.text((35,28),"TRENDING NOW • 4K • 4 SOURCES COMBINED",fill=(0,0,0),font=font_small)
     draw.rectangle((0,int(H*0.7),W,H),fill=(0,0,0,210))
     y=int(H*0.72)
     for line in textwrap.wrap(title[:60],width=26):
@@ -140,7 +255,7 @@ final=CompositeVideoClip([bg_clip,overlay_clip],size=(W,H))
 final=safe_set_duration(final,audio.duration)
 try: final=final.set_audio(audio)
 except: final=final.with_audio(audio)
-print(f"Writing 4K {seo_filename} {W}x{H}")
+print(f"Writing 4K {seo_filename} {W}x{H} - 4 TRENDING SOURCES")
 final.write_videofile(seo_filename, fps=30, codec='libx264', audio_codec='aac', threads=2, bitrate="12000k", logger=None)
-print(f"SHORTS 4K DONE - {seo_filename}")
+print(f"SHORTS 4K DONE - {seo_filename} - 4 TRENDING SOURCES COMBINED")
 upload_video(seo_filename,final_yt_title,description,tags)

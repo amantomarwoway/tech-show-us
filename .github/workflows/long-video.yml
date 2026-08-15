@@ -25,7 +25,7 @@ jobs:
         run: |
           pip install --no-cache-dir --upgrade pip wheel setuptools
           pip install --no-cache-dir "Pillow==9.5.0" "numpy==1.26.4" "decorator==5.1.1" "tqdm==4.66.2" "imageio==2.34.1" "imageio-ffmpeg==0.5.1" "proglog==0.1.10"
-          pip install --no-cache-dir "moviepy==2.0.3"
+          pip install --no-cache-dir "moviepy==1.0.3"
           pip install --no-cache-dir requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib
           pip install --no-cache-dir piper-tts || true
           python3 -c "import moviepy; print(f'MoviePy version: {moviepy.__version__}'); from moviepy.editor import VideoFileClip; print('✅ moviepy.editor import OK')"

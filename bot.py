@@ -76,8 +76,9 @@ def get_from_google_trends_pytrends():
 
 def get_from_youtube_trending():
     try:
-        api_key = os.environ.get("YOUTUBE_API_KEY") or os.environ.get("YOUTUBE_CLIENT_ID") or ""
+        api_key = os.environ.get("YOUTUBE_API_KEY")
         if not api_key:
+            print("⚠️ YOUTUBE_API_KEY not set - Skipping YouTube trending")
             return []
         url = f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=25&key={api_key}"
         r = requests.get(url, timeout=15)
@@ -87,6 +88,8 @@ def get_from_youtube_trending():
             if candidates:
                 print(f"✅ Shorts Source2 YouTube: {len(candidates)} found")
                 return candidates
+        else:
+            print(f"YouTube API Error {r.status_code}: {r.text[:150]}")
     except Exception as e:
         print(f"Shorts Source2 fail: {e}")
     return []

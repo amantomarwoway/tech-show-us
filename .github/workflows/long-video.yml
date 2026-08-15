@@ -11,16 +11,18 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install System Deps - FFmpeg + JPEG + Espeak - v2 Fixed
         run: |
           sudo apt-get update -y
           sudo apt-get remove -y ffmpeg || true
           sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev libpng-dev libjpeg8-dev
           ffmpeg -version
-          python3 -m pip install --upgrade pip wheel setuptools
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+
       - name: Install Python Deps - FIX ModuleNotFoundError - All Deps Explicit
         run: |
           pip install --no-cache-dir --upgrade pip wheel setuptools
@@ -28,13 +30,15 @@ jobs:
           pip install --no-cache-dir "moviepy==1.0.3"
           pip install --no-cache-dir requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends lxml
           pip install --no-cache-dir piper-tts || true
-          python3 -c "import moviepy; print(f'MoviePy version: {moviepy.__version__}'); from moviepy.editor import VideoFileClip; print('✅ moviepy.editor import OK')"
-          python3 -c "import PIL; print(f'Pillow version: {PIL.__version__}')"
+          python -c "import moviepy; print(f'MoviePy version: {moviepy.__version__}'); from moviepy.editor import VideoFileClip; print('✅ moviepy.editor import OK')"
+          python -c "import PIL; print(f'Pillow version: {PIL.__version__}')"
+
       - name: Download Piper model
         run: |
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx || true
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json || true
           ls -lh *.onnx* || true
+
       - name: Run Long Video Bot - ULTIMATE v2 - ModuleNotFound Fixed
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -43,6 +47,7 @@ jobs:
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: |
           python bot_long_video.py
+
       - name: Commit used titles
         run: |
           git config --global user.name "github-actions"

@@ -110,7 +110,7 @@ def get_from_google_trends_pytrends():
 
 def get_from_youtube_trending():
     try:
-        api_key = os.environ.get("YOUTUBE_API_KEY", "") or os.environ.get("YOUTUBE_CLIENT_ID", "")
+        api_key = os.environ.get("YOUTUBE_API_KEY", "") or os.environ.get("YT_CLIENT_ID", "")
         if not api_key:
             return []
         url = f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=25&key={api_key}"

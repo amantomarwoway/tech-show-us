@@ -122,7 +122,7 @@ def create_overlay(duration,title,search):
     try: font_small=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",int(W*0.02))
     except: font_small=ImageFont.load_default()
     draw.rounded_rectangle((20,20,700,70),radius=20,fill=(0,200,255,240))
-    draw.text((35,28),"WORLD TRENDING • 4K • HUMAN CURATED",fill=(0,0,0),font=font_small)
+    draw.text((35,28),"WORLD TRENDING - 4K - HUMAN CURATED",fill=(0,0,0),font=font_small)
     draw.rectangle((0,int(H*0.7),W,H),fill=(0,0,0,210))
     y=int(H*0.72)
     for line in textwrap.wrap(title[:60],width=26):

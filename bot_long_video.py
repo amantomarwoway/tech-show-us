@@ -98,7 +98,6 @@ def get_from_google_trends_pytrends():
             low=t.lower()
             if any(b in low for b in BANNED): continue
             if len(t) > 100: continue
-            # Keep tech OR short trending (will be relevant for tech channel)
             if any(k in low for k in TECH_ALLOWED) or len(t.split()) <= 5:
                 filtered.append(t)
         if filtered:
@@ -184,32 +183,24 @@ def get_trending():
     all_candidates.extend(get_from_youtube_trending())
     all_candidates.extend(get_from_reddit())
     all_candidates.extend(get_from_google_news())
-    
-    # Clean duplicates
     all_candidates = list(set([c.strip() for c in all_candidates if c.strip() and len(c.strip())>10]))
-    
     print(f"🔥 Total candidates from 4 sources: {len(all_candidates)}")
     for i,c in enumerate(all_candidates[:8]):
         print(f"  {i+1}. {c}")
-    
     if not all_candidates:
         print("⚠️ All 4 sources failed - emergency fallback")
         emergency=["iPhone 16 Pro Max Review","Samsung S24 Ultra Test","Tesla Bot 2026","Caterpillar D9 Bulldozer Power","Abrams M1A2 Tank","F35 Fighter Jet"]
         return random.choice(emergency)
-    
-    # Avoid repeat using used file
     used_file="used_long_titles.txt"
     if not os.path.exists(used_file):
         open(used_file,"w").close()
     with open(used_file,"r") as f:
         used=[line.strip().lower() for line in f.read().splitlines() if line.strip()]
-    
     fresh=[c for c in all_candidates if c.lower() not in used]
     if not fresh:
         print("All trending already used - resetting file")
         open(used_file,"w").close()
         fresh=all_candidates
-    
     chosen=random.choice(fresh)
     print(f"🎯 FINAL CHOSEN TRENDING (4 sources): {chosen}")
     try:
@@ -340,10 +331,11 @@ def create_video_emotional_single(sentences, total_duration, topic_main, girl_cl
                 gc_clip=ColorClip(size=(W,H),color=(25,10,40))
                 gc_clip=safe_duration(gc_clip,per_sentence)
             else:
+                # FIXED: Use safe_VideoFileClip instead of direct VideoFileClip
+                gc_clip = safe_VideoFileClip(path, per_sentence)
                 try:
-                    gc_clip=VideoFileClip(path)
                     gc_clip=safe_no_audio(gc_clip)
-                    if gc_clip.duration<per_sentence:
+                    if gc_clip.duration < per_sentence:
                         try: gc_clip=gc_clip.loop(duration=per_sentence)
                         except: gc_clip=safe_duration(gc_clip,per_sentence)
                     try: gc_clip=gc_clip.subclip(0,per_sentence)
@@ -355,6 +347,7 @@ def create_video_emotional_single(sentences, total_duration, topic_main, girl_cl
                 except:
                     gc_clip=ColorClip(size=(W,H),color=(25,10,40))
                     gc_clip=safe_duration(gc_clip,per_sentence)
+
             img=Image.new('RGBA',(W,H),(0,0,0,0))
             draw=ImageDraw.Draw(img,'RGBA')
             try: font_bold=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",int(W*0.022))
@@ -394,7 +387,8 @@ def create_video_emotional_single(sentences, total_duration, topic_main, girl_cl
     clips=[]
     for f in final_files:
         try:
-            c=VideoFileClip(f)
+            # FIXED: Use safe loader here also
+            c=safe_VideoFileClip(f, per_sentence)
             clips.append(c)
         except: continue
     final_video=concatenate_videoclips(clips,method="compose")

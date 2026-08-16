@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 18 * * 1-6'
+permissions:
+  contents: write
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -12,10 +14,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg -qq
-      - run: pip install -r requirements.txt -q
-      - run: |
-          [ -f en_US-lessac-medium.onnx ] || wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          [ -f en_US-lessac-medium.onnx.json ] || wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+      - run: pip install -r requirements.txt piper-tts -q
+      - name: Piper Model + Binary
+        run: |
+          mkdir -p piper
+          wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz
+          tar -xzf piper_linux_x86_64.tar.gz -C piper --strip-components=1
+          chmod +x piper/piper
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O en_US-lessac-medium.onnx
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O en_US-lessac-medium.onnx.json
+          ls -lh piper/piper en_US*.onnx
       - env:
           PYTHONUNBUFFERED: "1"
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}

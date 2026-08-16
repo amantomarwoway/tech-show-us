@@ -1,8 +1,6 @@
 import os,random,re,requests,subprocess,warnings
 warnings.filterwarnings("ignore")
 from moviepy.editor import *
-from PIL import Image,ImageDraw,ImageFont
-import numpy as np
 W,H,T=1080,1920,35
 W8,H8=2160,3840
 PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
@@ -43,6 +41,32 @@ def dl(q):
     except:pass
     return o
 
+def make_ass(words, dur, path="cap.ass"):
+    per=dur/len(words) if words else 1
+    header=f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {W}
+PlayResY: {H}
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Word,DejaVu Sans,55,&H0000EBFF,&H000000FF,&H00000000,&HAA000000,-1,0,1,4,1,2,10,10,180,1
+[Events]
+Format: Layer, Start, End, Style, Text
+"""
+    lines=[header]
+    for i,w in enumerate(words):
+        s=i*per; e=s+per
+        sh=int(s//3600); sm=int((s%3600)//60); ss=s%60
+        eh=int(e//3600); em=int((e%3600)//60); es=e%60
+        st=f"{sh}:{sm:02d}:{ss:06.3f}".replace(".",":")[:-1] # ass format H:MM:SS.cc
+        et=f"{eh}:{em:02d}:{es:06.3f}".replace(".",":")[:-1]
+        # Fix time format
+        st=f"{int(s//3600)}:{int((s%3600)//60):02d}:{int(s%60):02d}.{int((s%1)*100):02d}"
+        et=f"{int(e//3600)}:{int((e%3600)//60):02d}:{int(e%60):02d}.{int((e%1)*100):02d}"
+        lines.append(f"Dialogue: 0,{st},{et},Word,{w.upper()}")
+    open(path,"w",encoding="utf-8").write("\n".join(lines))
+    return path
+
 def up(vp,ti,de,ta):
     from google.oauth2.credentials import Credentials;from google.auth.transport.requests import Request;from googleapiclient.discovery import build;from googleapiclient.http import MediaFileUpload
     c=Credentials(None,refresh_token=os.environ.get("YT_REFRESH_TOKEN"),client_id=os.environ.get("YT_CLIENT_ID"),client_secret=os.environ.get("YT_CLIENT_SECRET"),token_uri="https://oauth2.googleapis.com/token",scopes=["https://www.googleapis.com/auth/youtube.upload"]);c.refresh(Request());yt=build("youtube","v3",credentials=c)
@@ -67,22 +91,15 @@ try: machine_audio=bg_video.audio.volumex(0.30).set_duration(dur) if bg_video.au
 except: machine_audio=None
 final_audio=CompositeAudioClip([machine_audio, audio]).set_duration(dur) if machine_audio else audio
 
-per=dur/len(words); caps=[]
-CAP_W,CAP_H=900,140
-Y_POS=int(H*0.78)
-for i,w in enumerate(words):
-    if not w.strip(): continue
-    cimg=Image.new('RGB',(CAP_W,CAP_H),color=(0,0,0))
-    dr=ImageDraw.Draw(cimg)
-    try: fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",55)
-    except: fnt=ImageFont.load_default()
-    dr.text((CAP_W//2, CAP_H//2), w.upper(), fill=(255,235,0), font=fnt, anchor="mm", stroke_width=4, stroke_fill=(0,0,0))
-    # FIX - without_mask hata ke ismask=False only
-    clip=ImageClip(np.array(cimg), ismask=False).set_start(i*per).set_duration(per).set_position(('center', Y_POS))
-    caps.append(clip)
+# 1. VIDEO WITHOUT CAPTION - NO ERROR
+no_cap="no_cap.mp4"
+CompositeVideoClip([bg_video],size=(W,H)).set_duration(dur).set_audio(final_audio).write_videofile(no_cap,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",logger=None)
 
-final=CompositeVideoClip([bg_video]+caps,size=(W,H)).set_duration(dur).set_audio(final_audio)
+# 2. BURN CAPTION WITH FFMPEG - BOTTOM CENTER SLIGHTLY UP
+ass=make_ass(words,dur)
+final_fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
+# ass filter + upscale to 8K
+subprocess.run(f'{FF} -y -i {no_cap} -vf "ass={ass},scale={W8}:{H8}:flags=lanczos" -c:a copy -b:v 80000k {final_fn}',shell=True,timeout=120)
+print(f"FINAL 8K {final_fn} {os.path.getsize(final_fn)}")
 
-fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
-final.write_videofile(fn,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",ffmpeg_params=["-vf",f"scale={W8}:{H8}"],logger=None)
-up(fn,title,desc,tags)
+up(final_fn,title,desc,tags)

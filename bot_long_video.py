@@ -22,7 +22,7 @@ TARGET_DURATION=240
 
 PEXELS_API_KEY=os.environ.get("PEXELS_API_KEY")
 BANNED=["tyrod","taylor","mariners","yankees","oreo","brad pitt","pushpa","jethalal","tmkoc","bhabi","kapil","bigg boss","football","cricket","movie","election","biden","trump","modi"]
-TECH_ALLOWED=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","military","abrams","f35","drone","ai","tesla","robot","technology","tech","electric","battery","camera","display"]
+TECH_ALLOWED=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","jet","drone","robot","ai","tesla","truck","car","motorcycle","plane","helicopter","weapon"]
 
 USA_GIRL_EMOTIONAL=[
     "beautiful american woman emotional talking with hands",
@@ -53,37 +53,66 @@ def clean_tts(t):
     return t
 
 def fix_video_with_ffmpeg(input_path):
+    """Repair corrupted video files with FFmpeg"""
     fixed_path = input_path.replace(".mp4", "_fixed.mp4")
     try:
-        cmd = [FFMPEG, "-y", "-i", input_path, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "scale=1280:720:force_original_aspect_ratio=decrease", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", fixed_path]
+        print(f"🔧 Attempting to fix video: {input_path}")
+        cmd = [FFMPEG, "-y", "-i", input_path, "-c:v", "libx264", "-pix_fmt", "yuv420p", 
+               "-vf", "scale=1280:720:force_original_aspect_ratio=decrease", "-c:a", "aac", 
+               "-b:a", "128k", "-movflags", "+faststart", fixed_path]
         subprocess.run(cmd, timeout=30, capture_output=True)
         if os.path.exists(fixed_path) and os.path.getsize(fixed_path) > 50000:
             try: os.remove(input_path)
             except: pass
             os.rename(fixed_path, input_path)
+            print(f"✅ Video fixed: {input_path}")
         else:
             try: os.remove(fixed_path)
             except: pass
-    except: pass
+    except Exception as e:
+        print(f"❌ Fix failed: {e}")
     return input_path
 
 def safe_VideoFileClip(path, per_sentence=5):
+    """Safely load video with retry logic and fallback"""
     for attempt in range(3):
         try:
-            if not os.path.exists(path) or os.path.getsize(path) < 50000:
-                raise Exception("missing")
-            clip = VideoFileClip(path)
+            # Validate file exists and has minimum size
+            if not os.path.exists(path):
+                raise Exception(f"File not found: {path}")
+            
+            file_size = os.path.getsize(path)
+            if file_size < 50000:
+                raise Exception(f"File too small: {file_size} bytes")
+            
+            print(f"📹 Loading video (attempt {attempt+1}/3): {path}")
+            clip = VideoFileClip(path, verbose=False, audio=False)
+            
+            # Critical check: reader must not be None
             if clip.reader is None:
                 clip.close()
-                raise Exception("Reader None")
-            clip.get_frame(0)
+                raise Exception("VideoFileClip reader is None - corrupted file")
+            
+            # Verify we can read the first frame
+            frame = clip.get_frame(0)
+            if frame is None:
+                clip.close()
+                raise Exception("Cannot get first frame")
+            
+            print(f"✅ Video loaded successfully: {path}")
             return clip
-        except:
+            
+        except Exception as e:
+            print(f"⚠️ Attempt {attempt+1} failed: {e}")
             if attempt < 2:
+                # Try to fix the file before retry
                 fix_video_with_ffmpeg(path)
                 time.sleep(1)
             else:
+                # Final attempt failed - return fallback color clip
+                print(f"❌ All attempts failed for {path}, using fallback color")
                 return safe_duration(ColorClip(size=(W,H), color=(15,15,35)), per_sentence)
+    
     return safe_duration(ColorClip(size=(W,H), color=(15,15,35)), per_sentence)
 
 # === 4 TRENDING SOURCES - ALL TOGETHER - NO FIX LIST ===
@@ -217,13 +246,13 @@ def generate_emotional_single_script(topic):
     script = f"""
     Oh my god guys! You will not believe what happened when I tested {main} for 7 days! I am literally shaking right now because what I found shocked me completely! 
     When I first saw {main}, I thought wow this looks amazing, 99,000 dollars, 600 horsepower, big machine, but is it really worth that much money? I had so many doubts in my heart.
-    I still remember day one, I was so nervous, my hands were shaking when I started {main} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was beating so fast! 
-    But then something magical happened. On day two, I saw how this beast lifts 50 tons like it is nothing! I literally screamed with excitement, my eyes were wide open, I could not believe what I was seeing! 50 tons! Can you imagine? My hands automatically went up in shock!
-    Day three was the most emotional day for me. I was working in Texas, hot sun, sweat on my face, but {main} did not stop. It worked for 5 hours non stop and completed 3 days of work! I started crying with happiness because I saved so much time and money. My facial expression was pure joy!
-    But wait, there is a hidden secret that nobody tells you about {main}. 99 percent of people miss this hidden feature. There is a secret fuel saving mode that saves 30 percent fuel! When I found it, my jaw dropped, I was like oh my god why nobody told me this before! My hands were moving everywhere explaining this!
-    Now let me be honest with you guys, with full emotions. I love {main} but there are 3 things that broke my heart. First, the price is too high, 99,000 dollars is a lot of money, my heart sank when I saw the price tag. Second, maintenance is so expensive, it hurts my pocket. Third, you need special training, I was so frustrated at first.
-    But after 7 days, my final emotional verdict is this. If you have big construction projects, if you want to save time, if you want to feel that power in your hands, then {main} is for you. I am so emotional right now saying this, but this machine changed my life! My face shows pure excitement!
-    So tell me in comments, would you buy {main} for 99,000 dollars? I am waiting for your comments with my heart full of emotions! If this 4 minute emotional review touched your heart, please subscribe! I put my full heart into this 4 minute video!
+    I still remember day one, I was so nervous, my hands were shaking when I started {main} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was pounding so fast.
+    But then something magical happened. On day two, I saw how this beast lifts 50 tons like it is nothing! I literally screamed with excitement, my eyes were wide open, I could not believe what I was seeing! This is insane!
+    Day three was the most emotional day for me. I was working in Texas, hot sun, sweat on my face, but {main} did not stop. It worked for 5 hours non stop and completed 3 days of work! I started crying with joy!
+    But wait, there is a hidden secret that nobody tells you about {main}. 99 percent of people miss this hidden feature. There is a secret fuel saving mode that saves 30 percent fuel! When I found this, my mind was blown!
+    Now let me be honest with you guys, with full emotions. I love {main} but there are 3 things that broke my heart. First, the price is too high, 99,000 dollars is a lot of money, my heart sank when I saw the bill!
+    But after 7 days, my final emotional verdict is this. If you have big construction projects, if you want to save time, if you want to feel that power in your hands, then {main} is for you. I recommend it with all my heart!
+    So tell me in comments, would you buy {main} for 99,000 dollars? I am waiting for your comments with my heart full of emotions! If this 4 minute emotional review touched your heart, please subscribe!
     """
     full=clean_tts(script)
     sentences = [s.strip() for s in full.split('.') if len(s.strip()) > 25]
@@ -441,6 +470,6 @@ if __name__=="__main__":
     print(f"✅ EMOTIONAL SINGLE 4 MINUTE DONE - {filename} - 4 TRENDING SOURCES - NO CHAPTERS!")
     try:
         from upload_youtube import upload_video
-        upload_video(filename,f"{topic_main} Made Me Cry! My Emotional 4 Minute Story! Trending Now!",f"Single topic emotional review with facial expressions and hand movements - 4 trending sources - {full_script[:500]}",[topic_main.lower(),"emotional","4 minute","girl reaction","viral","trending"])
+        upload_video(filename,f"{topic_main} Made Me Cry! My Emotional 4 Minute Story! Trending Now!",f"Single topic emotional review with facial expressions and hand movements - 4 trending sources combined - Trending now - No chapters - Emotional story - 4K quality - Facetime recording style. Watch this emotional journey!")
     except Exception as e:
         print(f"Upload fail: {e}")

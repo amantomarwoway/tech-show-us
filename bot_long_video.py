@@ -1,23 +1,15 @@
-import os,random,re,requests,subprocess,textwrap,warnings,sys
+import os,random,re,requests,subprocess,textwrap,warnings
 warnings.filterwarnings("ignore")
 from moviepy.editor import *
 from PIL import Image,ImageDraw,ImageFont
 import numpy as np
 W,H,T=1280,720,240; PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
 
-def fix(p):
- f=p.replace(".mp4","_f.mp4")
- try:subprocess.run([FF,"-y","-i",p,"-vf","scale=1280:720:force_original_aspect_ratio=decrease","-r","24","-c:v","libx264","-c:a","aac","-t","12",f],timeout=20,capture_output=True);os.remove(p);os.rename(f,p)
- except:pass
- return p
-def safe(p,d=6):
- try:return VideoFileClip(p,verbose=False).subclip(0,d).resize((W,H)).without_audio().set_duration(d)
- except:fix(p);return ColorClip((W,H),color=(15,15,35),duration=d)
 def viral():
  c=[]
  try:
   k=os.environ.get("YOUTUBE_API_KEY")
-  for rg in ["US","GB","IN","DE","JP"]:
+  for rg in ["US","GB","IN"]:
    try:j=requests.get(f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode={rg}&videoCategoryId=28&maxResults=5&key={k}",timeout=10).json();c+=[i['snippet']['title'][:70] for i in j.get('items',[])]
    except:pass
  except:pass
@@ -25,65 +17,137 @@ def viral():
   for s in ["technology","gadgets","MachinePorn","space"]:
    try:j=requests.get(f"https://www.reddit.com/r/{s}/hot.json?limit=6",headers={"User-Agent":"Mozilla/5.0"},timeout=10).json();c+=[p['data']['title'][:70] for p in j['data']['children']]
    except:pass
-  import xml.etree.ElementTree as ET;r=requests.get("https://news.google.com/rss/search?q=tesla+iphone+fighter+excavator+satellite+missile+vs&hl=en-US&gl=US&ceid=US:en",timeout=10);root=ET.fromstring(r.content);c+=[x.text.split(" - ")[0][:70] for x in root.findall('.//item/title')[:12]]
  except:pass
- base=["Rocks vs Excavators","F-35 vs J-20","Satellite vs Missile","Excavator vs Bulldozer","Tesla Bot vs Human","Starship vs Falcon 9"];c=c+base;c=list(set([x for x in c if 10<len(x)<80]));f="used_long_titles.txt";open(f,"a").close();u=open(f).read().lower();fr=[x for x in c if x.lower() not in u] or c;ch=random.choice(fr);open(f,"a").write(ch+"\n");print(f"TOPIC:{ch}",flush=True);return ch
+ base=["Rocks vs Excavators","F-35 vs J-20","AIRCRAFT SPEED COMPARISON","Excavator vs Bulldozer","Tesla Bot vs Human","Satellite vs Missile"]
+ c=c+base;c=list(set([x for x in c if 10<len(x)<80]));open("used_long_titles.txt","a").close();u=open("used_long_titles.txt").read().lower();fr=[x for x in c if x.lower() not in u] or c;ch=random.choice(fr);open("used_long_titles.txt","a").write(ch+"\n");print(f"TOPIC:{ch}",flush=True);return ch
+
 def seo(l,r):
- yr="2025";title=random.choice([f"{l} vs {r} - Who Will Win? Full Power Comparison {yr}",f"{l} vs {r} Ultimate Fight {yr} - Shocking Result!"]);tags=[f"{l} vs {r}",f"{l} vs {r} {yr}",f"{l} power",f"{r} power","who will win","ultimate showdown","power comparison","vs fight","tech battle"][:15];desc=f"""{title}\n\nIn this video you will get 3 things:\n1. Real power of {l}\n2. Hidden feature 99% miss\n3. Final verdict {l} vs {r} who wins?\n\n00:00 What you will get\n00:30 {l}\n02:00 {r}\n04:00 VS Fight\n05:30 Verdict\n\nThanks! Subscribe please.\nHow did you like video? Comment!\n\n#{l.replace(' ','')} #{r.replace(' ','')} #vsfight\nSubscribe: https://www.youtube.com/@YOUR_CHANNEL\n""";return title,tags,desc
-def tts(txt):
- files=[];chunks=[txt[i:i+700] for i in range(0,len(txt),700)][:5]
+ title=f"{l} vs {r} - Ultimate Power & Speed Comparison 2025"
+ tags=[f"{l} vs {r}",f"{l} power",f"{r} power","speed comparison","power comparison","who will win","ultimate showdown"][:12]
+ desc=f"""{title}
+
+In this video you will discover:
+1. Real power of {l}
+2. Hidden feature of {r}
+3. Final verdict who wins
+
+00:00 What you will get in this video
+00:30 {l} full power
+02:00 {r} full power
+04:00 Ultimate VS
+05:30 Final verdict
+
+Thanks for watching! Subscribe please.
+Comment how did you like video?
+
+#{l.replace(' ','')} #{r.replace(' ','')} #vsfight
+Subscribe: https://www.youtube.com/@YOUR_CHANNEL
+"""
+ return title,tags,desc
+
+def tts_pro(txt):
+ files=[]; chunks=[txt[i:i+600] for i in range(0,len(txt),600)][:6]
  for i,ch in enumerate(chunks):
-  ow=f"v{i}.wav";ch=ch.replace('"','').replace("'",'')
-  try:subprocess.run(f'echo "{ch}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.88',shell=True,timeout=60);files.append(ow) if os.path.exists(ow) and os.path.getsize(ow)>3000 else None
-  except:pass
- if not files:subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","60","dummy.wav"],capture_output=True);files=["dummy.wav"]
- return files
-def dl(q,pre):
+  ow=f"v{i}.wav"; ch=ch.replace('"','').replace("'",'').replace('\n',' ')
+  subprocess.run(f'echo "{ch}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.86',shell=True,timeout=60)
+  if os.path.exists(ow) and os.path.getsize(ow)>3000: files.append(ow)
+ if files:
+  # PRO SOUND - loudnorm + clear
+  concat="|".join(files)
+  subprocess.run(f'{FF} -y -i "concat:{concat}" -af loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=75,volume=1.3 final.wav',shell=True,capture_output=True)
+  if os.path.exists("final.wav"): return ["final.wav"]
+  return files
+ subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","60","dummy.wav"],capture_output=True);return ["dummy.wav"]
+
+def dl(q):
  out=[]
  try:
-  r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=6&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=12).json()
-  for v in r.get('videos',[])[:4]:
-   try:best=sorted(v['video_files'],key=lambda x:x['width'])[0];p=f"{pre}_{random.randint(1000,9999)}.mp4";open(p,'wb').write(requests.get(best['link'],timeout=20).content);out.append(fix(p))
+  r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
+  for v in r.get('videos',[])[:6]:
+   try:best=sorted(v['video_files'],key=lambda x:x['width'])[-1];p=f"c_{random.randint(1000,9999)}.mp4";open(p,'wb').write(requests.get(best['link'],timeout=20).content);out.append(p)
    except:continue
  except:pass
  return out
-def thumb(l,r):
- img=Image.new('RGB',(1280,720),(0,0,0));d=ImageDraw.Draw(img)
- try:fb=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",85);fm=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",38)
- except:fb=fm=ImageFont.load_default()
- d.rectangle((0,0,640,720),fill=(200,20,20));d.text((20,20),l[:18].upper(),fill="white",font=fm,stroke_width=3,stroke_fill="black");d.text((20,80),"POWER",fill="yellow",font=fb,stroke_width=4,stroke_fill="black")
- d.rectangle((640,0,1280,720),fill=(20,50,200));d.text((660,20),r[:18].upper(),fill="white",font=fm,stroke_width=3,stroke_fill="black");d.text((660,80),"FIGHT",fill="yellow",font=fb,stroke_width=4,stroke_fill="black")
- d.ellipse((520,240,760,480),fill=(255,230,0),outline="red",width=10);d.text((560,300),"VS",fill="red",font=fb,stroke_width=5,stroke_fill="white")
- d.rectangle((0,600,1280,720),fill=(0,0,0));d.text((20,620),"ULTIMATE SHOWDOWN - WHO WILL WIN?",fill="white",font=fm)
- img.save("thumb.jpg","JPEG",quality=95);return "thumb.jpg"
-def upload(vp,title,desc,tags,tp):
- print(f"UPLOAD {vp}",flush=True)
- try:
-  from google.oauth2.credentials import Credentials;from google.auth.transport.requests import Request;from googleapiclient.discovery import build;from googleapiclient.http import MediaFileUpload
-  creds=Credentials(None,refresh_token=os.environ.get("YT_REFRESH_TOKEN"),client_id=os.environ.get("YT_CLIENT_ID"),client_secret=os.environ.get("YT_CLIENT_SECRET"),token_uri="https://oauth2.googleapis.com/token",scopes=["https://www.googleapis.com/auth/youtube.upload"]);creds.refresh(Request());yt=build("youtube","v3",credentials=creds)
-  body={"snippet":{"title":title[:95],"description":desc,"tags":tags,"categoryId":"28"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}};media=MediaFileUpload(vp,chunksize=-1,resumable=True,mimetype="video/*");req=yt.videos().insert(part="snippet,status",body=body,media_body=media);resp=None
-  while resp is None:status,resp=req.next_chunk()
-  vid=resp["id"];print(f"DONE https://youtu.be/{vid}",flush=True)
-  if os.path.exists(tp):yt.thumbnails().set(videoId=vid,media_body=MediaFileUpload(tp,mimetype="image/jpeg")).execute()
-  return vid
- except Exception as e:print(f"UPLOAD FAIL {e}",flush=True)
 
-if __name__=="__main__":
- raw=viral();a,b=[x.strip() for x in re.split(r'\s+vs\s+',raw,flags=re.I)][:2] if "vs" in raw.lower() else (raw,"Ultimate Rival")
- title,tags,desc=seo(a,b)
- full=f"In this video you will get three things. Number one real power of {a} versus {b}. Number two hidden feature ninety nine percent miss. Number three final verdict. Let's start. First power of {a}. This beast delivers extreme force. Second power of {b}. This machine built for war. Finally ultimate showdown {a} versus {b}. Both collide only one will survive. Thank you for watching. Please subscribe. How did you like video? Comment."
- sents=[x.strip() for x in full.split(".") if len(x.strip())>8];af=tts(full);acl=[AudioFileClip(p) for p in af if os.path.exists(p)];audio=concatenate_audioclips(acl).subclip(0,T)
- clips=dl(a,"L")+dl(b,"R")+dl("fight explosion","F");per=max(1,audio.duration/len(sents));v=[]
- for i,s in enumerate(sents):
-  base=safe(clips[i%len(clips)],per) if clips else ColorClip((W,H),color=(20,10,30),duration=per)
-  try:base=base.loop(duration=per).resize((W,H)).without_audio().set_duration(per)
-  except:base=ColorClip((W,H),color=(20,10,30),duration=per).set_duration(per)
-  cimg=Image.new('RGBA',(W,H),(0,0,0,0));dr=ImageDraw.Draw(cimg,'RGBA')
-  try:fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",28)
-  except:fnt=ImageFont.load_default()
-  dr.rectangle((0,520,W,H),fill=(0,0,0,180))
-  for j,l in enumerate(textwrap.wrap(s.upper(),45)[:3]):dr.text((30,530+j*45),l,fill="white",font=fnt,stroke_width=3,stroke_fill="black")
-  txt=ImageClip(np.array(cimg)).set_duration(per);v.append(CompositeVideoClip([base,txt],size=(W,H)).set_duration(per))
- final=concatenate_videoclips(v).set_duration(audio.duration).set_audio(audio);fn=re.sub(r'[^a-z0-9]+','-',title.lower())[:40]+".mp4"
- final.write_videofile(fn,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="4000k",logger=None)
- th=thumb(a,b);upload(fn,title,desc,tags,th)
+def thumb_pro(l,r):
+    bg="bg.jpg"
+    query=f"{l} {r} fighter jet aircraft" if any(x in (l+r).lower() for x in ["f-35","f-22","jet","aircraft","su-57","j-20"]) else f"{l} {r} excavator machine"
+    try:
+        res=requests.get(f"https://api.pexels.com/v1/search?query={query}&per_page=2&orientation=landscape",headers={"Authorization":PEX} if PEX else {},timeout=10).json()
+        url=res['photos'][0]['src']['large2x']
+        open(bg,'wb').write(requests.get(url,timeout=12).content)
+        img=Image.open(bg).convert("RGB").resize((1280,720), Image.LANCZOS)
+    except:
+        img=Image.new('RGB',(1280,720),(18,28,58))
+
+    # Cinematic dark overlay like reference
+    overlay=Image.new('RGBA',(1280,720),(0,0,0,85))
+    img=Image.alpha_composite(img.convert('RGBA'),overlay).convert('RGB')
+    d=ImageDraw.Draw(img)
+    try:
+        fb=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",86)
+    except:
+        fb=ImageFont.load_default()
+
+    # CLEAN BOLD TEXT - topic related
+    if "vs" in f"{l} {r}".lower():
+        main=f"{l.upper()} vs {r.upper()}"
+    else:
+        main=f"{l.upper()} vs {r.upper()}"
+    sub="SPEED COMPARISON" if any(x in (l+r).lower() for x in ["aircraft","f-35","f-22","jet","speed"]) else "POWER COMPARISON"
+    full_text=f"{main}\n{sub}"
+
+    # 3D clean stroke like your photo
+    for off in [(5,5),(4,4)]:
+        d.text((640+off[0], 170+off[1]), full_text, fill="black", font=fb, anchor="mm", align="center")
+    d.text((640,170), full_text, fill="white", font=fb, anchor="mm", align="center", stroke_width=7, stroke_fill="black")
+
+    img.save("thumb.jpg","JPEG",quality=98)
+    return "thumb.jpg"
+
+def upload(vp,title,desc,tags,tp):
+ from google.oauth2.credentials import Credentials;from google.auth.transport.requests import Request;from googleapiclient.discovery import build;from googleapiclient.http import MediaFileUpload
+ creds=Credentials(None,refresh_token=os.environ.get("YT_REFRESH_TOKEN"),client_id=os.environ.get("YT_CLIENT_ID"),client_secret=os.environ.get("YT_CLIENT_SECRET"),token_uri="https://oauth2.googleapis.com/token",scopes=["https://www.googleapis.com/auth/youtube.upload"]);creds.refresh(Request());yt=build("youtube","v3",credentials=creds)
+ body={"snippet":{"title":title[:95],"description":desc,"tags":tags,"categoryId":"28"},"status":{"privacyStatus":"public"}};media=MediaFileUpload(vp,chunksize=-1,resumable=True);req=yt.videos().insert(part="snippet,status",body=body,media_body=media);resp=None
+ while resp is None:status,resp=req.next_chunk()
+ vid=resp["id"];
+ try:yt.thumbnails().set(videoId=vid,media_body=MediaFileUpload(tp,mimetype="image/jpeg")).execute()
+ except:pass
+ print(f"UPLOADED https://youtu.be/{vid}");return vid
+
+# === MAIN ===
+raw=viral(); a,b=[x.strip() for x in re.split(r'\s+vs\s+',raw,flags=re.I)][:2] if "vs" in raw.lower() else (raw,"Rival")
+title,tags,desc=seo(a,b)
+
+# FIXED SCRIPT - thanks only at end
+script=f"In this video you will discover three insane things. First the real top speed and power of {a}. Second the hidden feature of {b} that ninety nine percent people miss. And third the final verdict who will win. Let's start. The {a} is an absolute beast. It delivers extreme force and its speed is shocking. The sound is insane and performance is unmatched. Now the {b}. This machine is built for war. It strikes with incredible velocity and precision and dominates everything. Now the ultimate showdown {a} versus {b}. Both machines collide at full power. Only one can survive. This fight will blow your mind. Thank you so much for watching. If you enjoyed this comparison please subscribe to our channel and let me know in the comments how did you like the video."
+
+words=script.split()
+af=tts_pro(script); audio=AudioFileClip(af[0]).subclip(0,T)
+print(f"AUDIO OK {audio.duration} sec")
+
+clips=dl(f"{a} {b}")+dl(a)
+vclips=[]
+for p in clips:
+ try:vclips.append(VideoFileClip(p).resize((W,H)).without_audio())
+ except:pass
+if not vclips: vclips=[ColorClip((W,H),color=(20,20,40),duration=5)]
+bg_video=concatenate_videoclips(vclips,method="compose").loop(duration=audio.duration).resize((W,H))
+
+# WORD BY WORD CAPTION
+per=audio.duration/len(words)
+txts=[]
+for i,w in enumerate(words):
+ cimg=Image.new('RGBA',(W,H),(0,0,0,0)); dr=ImageDraw.Draw(cimg,'RGBA')
+ try:fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",54)
+ except:fnt=ImageFont.load_default()
+ dr.rectangle((0,590,W,720),fill=(0,0,0,150))
+ dr.text((W//2,645),w.upper(),fill="#FFEB00",font=fnt,anchor="mm",stroke_width=5,stroke_fill="black")
+ txts.append(ImageClip(np.array(cimg)).set_start(i*per).set_duration(per))
+
+final=CompositeVideoClip([bg_video]+txts,size=(W,H)).set_duration(audio.duration).set_audio(audio)
+fn=re.sub(r'[^a-z0-9]+','-',title.lower())[:38]+".mp4"
+final.write_videofile(fn,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="5000k",logger=None)
+
+th=thumb_pro(a,b)
+upload(fn,title,desc,tags,th)

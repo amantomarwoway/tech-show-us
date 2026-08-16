@@ -57,7 +57,7 @@ Let me know in comments how did you like video?
 
 #{l.replace(' ','')} #{r.replace(' ','')} #vsfight #whowillwin #{yr} #tech
 
-Subscribe: https://www.youtube.com/@YOUR_CHANNEL
+Subscribe: https://www.youtube.com/@TECH4USA
 """
  return title,tags,desc
 

@@ -6,22 +6,23 @@ import numpy as np
 W,H,T=1280,720,240; PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
 
 def viral():
- base=["Rocks vs Excavators","F-35 vs J-20","AIRCRAFT SPEED COMPARISON","Excavator vs Bulldozer","Tesla Bot vs Human","Satellite vs Missile"]
+ base=["Rocks vs Excavators","F-35 vs J-20","AIRCRAFT SPEED COMPARISON","Excavator vs Bulldozer","Tesla Bot vs Human","Satellite vs Missile","iPhone 16 vs Samsung S24","Tank vs Missile"]
  c=base;open("used_long_titles.txt","a").close();u=open("used_long_titles.txt").read().lower();fr=[x for x in c if x.lower() not in u] or c;ch=random.choice(fr);open("used_long_titles.txt","a").write(ch+"\n");return ch
 
 def seo(l,r):
- title=f"{l} vs {r} - Ultimate Comparison 2025";tags=[f"{l} vs {r}",f"{l} power",f"{r} power","who will win"][:12]
- desc=f"{title}\n\nThanks! Subscribe!\n";return title,tags,desc
+ title=f"{l} vs {r} - Ultimate Power & Speed Comparison 2025";tags=[f"{l} vs {r}",f"{l} power",f"{r} power","who will win","power comparison","speed comparison"][:12]
+ desc=f"{title}\n\nDiscover power of {l} and {r}\n\nThanks! Subscribe!\n";return title,tags,desc
 
 def tts_pro(txt):
  files=[]
- for i,ch in enumerate([txt[i:i+600] for i in range(0,len(txt),600)][:5]):
-  ow=f"v{i}.wav"; ch=ch.replace('"','').replace("'",'')
-  subprocess.run(f'echo "{ch}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.86',shell=True,timeout=60)
+ # 10 chunks = 4 min voice
+ chunks=[txt[i:i+600] for i in range(0,len(txt),600)][:10]
+ for i,ch in enumerate(chunks):
+  ow=f"v{i}.wav"; ch=ch.replace('"','').replace("'",'').replace('\n',' ')
+  subprocess.run(f'echo "{ch}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.88 --noise_scale 0.6',shell=True,timeout=90)
   if os.path.exists(ow) and os.path.getsize(ow)>3000: files.append(ow)
  if not files:
   subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","60","dummy.wav"],capture_output=True);return ["dummy.wav"]
- # SAFE CONCAT - list file method
  open("list.txt","w").write("\n".join([f"file '{f}'" for f in files]))
  subprocess.run(f'{FF} -y -f concat -safe 0 -i list.txt -af loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=75,volume=1.3 final.wav',shell=True,capture_output=True)
  return ["final.wav"] if os.path.exists("final.wav") else files
@@ -29,15 +30,15 @@ def tts_pro(txt):
 def dl(q):
  out=[]
  try:
-  r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=6&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
-  for v in r.get('videos',[])[:5]:
+  r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
+  for v in r.get('videos',[])[:6]:
    try:best=sorted(v['video_files'],key=lambda x:x['width'])[-1];p=f"c_{random.randint(1000,9999)}.mp4";open(p,'wb').write(requests.get(best['link'],timeout=20).content);out.append(p)
    except:continue
  except:pass
  return out
 
 def thumb_pro(l,r):
-    bg="bg.jpg"; query=f"{l} {r}"
+    bg="bg.jpg"; query=f"{l} {r} jet" if any(x in (l+r).lower() for x in ["f-35","jet","aircraft","speed"]) else f"{l} {r} machine"
     try:
         res=requests.get(f"https://api.pexels.com/v1/search?query={query}&per_page=1&orientation=landscape",headers={"Authorization":PEX} if PEX else {},timeout=10).json()
         url=res['photos'][0]['src']['large2x']; open(bg,'wb').write(requests.get(url,timeout=12).content)
@@ -59,16 +60,29 @@ def upload(vp,title,desc,tags,tp):
 
 raw=viral(); a,b=[x.strip() for x in re.split(r'\s+vs\s+',raw,flags=re.I)][:2] if "vs" in raw.lower() else (raw,"Rival")
 title,tags,desc=seo(a,b)
-script=f"In this video you will discover three insane things. First the real power of {a}. Second the hidden feature of {b} that ninety nine percent people miss. And third the final verdict who will win. Let's start. The {a} is an absolute beast. It delivers extreme force. Now the {b}. This machine is built for war. It strikes with incredible velocity. Now the ultimate showdown {a} versus {b}. Only one can survive. Thank you so much for watching. Please subscribe and comment how did you like the video."
-words=script.split()
-af=tts_pro(script)
-# FIX - duration buffer
-audio=AudioFileClip(af[0])
-dur=max(1, audio.duration - 0.2) # 0.2 sec safety
-audio=audio.subclip(0, dur)
-print(f"AUDIO FIXED {audio.duration}")
 
-clips=dl(f"{a} {b}")+dl(a)
+# 4 MINUTE LONG SCRIPT - 700 WORDS
+script=f"""In this video you will discover three insane things about {a} versus {b}. First the real top speed and power of {a}. Second the hidden feature of {b} that ninety nine percent people miss. And third the final verdict who will win this ultimate showdown.
+
+Let's start with number one, the power of {a}. The {a} is an absolute beast. It is engineered for extreme performance. It delivers incredible force and its engine produces a thunderous sound. When it moves, the ground shakes. Its design is aerodynamic and built for domination. Experts say its top speed can cross limits that normal machines cannot even imagine. Its fuel efficiency and power ratio is unmatched. The technology inside {a} is from the future. Many people think they know about {a}, but the real power is hidden. It has a secret mode that activates only in extreme conditions. That mode makes it ten times more powerful.
+
+Now number two, the power of {b}. The {b} is built for war. It strikes with incredible velocity and precision. Its build quality is solid like a tank. It can operate in the toughest conditions. Whether it is desert, snow, or rain, the {b} never stops. Its engine is more powerful than ten normal engines combined. The sound of {b} is so loud that you can hear it from miles away. It is a true monster on the battlefield. The {b} has been tested in real world battles and it has never failed. Its armor is unbreakable and its speed is unbelievable. People fear the {b} because of its raw power.
+
+Now the most awaited part, the ultimate showdown, {a} versus {b}. Imagine both machines are standing face to face. On the left side, the {a} roars with full power. On the right side, the {b} fires up its engine. The crowd is silent. The atmosphere is tense. The fight begins. The {a} attacks first with its incredible speed. It moves so fast that you cannot even see it. But the {b} defends and counter attacks with double force. Both machines collide. Sparks fly everywhere. Smoke fills the air. The ground trembles. This is not just a fight, this is a war of titans. Only one can survive this epic battle.
+
+Who do you think will win? The {a} with its speed and agility, or the {b} with its raw power and strength? Comment your winner below.
+
+In my honest final verdict, both machines are powerful, but if we talk about pure power, real world domination, and future technology, the winner is shocking. The result will blow your mind.
+
+Thank you so much for watching this ultimate comparison of {a} versus {b}. If you enjoyed this video, please subscribe to our channel, like this video, and let me know in the comments how did you like the video and who is your winner, {a} or {b}. See you in the next epic battle.
+"""
+
+words=script.split(); print(f"TOTAL WORDS {len(words)} - TARGET 4 MIN")
+af=tts_pro(script)
+audio=AudioFileClip(af[0]); dur=max(1, audio.duration - 0.2); audio=audio.subclip(0, dur)
+print(f"AUDIO DURATION {dur:.1f} sec = {dur/60:.1f} min")
+
+clips=dl(f"{a} {b}")+dl(a)+dl(b)
 vclips=[]
 for p in clips:
  try:vclips.append(VideoFileClip(p).resize((W,H)).without_audio())
@@ -85,7 +99,6 @@ for i,w in enumerate(words):
  txts.append(ImageClip(np.array(cimg)).set_start(i*per).set_duration(per))
 
 final=CompositeVideoClip([bg_video]+txts,size=(W,H)).set_duration(dur).set_audio(audio)
-
 safe_title=re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')
 if not safe_title: safe_title='video'
 fn='vid-'+safe_title[:35]+".mp4"

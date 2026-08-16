@@ -31,8 +31,8 @@ MAX_DURATION = 240
 TARGET_DURATION = 240
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-BANNED = ["tyrod", "taylor", "mariners", "yankees", "oreo", "brad pitt", "pushpa", "jethalal", "tmkoc", "bhabi", "kapil", "bigg boss", "football", "cricket", "movie", "election", "biden", "trump", "modi"]
-TECH_ALLOWED = ["iphone", "apple", "samsung", "pixel", "phone", "headphone", "earbuds", "watch", "laptop", "gadget", "airpods", "excavator", "crane", "bulldozer", "jcb", "caterpillar", "construction", "tank", "fighter", "robot", "tesla", "humanoid", "ai", "processor", "chip", "gpu"]
+BANNED = ["tyrod", "taylor", "mariners", "yankees", "oreo", "brad pitt", "pushpa", "jethalal", "tmkoc", "bhabi", "kapil", "bigg boss", "football", "cricket", "movie", "election", "biden", "trump", "bollywood", "actor", "actress", "celebrity"]
+TECH_ALLOWED = ["iphone", "apple", "samsung", "pixel", "phone", "headphone", "earbuds", "watch", "laptop", "gadget", "airpods", "excavator", "crane", "bulldozer", "jcb", "caterpillar", "construction", "tesla", "robot", "ai", "tech"]
 
 USA_GIRL_EMOTIONAL = [
     "beautiful american woman emotional talking with hands",
@@ -99,7 +99,16 @@ def fix_video_with_ffmpeg(input_path):
     """Repair corrupted video files with FFmpeg"""
     if not os.path.exists(input_path):
         logger.error(f"File not found: {input_path}")
-        return input_path
+        return None
+    
+    file_size = os.path.getsize(input_path)
+    if file_size < 50000:
+        logger.warning(f"File too small ({file_size} bytes), skipping: {input_path}")
+        try:
+            os.remove(input_path)
+        except:
+            pass
+        return None
     
     fixed_path = input_path.replace(".mp4", "_fixed.mp4")
     try:
@@ -116,17 +125,20 @@ def fix_video_with_ffmpeg(input_path):
                 pass
             os.rename(fixed_path, input_path)
             logger.info(f"✅ Video fixed: {input_path}")
+            return input_path
         else:
             try:
                 os.remove(fixed_path)
             except:
                 pass
+            logger.error(f"FFmpeg fix failed for {input_path}")
+            return None
     except subprocess.TimeoutExpired:
         logger.error(f"FFmpeg timeout for {input_path}")
+        return None
     except Exception as e:
         logger.error(f"❌ Fix failed: {e}")
-    
-    return input_path
+        return None
 
 def safe_VideoFileClip(path, per_sentence=5):
     """Safely load video with retry logic and fallback"""
@@ -169,7 +181,11 @@ def safe_VideoFileClip(path, per_sentence=5):
             logger.warning(f"⚠️ Attempt {attempt+1} failed: {e}")
             if attempt < 2:
                 # Try to fix the file before retry
-                fix_video_with_ffmpeg(path)
+                fixed = fix_video_with_ffmpeg(path)
+                if fixed is None:
+                    # File couldn't be fixed, return fallback
+                    logger.error(f"❌ File cannot be fixed: {path}")
+                    return safe_duration(ColorClip(size=(W, H), color=(15, 15, 35)), per_sentence)
                 time.sleep(1)
             else:
                 # Final attempt failed - return fallback color clip
@@ -342,13 +358,13 @@ def generate_emotional_single_script(topic):
     script = f"""
     Oh my god guys! You will not believe what happened when I tested {main} for 7 days! I am literally shaking right now because what I found shocked me completely! 
     When I first saw {main}, I thought wow this looks amazing, 99,000 dollars, 600 horsepower, big machine, but is it really worth that much money? I had so many doubts in my heart.
-    I still remember day one, I was so nervous, my hands were shaking when I started {main} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was racing so fast.
+    I still remember day one, I was so nervous, my hands were shaking when I started {main} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was pounding like never before!
     But then something magical happened. On day two, I saw how this beast lifts 50 tons like it is nothing! I literally screamed with excitement, my eyes were wide open, I could not believe what I was seeing!
-    Day three was the most emotional day for me. I was working in Texas, hot sun, sweat on my face, but {main} did not stop. It worked for 5 hours non stop and completed 3 days of work! I started crying tears of joy.
-    But wait, there is a hidden secret that nobody tells you about {main}. 99 percent of people miss this hidden feature. There is a secret fuel saving mode that saves 30 percent fuel! When I found this I literally jumped with happiness.
-    Now let me be honest with you guys, with full emotions. I love {main} but there are 3 things that broke my heart. First, the price is too high, 99,000 dollars is a lot of money, my heart sank when I saw the invoice.
-    But after 7 days, my final emotional verdict is this. If you have big construction projects, if you want to save time, if you want to feel that power in your hands, then {main} is for you. I recommend it with all my heart!
-    So tell me in comments, would you buy {main} for 99,000 dollars? I am waiting for your comments with my heart full of emotions! If this 4 minute emotional review touched your heart, please subscribe and hit that bell!
+    Day three was the most emotional day for me. I was working in Texas, hot sun, sweat on my face, but {main} did not stop. It worked for 5 hours non stop and completed 3 days of work! I started crying tears of joy!
+    But wait, there is a hidden secret that nobody tells you about {main}. 99 percent of people miss this hidden feature. There is a secret fuel saving mode that saves 30 percent fuel! When I found out, I was shocked!
+    Now let me be honest with you guys, with full emotions. I love {main} but there are 3 things that broke my heart. First, the price is too high, 99,000 dollars is a lot of money, my heart sank when I saw the price tag!
+    But after 7 days, my final emotional verdict is this. If you have big construction projects, if you want to save time, if you want to feel that power in your hands, then {main} is for you. I highly recommend it with all my heart!
+    So tell me in comments, would you buy {main} for 99,000 dollars? I am waiting for your comments with my heart full of emotions! If this 4 minute emotional review touched your heart, please subscribe!
     """
     full = clean_tts(script)
     sentences = [s.strip() for s in full.split('.') if len(s.strip()) > 25]
@@ -454,10 +470,11 @@ def download_pexels_emotional(query, prefix):
                         pass
                     continue
                 
-                path = fix_video_with_ffmpeg(path)
-                out.append(path)
-                if len(out) >= 2:
-                    break
+                fixed_path = fix_video_with_ffmpeg(path)
+                if fixed_path:
+                    out.append(fixed_path)
+                    if len(out) >= 2:
+                        break
             except Exception as e:
                 logger.warning(f"Error downloading Pexels video: {e}")
                 continue
@@ -657,6 +674,7 @@ if __name__ == "__main__":
         
         all_clips = girl_clips + bg_clips
         if len(all_clips) < 2:
+            logger.warning("⚠️ Not enough video clips downloaded, using fallback color")
             video_clip = ColorClip(size=(W, H), color=(25, 10, 40))
             video_clip = safe_duration(video_clip, final_audio.duration)
             temp_files = []

@@ -33,40 +33,31 @@ def viral():
  c=c+base; c=list(set([x for x in c if 10<len(x)<80])); f="used_long_titles.txt"; open(f,"a").close(); u=open(f).read().lower(); fr=[x for x in c if x.lower() not in u] or c; ch=random.choice(fr); open(f,"a").write(ch+"\n"); print(f"WORLDWIDE:{ch}",flush=True); return ch
 
 def seo_pack(raw,l,r):
- yr="2025"
- titles=[f"{l} vs {r} - Who Will Win? Full Power Comparison {yr}",f"{l} vs {r} Ultimate Fight {yr} - Shocking Result!",f"{l} vs {r} Real Power Test - You Won't Believe Who Wins!"]
- title=random.choice(titles)
+ yr="2025"; title=random.choice([f"{l} vs {r} - Who Will Win? Full Power Comparison {yr}",f"{l} vs {r} Ultimate Fight {yr} - Shocking Result!",f"{l} vs {r} Real Power Test - You Won't Believe Who Wins!"])
  tags=[f"{l} vs {r}",f"{l} vs {r} {yr}",f"{l} power",f"{r} power",f"{l} vs {r} who will win","ultimate showdown","power comparison","full comparison","real test","who will win",f"{l} {yr}",f"{r} {yr}","vs fight","machine fight","tech battle"][:15]
- desc=f"""{title}
-
-In this video you will get 3 powerful things:
-1. Real power of {l}
-2. Hidden feature 99% miss
-3. Final verdict - {l} vs {r} who wins?
-
-We start with {l} extreme test, then {r} brutal power, then ultimate showdown {l} versus {r}.
-
-00:00 What you will get
-00:30 Let's Start - {l}
-02:00 {r} Power
-04:00 Ultimate VS Fight
-05:30 Final Verdict
-
-Thank you for watching! Please subscribe.
-Let me know in comments how did you like video?
-
-#{l.replace(' ','')} #{r.replace(' ','')} #vsfight #whowillwin #{yr} #tech
-
-Subscribe: https://www.youtube.com/@TECH4USA
-"""
+ desc=f"""{title}\n\nIn this video you will get 3 powerful things:\n1. Real power of {l}\n2. Hidden feature 99% miss\n3. Final verdict - {l} vs {r} who wins?\n\n00:00 What you will get\n00:30 Let's Start - {l}\n02:00 {r} Power\n04:00 Ultimate VS Fight\n05:30 Final Verdict\n\nThank you! Please subscribe.\nLet me know in comments how did you like video?\n\n#{l.replace(' ','')} #{r.replace(' ','')} #vsfight #whowillwin #{yr}\nSubscribe: https://www.youtube.com/@YOUR_CHANNEL\n"""
  return title,tags,desc
 
 def tts(txt):
- files=[]
- for i,p in enumerate([txt[i:i+800] for i in range(0,len(txt),800)][:5]):
-  ow=f"v{i}.wav"
-  try: subprocess.run(f'echo "{p.replace(chr(34),"")}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.88',shell=True,timeout=40); files.append(ow)
+ print("TTS START",flush=True); files=[]; chunks=[txt[i:i+700] for i in range(0,len(txt),700)][:5]
+ for i,ch in enumerate(chunks):
+  ow=f"v{i}.wav"; ch=ch.replace('"','').replace("'",'').replace("\n"," ")
+  try:
+   # try piper binary
+   cmd=f'echo "{ch}" |./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.88'
+   subprocess.run(cmd,shell=True,timeout=60)
+   if os.path.exists(ow) and os.path.getsize(ow)>5000: files.append(ow); print(f"TTS OK {ow}",flush=True); continue
+  except Exception as e: print(f"TTS FAIL BIN {e}")
+  try:
+   # fallback python piper
+   subprocess.run([sys.executable,"-m","piper","--model","en_US-lessac-medium.onnx","--output_file",ow],input=ch.encode(),timeout=60)
+   if os.path.exists(ow) and os.path.getsize(ow)>5000: files.append(ow); continue
   except: pass
+ # FINAL BACKUP - silent audio to prevent crash
+ if not files:
+  print("TTS FAILED - CREATING DUMMY AUDIO TO PREVENT CRASH",flush=True)
+  subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","60","dummy.wav"],capture_output=True)
+  files=["dummy.wav"]
  return files
 
 def dl(q,pre):
@@ -96,9 +87,20 @@ if __name__=="__main__":
  title,tags,desc=seo_pack(raw,a,b)
  full=f"""In this video you will get three things. Number one, the real power of {a} versus {b}. Number two, the hidden feature that ninety nine percent of people miss. Number three, my honest final verdict. Let's start. First, the power of {a}. This beast delivers extreme force and dominates the battlefield. The sound is insane and the performance is shocking. Second, the power of {b}. This machine is built for war and shows no mercy. It strikes with speed and precision. Finally, the ultimate showdown {a} versus {b}. Both machines collide and only one will survive. This fight will blow your mind. Thank you so much for watching. If you enjoyed this fight, please subscribe to our channel. Let me know in the comments how did you like the video."""
  sents=[x.strip() for x in full.split(".") if len(x.strip())>8]
- af=tts(full); acl=[AudioFileClip(p) for p in af if os.path.exists(p)]; audio=concatenate_audioclips(acl).subclip(0,T)
+ af=tts(full)
+ # FIXED - never empty now
+ print(f"AUDIO FILES {af}",flush=True)
+ acl=[]
+ for p in af:
+  try:
+   if os.path.exists(p) and os.path.getsize(p)>1000: acl.append(AudioFileClip(p))
+  except: pass
+ if not acl:
+  print("CRITICAL AUDIO EMPTY - USING SILENT"); acl=[AudioClip(lambda t: 0, duration=60)]
+ audio=concatenate_audioclips(acl).subclip(0,T)
+ print(f"AUDIO DUR {audio.duration}",flush=True)
  clips=dl(a,"L")+dl(b,"R")+dl("explosion fight","F"); print(f"CLIPS {len(clips)}",flush=True)
- per=audio.duration/len(sents); v=[]
+ per=max(1,audio.duration/len(sents)); v=[]
  for i,s in enumerate(sents):
   base=safe(clips[i%len(clips)],per) if clips else ColorClip((W,H),color=(20,10,30),duration=per)
   try: base=base.loop(duration=per).resize((W,H)).without_audio().set_duration(per)

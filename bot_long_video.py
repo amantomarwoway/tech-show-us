@@ -26,7 +26,6 @@ def sr(c,w=W):
     try: return c.resize(width=w)
     except: return c.resized(width=w) if hasattr(c,'resized') else c
 def clean(t): return re.sub(r'\s+',' ',re.sub(r'[^a-zA-Z0-9.,!?$% ]',' ',re.sub(r'http\S+|www\S+|\.com','',t,flags=re.I))).strip()
-
 def fix(p):
     f=p.replace(".mp4","_f.mp4")
     try:
@@ -37,7 +36,6 @@ def fix(p):
             except: pass
     except: pass
     return p
-
 def safe_clip(path,d=5):
     for _ in range(3):
         try:
@@ -123,10 +121,10 @@ def dl(q,pre):
     return out
 
 def make_vid(sents,dur,topic,g,b):
-    final=[]; per=max(28.0,min(dur/len(sents) if sents else 30,32.0)); allc=g+b or g
+    per=dur/len(sents); allc=g+b or g; clips=[]
     for i,sent in enumerate(sents[:8]):
         try:
-            p=allc[i%len(allc)] if allc else None; gc=safe_clip(p,per) if p and os.path.exists(p) else sd(ColorClip(size=(W,H),color=(25,10,40)),per)
+            p=allc[i%len(allc)] if allc else None; gc=safe_clip(p,per) if p and os.path.exists(p) else sd(ColorClip(size=(W,H),color=(15,15,35)),per)
             gc=sna(gc)
             if gc.duration<per:
                 try: gc=gc.loop(duration=per)
@@ -144,12 +142,10 @@ def make_vid(sents,dur,topic,g,b):
             dr.rectangle((0,int(H*0.70),W,H),fill=(0,0,0,200)); y=int(H*0.73)
             for line in textwrap.wrap(sent,width=50)[:4]: dr.text((40,y),line.upper(),fill="white",font=fb,stroke_width=4,stroke_fill="black"); y+=int(H*0.05)
             txt=ImageClip(np.array(img)); txt=sd(txt,per); comp=CompositeVideoClip([gc,txt],size=(W,H)); comp=sd(comp,per)
-            tmp=f"temp_{i}.mp4"; comp.write_videofile(tmp,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None,verbose=False); final.append(tmp)
-            try: comp.close(); gc.close()
-            except: pass
+            clips.append(comp)
         except Exception as e: print(f"Seg {i} {e}"); continue
-    if not final: return sd(ColorClip(size=(W,H),color=(25,10,40)),dur),[]
-    cl=[safe_clip(f,per) for f in final]; fv=concatenate_videoclips(cl,method="compose"); fv=sd(fv,T); return fv,final
+    if not clips: return sd(ColorClip(size=(W,H),color=(25,10,40)),dur),[]
+    fv=concatenate_videoclips(clips,method="compose"); fv=sd(fv,T); return fv,[]
 
 if __name__=="__main__":
     top=get_trends(); full,sents,main=gen_script(top)
@@ -160,12 +156,12 @@ if __name__=="__main__":
     fa=concatenate_audioclips(acl); fa=fa.subclip(0,T) if fa.duration>T else fa; fa=sd(fa,T)
     g=[]; [g.extend(dl(q,"emotional_girl")) for q in GIRL_Q if len(g)<8]
     b=dl(f"{main.split()[0]} cinematic bokeh","creative_bg")
-    allc=g+b; vc,tm=make_vid(sents,fa.duration,main,g,b) if len(allc)>=2 else (sd(ColorClip(size=(W,H),color=(25,10,40)),fa.duration),[])
+    allc=g+b; vc,_=make_vid(sents,fa.duration,main,g,b) if len(allc)>=2 else (sd(ColorClip(size=(W,H),color=(25,10,40)),fa.duration),[])
     fv=sd(sa(sd(vc,T),fa),T); fn=re.sub(r'[^a-z0-9]+','-',main.lower()).strip('-')[:40]+"-emotional-single-4min-4k.mp4"
-    fv.write_videofile(fn,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None)
-    for x in tm+allc:
+    print(f"Writing {fn} - FAST SINGLE PASS - 4K"); fv.write_videofile(fn,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="5000k",logger=None)
+    for x in allc:
         try: os.remove(x)
         except: pass
-    print(f"✅ DONE {fn}")
+    print(f"✅ DONE {fn} - FAST MODE")
     try: from upload_youtube import upload_video; upload_video(fn,f"{main} Made Me Cry! Emotional 4 Minute Story!",f"{full[:500]}",[main.lower(),"emotional","viral"])
     except Exception as e: print(f"Upload {e}")

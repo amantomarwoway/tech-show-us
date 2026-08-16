@@ -21,7 +21,14 @@ jobs:
           sudo apt-get update -y
           sudo apt-get remove -y ffmpeg || true
           sudo apt-get install -y ffmpeg espeak espeak-ng libjpeg-dev libpng-dev libjpeg8-dev
+          echo "========== FFMPEG VERSION =========="
           ffmpeg -version
+          echo "========== FFMPEG CODECS CHECK =========="
+          ffmpeg -encoders | grep -E "264|aac|mp3" || true
+          ffmpeg -codecs | grep -E "libx264|aac" || true
+          which ffmpeg
+          ls -lh $(which ffmpeg)
+          echo "========== SYSTEM DEPS DONE =========="
 
       - name: Install Python Deps - FIX ModuleNotFoundError - All Deps Explicit
         run: |
@@ -30,14 +37,44 @@ jobs:
           pip install --no-cache-dir "moviepy==1.0.3"
           pip install --no-cache-dir requests gtts google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends lxml
           pip install --no-cache-dir piper-tts || true
+          echo "========== PYTHON DEPS VERIFICATION =========="
           python -c "import moviepy; print(f'MoviePy version: {moviepy.__version__}'); from moviepy.editor import VideoFileClip; print('✅ moviepy.editor import OK')"
           python -c "import PIL; print(f'Pillow version: {PIL.__version__}')"
+          echo "========== FFMPEG PATH VERIFICATION =========="
+          python -c "
+          import os
+          import imageio_ffmpeg
+          try:
+              exe = imageio_ffmpeg.get_ffmpeg_exe()
+              print(f'✅ imageio_ffmpeg exe: {exe}')
+              print(f'   Exists: {os.path.exists(exe)}')
+              print(f'   Size: {os.path.getsize(exe) if os.path.exists(exe) else 0} bytes')
+          except Exception as e:
+              print(f'❌ imageio_ffmpeg error: {e}')
+          import shutil
+          sys_ffmpeg = shutil.which('ffmpeg')
+          print(f'✅ system ffmpeg: {sys_ffmpeg}')
+          "
+          echo "========== CODEC TEST - DUMMY VIDEO =========="
+          python -c "
+          import subprocess, os
+          cmd = ['ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=1280x720:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '1', 'test_codec.mp4']
+          result = subprocess.run(cmd, capture_output=True, text=True)
+          if os.path.exists('test_codec.mp4'):
+              print(f'✅ libx264 codec OK - test file size: {os.path.getsize(\"test_codec.mp4\")} bytes')
+              os.remove('test_codec.mp4')
+          else:
+              print('❌ libx264 codec FAILED')
+              print(result.stderr[-500:])
+          "
 
       - name: Download Piper model
         run: |
+          echo "========== PIPER MODEL DOWNLOAD =========="
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx || true
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json || true
-          ls -lh *.onnx* || true
+          ls -lh *.onnx* || echo "⚠️ Piper model not found, will use gTTS fallback"
+          echo "========== PIPER DONE =========="
 
       - name: Run Long Video Bot - ULTIMATE v2 - ModuleNotFound Fixed
         env:
@@ -46,12 +83,37 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: |
-          python bot_long_video.py
+          echo "========== BOT START - DEBUG INFO =========="
+          echo "Python: $(python --version)"
+          echo "PWD: $(pwd)"
+          echo "Files: $(ls -lh | head -20)"
+          echo "Env check: PEXELS_API_KEY exists? $([ -n "$PEXELS_API_KEY" ] && echo YES || echo NO)"
+          echo "Env check: YT_CLIENT_ID exists? $([ -n "$YT_CLIENT_ID" ] && echo YES || echo NO)"
+          echo "========== RUNNING BOT =========="
+          set -o pipefail
+          python bot_long_video.py 2>&1 | tee bot_output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "========== BOT EXIT CODE: $EXIT_CODE =========="
+          echo "========== GENERATED FILES =========="
+          ls -lh *.mp4 *.txt 2>&1 | head -30 || true
+          echo "========== LAST 100 LINES OF LOG =========="
+          tail -100 bot_output.log || true
+          exit $EXIT_CODE
+
+      - name: Upload Logs on Failure - Better Debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-logs-${{ github.run_number }}
+          path: |
+            bot_output.log
+            *.log
+          retention-days: 3
 
       - name: Commit used titles
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add used_long_titles.txt || true
-          git commit -m "Update long titles v2" || true
+          git commit -m "Update long titles v2 - run ${{ github.run_number }}" || true
           git push || true

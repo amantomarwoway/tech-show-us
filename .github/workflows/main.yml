@@ -1,48 +1,26 @@
-name: 3 Shorts USA Time - 4K FINAL
+name: Shorts-8K-Machine-Fights
 on:
-  schedule:
-    # 3 per day - Best USA times (UTC) - GitHub Actions uses UTC
-    # 11 UTC = 7 AM EDT (Morning US) / 4:30 PM IST
-    # 17 UTC = 1 PM EDT (Lunch US) / 10:30 PM IST
-    # 23 UTC = 7 PM EDT (Evening Peak US) / 4:30 AM IST next day
-    - cron: '0 11 * * *'
-    - cron: '0 17 * * *'
-    - cron: '0 23 * * *'
   workflow_dispatch:
+  schedule: [{cron: '0 */3 * * *'}]
+permissions: {contents: write}
 jobs:
-  run-bot:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    permissions:
-      contents: write
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install --no-cache-dir pytrends lxml
-      - name: Install Piper TTS
-        run: |
-          pip install piper-tts
-      - name: Download Piper model
-        run: |
-          wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-      - name: Run Shorts Bot
-        env:
+        with: {python-version: '3.11'}
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg -qq
+      - run: pip install -r requirements.txt piper-tts google-api-python-client google-auth -q
+      - run: |
+          mkdir -p piper; wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz; tar -xzf piper_linux_x86_64.tar.gz -C piper --strip-components=1; chmod +x piper/piper
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx; wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+      - env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        run: |
-          python bot.py
-      - name: Commit used titles
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add used_titles.txt || true
-          git commit -m "Update used titles" || true
-          git push || true
+        run: python -u bot.py
+      - if: always()
+        run: git config user.name bot; git config user.email bot@bot.com; git add used_short_titles.txt || true; git commit -m "short 8K dual audio [skip ci]" || true; git push || true

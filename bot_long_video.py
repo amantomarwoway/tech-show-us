@@ -1,721 +1,171 @@
-import random, requests, re, os, time, textwrap, subprocess, xml.etree.ElementTree as ET, gc, logging
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-try:
-    import imageio_ffmpeg
-    os.environ['IMAGEIO_FFMPEG_EXE'] = imageio_ffmpeg.get_ffmpeg_exe()
-    FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-except Exception as e:
-    logger.warning(f"imageio_ffmpeg not available: {e}")
-    FFMPEG = "ffmpeg"
-
-try:
-    from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
-except ImportError:
-    try:
-        from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, concatenate_audioclips
-    except ImportError as e:
-        logger.error(f"MoviePy import failed: {e}")
-        raise
-
+import random, requests, re, os, time, textwrap, subprocess, xml.etree.ElementTree as ET, gc, warnings
+warnings.filterwarnings("ignore")
+try: import imageio_ffmpeg; os.environ['IMAGEIO_FFMPEG_EXE']=imageio_ffmpeg.get_ffmpeg_exe(); FFMPEG=imageio_ffmpeg.get_ffmpeg_exe()
+except: FFMPEG="ffmpeg"
+try: from moviepy.editor import *
+except: from moviepy import *
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-print("🔥 4 TRENDING SOURCES COMBINED - LONG VIDEO - 4 MIN EXACT - NO FIX LIST")
+W,H,T=3840,2160,240
+PEXELS=os.environ.get("PEXELS_API_KEY")
+BANNED=["tyrod","taylor","mariners","yankees","oreo","brad pitt","pushpa","jethalal","tmkoc","bhabi","kapil","bigg boss","football","cricket","movie","election","biden","trump","modi"]
+TECH=["iphone","apple","samsung","pixel","phone","headphone","earbuds","watch","laptop","gadget","airpods","excavator","crane","bulldozer","jcb","caterpillar","construction","tank","fighter","robot","tesla","humanoid","ai","processor","chip","gpu"]
+GIRL_Q=["beautiful american woman emotional talking","american girl shocked facial expression close up","beautiful blonde woman crying happy","american woman explaining with hand gestures"]
 
-W, H = 3840, 2160
-MAX_DURATION = 240
-TARGET_DURATION = 240
+def sd(c,d):
+    try: return c.set_duration(d)
+    except: return c.with_duration(d) if hasattr(c,'with_duration') else c
+def sa(c,a):
+    try: return c.set_audio(a)
+    except: return c.with_audio(a) if hasattr(c,'with_audio') else c
+def sna(c):
+    try: return c.without_audio()
+    except: return c.with_audio(None)
+def sr(c,w=W):
+    try: return c.resize(width=w)
+    except: return c.resized(width=w) if hasattr(c,'resized') else c
+def clean(t): return re.sub(r'\s+',' ',re.sub(r'[^a-zA-Z0-9.,!?$% ]',' ',re.sub(r'http\S+|www\S+|\.com','',t,flags=re.I))).strip()
 
-PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-BANNED = ["tyrod", "taylor", "mariners", "yankees", "oreo", "brad pitt", "pushpa", "jethalal", "tmkoc", "bhabi", "kapil", "bigg boss", "football", "cricket", "movie", "election", "biden", "trump", "bollywood", "actor", "actress", "celebrity"]
-TECH_ALLOWED = ["iphone", "apple", "samsung", "pixel", "phone", "headphone", "earbuds", "watch", "laptop", "gadget", "airpods", "excavator", "crane", "bulldozer", "jcb", "caterpillar", "construction", "tesla", "robot", "ai", "tech"]
-
-USA_GIRL_EMOTIONAL = [
-    "beautiful american woman emotional talking with hands",
-    "american girl shocked surprised facial expression close up",
-    "beautiful blonde woman crying happy emotional hands moving",
-    "american woman explaining with hand gestures expressive",
-    "beautiful american girl excited face talking camera"
-]
-
-def safe_duration(c, d):
-    """Set duration safely with fallback methods"""
+def fix(p):
+    f=p.replace(".mp4","_f.mp4")
     try:
-        return c.set_duration(d)
-    except:
-        try:
-            return c.with_duration(d)
-        except:
-            logger.warning(f"Could not set duration to {d}")
-            return c
-
-def safe_audio(c, a):
-    """Set audio safely with fallback methods"""
-    try:
-        return c.set_audio(a)
-    except:
-        try:
-            return c.with_audio(a)
-        except:
-            logger.warning("Could not set audio")
-            return c
-
-def safe_no_audio(c):
-    """Remove audio safely with fallback methods"""
-    try:
-        return c.without_audio()
-    except:
-        try:
-            return c.with_audio(None)
-        except:
-            logger.warning("Could not remove audio")
-            return c
-
-def safe_resize(clip, width=W):
-    """Resize clip safely with fallback methods"""
-    try:
-        return clip.resize(width=width)
-    except:
-        try:
-            return clip.resized(width=width)
-        except:
-            logger.warning(f"Could not resize to width {width}")
-            return clip
-
-def clean_tts(t):
-    """Clean text for TTS processing"""
-    if not isinstance(t, str):
-        return ""
-    t = re.sub(r'http\S+|www\S+|\.com', '', t, flags=re.IGNORECASE)
-    t = re.sub(r'[^a-zA-Z0-9.,!?$% ]', ' ', t)
-    t = re.sub(r'\s+', ' ', t).strip()
-    return t
-
-def fix_video_with_ffmpeg(input_path):
-    """Repair corrupted video files with FFmpeg"""
-    if not os.path.exists(input_path):
-        logger.error(f"File not found: {input_path}")
-        return None
-    
-    file_size = os.path.getsize(input_path)
-    if file_size < 50000:
-        logger.warning(f"File too small ({file_size} bytes), skipping: {input_path}")
-        try:
-            os.remove(input_path)
-        except:
-            pass
-        return None
-    
-    fixed_path = input_path.replace(".mp4", "_fixed.mp4")
-    try:
-        logger.info(f"🔧 Attempting to fix video: {input_path}")
-        cmd = [FFMPEG, "-y", "-i", input_path, "-c:v", "libx264", "-pix_fmt", "yuv420p",
-               "-vf", "scale=1280:720:force_original_aspect_ratio=decrease", "-c:a", "aac",
-               "-b:a", "128k", "-movflags", "+faststart", fixed_path]
-        result = subprocess.run(cmd, timeout=30, capture_output=True, check=False)
-        
-        if os.path.exists(fixed_path) and os.path.getsize(fixed_path) > 50000:
-            try:
-                os.remove(input_path)
-            except:
-                pass
-            os.rename(fixed_path, input_path)
-            logger.info(f"✅ Video fixed: {input_path}")
-            return input_path
+        subprocess.run([FFMPEG,"-y","-err_detect","ignore_err","-fflags","+discardcorrupt","-i",p,"-c:v","libx264","-pix_fmt","yuv420p","-vf","scale=1280:720:force_original_aspect_ratio=decrease","-c:a","aac","-movflags","+faststart",f],timeout=30,capture_output=True)
+        if os.path.exists(f) and os.path.getsize(f)>50000: os.remove(p); os.rename(f,p)
         else:
-            try:
-                os.remove(fixed_path)
-            except:
-                pass
-            logger.error(f"FFmpeg fix failed for {input_path}")
-            return None
-    except subprocess.TimeoutExpired:
-        logger.error(f"FFmpeg timeout for {input_path}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ Fix failed: {e}")
-        return None
+            try: os.remove(f)
+            except: pass
+    except: pass
+    return p
 
-def safe_VideoFileClip(path, per_sentence=5):
-    """Safely load video with retry logic and fallback"""
-    if not path or not isinstance(path, str):
-        logger.warning("Invalid path provided to safe_VideoFileClip")
-        return safe_duration(ColorClip(size=(W, H), color=(15, 15, 35)), per_sentence)
-    
-    for attempt in range(3):
+def safe_clip(path,d=5):
+    for _ in range(3):
         try:
-            # Validate file exists and has minimum size
-            if not os.path.exists(path):
-                raise Exception(f"File not found: {path}")
-            
-            file_size = os.path.getsize(path)
-            if file_size < 50000:
-                raise Exception(f"File too small: {file_size} bytes")
-            
-            logger.info(f"📹 Loading video (attempt {attempt+1}/3): {path}")
-            clip = VideoFileClip(path, verbose=False, audio=False)
-            
-            # Critical check: reader must not be None
-            if clip.reader is None:
-                clip.close()
-                raise Exception("VideoFileClip reader is None - corrupted file")
-            
-            # Verify we can read the first frame
-            try:
-                frame = clip.get_frame(0)
-                if frame is None:
-                    clip.close()
-                    raise Exception("Cannot get first frame")
-            except Exception as e:
-                clip.close()
-                raise Exception(f"Frame reading failed: {e}")
-            
-            logger.info(f"✅ Video loaded successfully: {path}")
-            return clip
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Attempt {attempt+1} failed: {e}")
-            if attempt < 2:
-                # Try to fix the file before retry
-                fixed = fix_video_with_ffmpeg(path)
-                if fixed is None:
-                    # File couldn't be fixed, return fallback
-                    logger.error(f"❌ File cannot be fixed: {path}")
-                    return safe_duration(ColorClip(size=(W, H), color=(15, 15, 35)), per_sentence)
-                time.sleep(1)
-            else:
-                # Final attempt failed - return fallback color clip
-                logger.error(f"❌ All attempts failed for {path}, using fallback color")
-                return safe_duration(ColorClip(size=(W, H), color=(15, 15, 35)), per_sentence)
-    
-    return safe_duration(ColorClip(size=(W, H), color=(15, 15, 35)), per_sentence)
+            if not os.path.exists(path) or os.path.getsize(path)<50000: raise Exception()
+            cl=VideoFileClip(path,verbose=False)
+            if cl.reader is None: cl.close(); raise Exception()
+            cl.get_frame(0); return cl
+        except: fix(path); time.sleep(0.5)
+    return sd(ColorClip(size=(W,H),color=(15,15,35)),d)
 
-# === 4 TRENDING SOURCES - ALL TOGETHER - NO FIX LIST ===
-def get_from_google_trends_pytrends():
-    """Fetch trends from Google Trends using pytrends"""
+def get_trends():
+    c=[]
     try:
         from pytrends.request import TrendReq
-        pytrends = TrendReq(hl='en-US', tz=360)
-        trending = pytrends.trending_searches(pn='united_states')
-        all_trends = trending[0].tolist() if hasattr(trending[0], 'tolist') else list(trending[0])
-        filtered = []
-        for t in all_trends:
-            if not isinstance(t, str):
-                continue
-            low = t.lower()
-            if any(b in low for b in BANNED):
-                continue
-            if len(t) > 100:
-                continue
-            if any(k in low for k in TECH_ALLOWED) or len(t.split()) <= 5:
-                filtered.append(t)
-        if filtered:
-            logger.info(f"✅ Source1 Google Trends pytrends: {len(filtered)} found")
-            return filtered
-    except Exception as e:
-        logger.warning(f"Source1 pytrends fail: {e}")
-    return []
-
-def get_from_youtube_trending():
-    """Fetch trending videos from YouTube API"""
+        tr=TrendReq(hl='en-US',tz=360).trending_searches(pn='united_states')[0].tolist()
+        c+=[t for t in tr if not any(b in t.lower() for b in BANNED) and len(t)<100 and (any(k in t.lower() for k in TECH) or len(t.split())<=5)]
+    except: pass
     try:
-        api_key = os.environ.get("YOUTUBE_API_KEY", "") or os.environ.get("YT_CLIENT_ID", "")
-        if not api_key:
-            return []
-        url = f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=25&key={api_key}"
-        r = requests.get(url, timeout=15)
-        if r.status_code == 200:
-            data = r.json()
-            candidates = []
-            for item in data.get('items', []):
-                try:
-                    title = item.get('snippet', {}).get('title', '')
-                    if 10 < len(title) < 90 and not any(b in title.lower() for b in BANNED):
-                        candidates.append(title[:60])
-                except:
-                    continue
-            if candidates:
-                logger.info(f"✅ Source2 YouTube Trending: {len(candidates)} found")
-                return candidates
-    except Exception as e:
-        logger.warning(f"Source2 YouTube fail: {e}")
-    return []
-
-def get_from_reddit():
-    """Fetch trending posts from Reddit"""
+        k=os.environ.get("YOUTUBE_API_KEY","") or os.environ.get("YT_CLIENT_ID","")
+        if k:
+            d=requests.get(f"https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=US&videoCategoryId=28&maxResults=25&key={k}",timeout=15).json()
+            c+=[i['snippet']['title'][:60] for i in d.get('items',[]) if 10<len(i['snippet']['title'])<90 and not any(b in i['snippet']['title'].lower() for b in BANNED)]
+    except: pass
     try:
-        candidates = []
-        for sub in ["technology", "gadgets"]:
-            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=25"
-            headers = {"User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)"}
-            r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 200:
-                data = r.json()
-                for post in data.get('data', {}).get('children', []):
-                    try:
-                        title = post.get('data', {}).get('title', '')
-                        if 10 < len(title) < 90 and not any(b in title.lower() for b in BANNED):
-                            title = re.sub(r'[^a-zA-Z0-9 ]', ' ', title)
-                            title = re.sub(r'\s+', ' ', title).strip()
-                            if any(k in title.lower() for k in TECH_ALLOWED):
-                                candidates.append(title[:60])
-                    except:
-                        continue
-        if candidates:
-            logger.info(f"✅ Source3 Reddit: {len(candidates)} found")
-            return candidates
-    except Exception as e:
-        logger.warning(f"Source3 Reddit fail: {e}")
-    return []
-
-def get_from_google_news():
-    """Fetch trending news from Google News RSS"""
+        for sub in ["technology","gadgets"]:
+            d=requests.get(f"https://www.reddit.com/r/{sub}/hot.json?limit=25",headers={"User-Agent":"Mozilla/5.0"},timeout=15).json()
+            for p in d['data']['children']:
+                t=re.sub(r'\s+',' ',re.sub(r'[^a-zA-Z0-9 ]',' ',p['data']['title'])).strip()
+                if 10<len(t)<90 and any(k in t.lower() for k in TECH) and not any(b in t.lower() for b in BANNED): c.append(t[:60])
+    except: pass
     try:
-        urls = [
-            "https://news.google.com/rss/search?q=technology+gadget+review+2026&hl=en-US&gl=US&ceid=US:en",
-            "https://news.google.com/rss/search?q=iphone+samsung+tesla+robot+tech&hl=en-US&gl=US&ceid=US:en",
-            "https://news.google.com/rss/search?q=excavator+bulldozer+military+tank&hl=en-US&gl=US&ceid=US:en"
-        ]
-        candidates = []
-        for url in urls:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 200:
-                try:
-                    root = ET.fromstring(r.content)
-                    for item in root.findall('.//item/title')[:15]:
-                        try:
-                            t = item.text.strip().split(' - ')[0] if item.text else ""
-                            if 10 < len(t) < 90 and not any(b in t.lower() for b in BANNED):
-                                if any(k in t.lower() for k in TECH_ALLOWED):
-                                    candidates.append(t[:60])
-                        except:
-                            continue
-                except ET.ParseError as e:
-                    logger.warning(f"XML parse error: {e}")
-                    continue
-        if candidates:
-            logger.info(f"✅ Source4 Google News: {len(candidates)} found")
-            return candidates
-    except Exception as e:
-        logger.warning(f"Source4 Google News fail: {e}")
-    return []
+        for url in ["https://news.google.com/rss/search?q=technology+gadget+review+2026&hl=en-US&gl=US&ceid=US:en","https://news.google.com/rss/search?q=iphone+samsung+tesla+robot+tech&hl=en-US&gl=US&ceid=US:en"]:
+            r=requests.get(url,timeout=15); root=ET.fromstring(r.content)
+            for it in root.findall('.//item/title')[:15]:
+                t=it.text.split(' - ')[0]
+                if 10<len(t)<90 and any(k in t.lower() for k in TECH) and not any(b in t.lower() for b in BANNED): c.append(t[:60])
+    except: pass
+    c=list(set([x for x in c if len(x)>10]))
+    if not c: return random.choice(["iPhone 16 Pro Max Review","Tesla Bot 2026","Caterpillar D9 Bulldozer Power"])
+    f="used_long_titles.txt"; open(f,"a").close(); used=[l.lower() for l in open(f).read().splitlines()]
+    fresh=[x for x in c if x.lower() not in used] or c
+    ch=random.choice(fresh); open(f,"a").write(ch+"\n"); print(f"🎯 {ch}"); return ch
 
-def get_trending():
-    """Fetch trending topics from 4 sources combined"""
-    logger.info("🔍 Fetching 4 TRENDING SOURCES COMBINED - No fix list...")
-    all_candidates = []
-    all_candidates.extend(get_from_google_trends_pytrends())
-    all_candidates.extend(get_from_youtube_trending())
-    all_candidates.extend(get_from_reddit())
-    all_candidates.extend(get_from_google_news())
-    all_candidates = list(set([c.strip() for c in all_candidates if isinstance(c, str) and c.strip() and len(c.strip()) > 10]))
-    logger.info(f"🔥 Total candidates from 4 sources: {len(all_candidates)}")
-    for i, c in enumerate(all_candidates[:8]):
-        logger.info(f"  {i+1}. {c}")
-    
-    if not all_candidates:
-        logger.warning("⚠️ All 4 sources failed - emergency fallback")
-        emergency = ["iPhone 16 Pro Max Review", "Samsung S24 Ultra Test", "Tesla Bot 2026", "Caterpillar D9 Bulldozer Power", "Abrams M1A2 Tank", "F35 Fighter Jet"]
-        return random.choice(emergency)
-    
-    used_file = "used_long_titles.txt"
-    if not os.path.exists(used_file):
-        open(used_file, "w").close()
-    
-    try:
-        with open(used_file, "r") as f:
-            used = [line.strip().lower() for line in f.read().splitlines() if line.strip()]
-    except:
-        used = []
-    
-    fresh = [c for c in all_candidates if c.lower() not in used]
-    if not fresh:
-        logger.info("All trending already used - resetting file")
-        open(used_file, "w").close()
-        fresh = all_candidates
-    
-    chosen = random.choice(fresh)
-    logger.info(f"🎯 FINAL CHOSEN TRENDING (4 sources): {chosen}")
-    try:
-        with open(used_file, "a") as f:
-            f.write(chosen + "\n")
-    except:
-        pass
-    return chosen
+def gen_script(t):
+    m=t.replace(" - "," ").strip()
+    s=f"""Oh my god guys! You will not believe what happened when I tested {m} for 7 days! I am literally shaking right now because what I found shocked me completely! When I first saw {m}, I thought wow this looks amazing, 99,000 dollars, 600 horsepower, big machine, but is it really worth that much money? I still remember day one, I was so nervous, my hands were shaking when I started {m} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was racing so fast. On day two, I saw how this beast lifts 50 tons like it is nothing! I literally screamed with excitement! Day three was most emotional day, I was working in Texas, hot sun, but {m} did not stop. It worked 5 hours non stop and completed 3 days work! I started crying tears of joy. But wait, there is hidden secret that nobody tells you about {m}. 99 percent miss this hidden feature. Secret fuel saving mode saves 30 percent fuel! Now let me be honest, I love {m} but 3 things broke my heart. First, price too high, 99,000 dollars. Second, maintenance expensive. Third, need special training. But after 7 days, final verdict is this. If you have big projects, if you want to save time, if you want to feel power, then {m} is for you. So tell me in comments, would you buy {m} for 99,000 dollars? If this 4 minute emotional review touched your heart, please subscribe!"""
+    full=clean(s); sens=[x.strip() for x in full.split('.') if len(x.strip())>25]
+    if len(sens)>8: cs=len(sens)//8; sens=[". ".join(sens[i*cs:(i*cs+cs if i<7 else len(sens))]) for i in range(8)]
+    return full,sens[:8],m
 
-def get_topic():
-    """Get trending topic"""
-    return get_trending()
-
-def generate_emotional_single_script(topic):
-    """Generate emotional script for topic"""
-    main = topic.replace(" - ", " ").strip()
-    script = f"""
-    Oh my god guys! You will not believe what happened when I tested {main} for 7 days! I am literally shaking right now because what I found shocked me completely! 
-    When I first saw {main}, I thought wow this looks amazing, 99,000 dollars, 600 horsepower, big machine, but is it really worth that much money? I had so many doubts in my heart.
-    I still remember day one, I was so nervous, my hands were shaking when I started {main} for the first time. The sound was so loud, like a beast roaring, 600 horsepower engine, oh my god! My heart was pounding like never before!
-    But then something magical happened. On day two, I saw how this beast lifts 50 tons like it is nothing! I literally screamed with excitement, my eyes were wide open, I could not believe what I was seeing!
-    Day three was the most emotional day for me. I was working in Texas, hot sun, sweat on my face, but {main} did not stop. It worked for 5 hours non stop and completed 3 days of work! I started crying tears of joy!
-    But wait, there is a hidden secret that nobody tells you about {main}. 99 percent of people miss this hidden feature. There is a secret fuel saving mode that saves 30 percent fuel! When I found out, I was shocked!
-    Now let me be honest with you guys, with full emotions. I love {main} but there are 3 things that broke my heart. First, the price is too high, 99,000 dollars is a lot of money, my heart sank when I saw the price tag!
-    But after 7 days, my final emotional verdict is this. If you have big construction projects, if you want to save time, if you want to feel that power in your hands, then {main} is for you. I highly recommend it with all my heart!
-    So tell me in comments, would you buy {main} for 99,000 dollars? I am waiting for your comments with my heart full of emotions! If this 4 minute emotional review touched your heart, please subscribe!
-    """
-    full = clean_tts(script)
-    sentences = [s.strip() for s in full.split('.') if len(s.strip()) > 25]
-    if len(sentences) > 8:
-        combined = []
-        chunk_size = len(sentences) // 8
-        for i in range(8):
-            start = i * chunk_size
-            end = start + chunk_size if i < 7 else len(sentences)
-            combined.append(". ".join(sentences[start:end]))
-        sentences = combined
-    return full, sentences[:8], main
-
-def tts_piper_4min_emotional(script):
-    """Generate TTS audio using Piper or gTTS"""
-    clean = clean_tts(script)
-    if not clean:
-        logger.error("Script is empty after cleaning")
-        return []
-    
-    words = clean.split()
-    chunk_size = max(1, len(words) // 4)
-    chunks = [
-        ' '.join(words[:chunk_size]),
-        ' '.join(words[chunk_size:chunk_size*2]),
-        ' '.join(words[chunk_size*2:chunk_size*3]),
-        ' '.join(words[chunk_size*3:])
-    ]
-    chunks = [c for c in chunks if len(c.strip()) > 20]
-    files = []
-    model = "en_US-lessac-medium.onnx"
-    has_piper = os.path.exists(model)
-    
-    for idx, chunk in enumerate(chunks):
-        out_wav = f"voice_{idx}.wav"
-        out_mp3 = f"voice_{idx}.mp3"
-        ok = False
-        
-        if has_piper:
+def tts(txt):
+    wds=txt.split(); cs=max(1,len(wds)//4); chs=[' '.join(wds[:cs]),' '.join(wds[cs:cs*2]),' '.join(wds[cs*2:cs*3]),' '.join(wds[cs*3:])]
+    chs=[c for c in chs if len(c)>20]; files=[]; model="en_US-lessac-medium.onnx"; has=os.path.exists(model)
+    for i,c in enumerate(chs):
+        ow=f"voice_{i}.wav"; om=f"voice_{i}.mp3"; ok=False
+        if has:
             try:
-                safe = chunk.replace('"', '').replace('`', '').replace('$', '')
-                cmd = f'echo "{safe}" | piper --model {model} --output_file {out_wav} --length_scale 0.92 --sentence_silence 0.25'
-                subprocess.run(cmd, shell=True, timeout=80, capture_output=True, check=False)
-                if os.path.exists(out_wav) and os.path.getsize(out_wav) > 2000:
-                    files.append(out_wav)
-                    ok = True
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Piper timeout for chunk {idx}")
-            except Exception as e:
-                logger.warning(f"Piper failed for chunk {idx}: {e}")
-        
+                subprocess.run(f'echo "{c.replace(chr(34),"").replace(chr(96),"")}" | piper --model {model} --output_file {ow} --length_scale 0.92',shell=True,timeout=80,capture_output=True)
+                if os.path.exists(ow) and os.path.getsize(ow)>2000: files.append(ow); ok=True
+            except: pass
         if not ok:
-            try:
-                from gtts import gTTS
-                gTTS(text=chunk[:4000], lang='en', tld='us', slow=False).save(out_mp3)
-                if os.path.exists(out_mp3):
-                    files.append(out_mp3)
-            except Exception as e:
-                logger.warning(f"gTTS failed for chunk {idx}: {e}")
-        
-        gc.collect()
-    
+            try: from gtts import gTTS; gTTS(text=c[:4000],lang='en',tld='us').save(om); files.append(om)
+            except: pass
     return files
 
-def download_pexels_emotional(query, prefix):
-    """Download emotional clips from Pexels API"""
-    out = []
+def dl(q,pre):
+    out=[]
     try:
-        if not PEXELS_API_KEY:
-            logger.warning("PEXELS_API_KEY not set")
-            return []
-        
-        url = f"https://api.pexels.com/videos/search?query={requests.utils.quote(query)}&per_page=15&orientation=landscape&size=medium"
-        headers = {"Authorization": PEXELS_API_KEY}
-        r = requests.get(url, headers=headers, timeout=15)
-        
-        if r.status_code != 200:
-            logger.warning(f"Pexels API returned {r.status_code}")
-            return []
-        
-        videos = r.json().get('videos', [])
-        random.shuffle(videos)
-        
-        for v in videos[:5]:
+        r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=15&orientation=landscape&size=medium",headers={"Authorization":PEXELS} if PEXELS else {},timeout=15)
+        if r.status_code!=200: return []
+        vs=r.json().get('videos',[]); random.shuffle(vs)
+        for v in vs[:5]:
             try:
-                files = sorted(v.get('video_files', []), key=lambda x: x.get('width', 0), reverse=True)
-                candidates = [f for f in files if 720 <= f.get('width', 0) <= 1280]
-                if not candidates:
-                    continue
-                
-                best = random.choice(candidates[:2])
-                path = f"{prefix}_{random.randint(1000, 9999)}.mp4"
-                
-                resp = requests.get(best.get('link', ''), stream=True, timeout=90)
-                with open(path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=512*1024):
-                        f.write(chunk)
-                
-                if not os.path.exists(path) or os.path.getsize(path) < 80000:
-                    try:
-                        os.remove(path)
-                    except:
-                        pass
-                    continue
-                
-                fixed_path = fix_video_with_ffmpeg(path)
-                if fixed_path:
-                    out.append(fixed_path)
-                    if len(out) >= 2:
-                        break
-            except Exception as e:
-                logger.warning(f"Error downloading Pexels video: {e}")
-                continue
-    except Exception as e:
-        logger.warning(f"Pexels download error: {e}")
-    
+                fs=sorted(v['video_files'],key=lambda x:x['width'],reverse=True); cand=[f for f in fs if 720<=f['width']<=1280]
+                if not cand: continue
+                best=random.choice(cand[:2]); p=f"{pre}_{random.randint(1000,9999)}.mp4"
+                open(p,"wb").write(requests.get(best['link'],stream=True,timeout=90).content)
+                if os.path.getsize(p)<80000: os.remove(p); continue
+                out.append(fix(p))
+                if len(out)>=2: break
+            except: continue
+    except: pass
     return out
 
-def get_emotional_girl_clips():
-    """Download emotional girl clips"""
-    clips = []
-    for q in USA_GIRL_EMOTIONAL[:4]:
-        found = download_pexels_emotional(q, "emotional_girl")
-        clips.extend(found)
-        if len(clips) >= 8:
-            break
-        time.sleep(0.5)
-        gc.collect()
-    return clips
-
-def get_creative_background_clips(topic):
-    """Download creative background clips"""
-    if not topic or not isinstance(topic, str):
-        logger.warning("Invalid topic for background clips")
-        return []
-    
-    topic_word = topic.split()[0] if topic.split() else "creative"
-    queries = [f"{topic_word} cinematic bokeh", "creative neon background 4k", "abstract technology background"]
-    clips = []
-    for q in queries[:2]:
-        found = download_pexels_emotional(q, "creative_bg")
-        clips.extend(found)
-        if len(clips) >= 4:
-            break
-        time.sleep(0.5)
-        gc.collect()
-    return clips
-
-def create_video_emotional_single(sentences, total_duration, topic_main, girl_clips, bg_clips):
-    """Create emotional single topic video"""
-    final_files = []
-    per_sentence = total_duration / len(sentences) if sentences else 30
-    per_sentence = max(28.0, min(per_sentence, 32.0))
-    logger.info(f"Creating EMOTIONAL SINGLE TOPIC - {len(sentences)} x {per_sentence:.1f} sec = {total_duration} sec")
-    
-    all_clips = girl_clips + bg_clips
-    if not all_clips:
-        all_clips = []
-    
-    for i, sent in enumerate(sentences[:8]):
+def make_vid(sents,dur,topic,g,b):
+    final=[]; per=max(28.0,min(dur/len(sents) if sents else 30,32.0)); allc=g+b or g
+    for i,sent in enumerate(sents[:8]):
         try:
-            path = all_clips[i % len(all_clips)] if all_clips else None
-            if not path or not os.path.exists(path):
-                gc_clip = ColorClip(size=(W, H), color=(25, 10, 40))
-                gc_clip = safe_duration(gc_clip, per_sentence)
-            else:
-                # Use safe_VideoFileClip instead of direct VideoFileClip
-                gc_clip = safe_VideoFileClip(path, per_sentence)
-                try:
-                    gc_clip = safe_no_audio(gc_clip)
-                    if gc_clip.duration < per_sentence:
-                        try:
-                            gc_clip = gc_clip.loop(duration=per_sentence)
-                        except:
-                            gc_clip = safe_duration(gc_clip, per_sentence)
-                    try:
-                        gc_clip = gc_clip.subclip(0, per_sentence)
-                    except:
-                        try:
-                            gc_clip = gc_clip.with_end(per_sentence)
-                        except:
-                            pass
-                    gc_clip = safe_duration(gc_clip, per_sentence)
-                    gc_clip = safe_resize(gc_clip, W)
-                    try:
-                        gc_clip = gc_clip.crop(x_center=gc_clip.w/2, y_center=gc_clip.h*0.42, width=W, height=H)
-                    except:
-                        pass
-                except Exception as e:
-                    logger.warning(f"Error processing video clip: {e}")
-                    gc_clip = ColorClip(size=(W, H), color=(25, 10, 40))
-                    gc_clip = safe_duration(gc_clip, per_sentence)
+            p=allc[i%len(allc)] if allc else None; gc=safe_clip(p,per) if p and os.path.exists(p) else sd(ColorClip(size=(W,H),color=(25,10,40)),per)
+            gc=sna(gc)
+            if gc.duration<per:
+                try: gc=gc.loop(duration=per)
+                except: gc=sd(gc,per)
+            try: gc=gc.subclip(0,per)
+            except: pass
+            gc=sd(sr(gc,W),per)
+            try: gc=gc.crop(x_center=gc.w/2,y_center=gc.h*0.42,width=W,height=H)
+            except: pass
+            img=Image.new('RGBA',(W,H),(0,0,0,0)); dr=ImageDraw.Draw(img,'RGBA')
+            try: fb=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",int(W*0.022)); fs=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",int(W*0.016))
+            except: fb=fs=ImageFont.load_default()
+            if i==0: dr.rounded_rectangle((30,30,950,90),radius=15,fill=(255,0,80,230)); dr.text((50,40),"TRENDING NOW - EMOTIONAL - 4K - 4 SOURCES",fill="white",font=fs)
+            else: emos=["SHOCKED! 😱","AMAZING! 🤩","SO HAPPY! 😭","WOW! 🙌","EMOTIONAL! ❤️","UNBELIEVABLE! 😲","LOVE IT! 🥰","FINAL! 💖"]; dr.rounded_rectangle((30,30,750,80),radius=12,fill=(0,200,255,220)); dr.text((40,38),f"{emos[i%len(emos)]} - {topic[:20].upper()}",fill="black",font=fs)
+            dr.rectangle((0,int(H*0.70),W,H),fill=(0,0,0,200)); y=int(H*0.73)
+            for line in textwrap.wrap(sent,width=50)[:4]: dr.text((40,y),line.upper(),fill="white",font=fb,stroke_width=4,stroke_fill="black"); y+=int(H*0.05)
+            txt=ImageClip(np.array(img)); txt=sd(txt,per); comp=CompositeVideoClip([gc,txt],size=(W,H)); comp=sd(comp,per)
+            tmp=f"temp_{i}.mp4"; comp.write_videofile(tmp,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None,verbose=False); final.append(tmp)
+            try: comp.close(); gc.close()
+            except: pass
+        except Exception as e: print(f"Seg {i} {e}"); continue
+    if not final: return sd(ColorClip(size=(W,H),color=(25,10,40)),dur),[]
+    cl=[safe_clip(f,per) for f in final]; fv=concatenate_videoclips(cl,method="compose"); fv=sd(fv,T); return fv,final
 
-            img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(img, 'RGBA')
-            try:
-                font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(W*0.022))
-            except:
-                font_bold = ImageFont.load_default()
-            try:
-                font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(W*0.016))
-            except:
-                font_small = ImageFont.load_default()
-            
-            if i == 0:
-                draw.rounded_rectangle((30, 30, 950, 90), radius=15, fill=(255, 0, 80, 230))
-                draw.text((50, 40), "TRENDING NOW - EMOTIONAL - 4K - 4 SOURCES", fill="white", font=font_small)
-            else:
-                emotions = ["SHOCKED! 😱", "AMAZING! 🤩", "SO HAPPY! 😭", "WOW! 🙌", "EMOTIONAL! ❤️", "UNBELIEVABLE! 😲", "LOVE IT! 🥰", "FINAL! 💖"]
-                draw.rounded_rectangle((30, 30, 750, 80), radius=12, fill=(0, 200, 255, 220))
-                draw.text((40, 38), f"{emotions[i % len(emotions)]} - {topic_main[:20].upper()}", fill="black", font=font_small)
-            
-            draw.rectangle((0, int(H*0.70), W, H), fill=(0, 0, 0, 200))
-            draw.rectangle((0, int(H*0.70), 15, H), fill=(255, 0, 80, 180))
-            wrapped = textwrap.wrap(sent, width=50)
-            y = int(H*0.73)
-            for line in wrapped[:4]:
-                draw.text((40, y), line.upper(), fill="white", font=font_bold, stroke_width=4, stroke_fill="black")
-                y += int(H*0.05)
-            
-            txt_clip = ImageClip(np.array(img))
-            txt_clip = safe_duration(txt_clip, per_sentence)
-            comp = CompositeVideoClip([gc_clip, txt_clip], size=(W, H))
-            comp = safe_duration(comp, per_sentence)
-            temp_file = f"temp_emotional_{i}.mp4"
-            
-            comp.write_videofile(temp_file, fps=24, codec='libx264', audio_codec='aac', preset='ultrafast', threads=2, bitrate="8000k", logger=None, verbose=False)
-            final_files.append(temp_file)
-            
-            try:
-                comp.close()
-                gc_clip.close()
-            except:
-                pass
-            gc.collect()
-        except Exception as e:
-            logger.error(f"Segment {i} error: {e}")
-            gc.collect()
-            continue
-    
-    if not final_files:
-        logger.error("No final files created, returning fallback")
-        fallback = ColorClip(size=(W, H), color=(25, 10, 40))
-        fallback = safe_duration(fallback, total_duration)
-        return fallback, []
-    
-    clips = []
-    for f in final_files:
-        try:
-            c = safe_VideoFileClip(f, per_sentence)
-            clips.append(c)
-        except Exception as e:
-            logger.warning(f"Error loading temp file {f}: {e}")
-            continue
-    
-    if not clips:
-        logger.error("No clips to concatenate, returning fallback")
-        fallback = ColorClip(size=(W, H), color=(25, 10, 40))
-        fallback = safe_duration(fallback, total_duration)
-        return fallback, final_files
-    
-    final_video = concatenate_videoclips(clips, method="compose")
-    final_video = safe_duration(final_video, TARGET_DURATION)
-    
-    for c in clips:
-        try:
-            c.close()
-        except:
-            pass
-    
-    gc.collect()
-    return final_video, final_files
-
-if __name__ == "__main__":
-    try:
-        trending_topic = get_trending()
-        full_script, sentences, topic_main = generate_emotional_single_script(trending_topic)
-        logger.info(f"Topic: {topic_main} - EMOTIONAL SINGLE - 4 MIN - {len(sentences)} parts")
-        logger.info(f"Script preview: {full_script[:200]}...")
-        
-        audio_files = tts_piper_4min_emotional(full_script)
-        if not audio_files:
-            logger.error("No audio files generated")
-            exit(1)
-        
-        audio_clips = [AudioFileClip(p) for p in audio_files if os.path.exists(p) and os.path.getsize(p) > 1000]
-        if not audio_clips:
-            logger.error("No valid audio clips")
-            exit(1)
-        
-        final_audio = concatenate_audioclips(audio_clips)
-        if final_audio.duration > TARGET_DURATION:
-            try:
-                final_audio = final_audio.subclip(0, TARGET_DURATION)
-            except:
-                try:
-                    final_audio = final_audio.with_end(TARGET_DURATION)
-                except:
-                    pass
-        
-        final_audio = safe_duration(final_audio, TARGET_DURATION)
-        logger.info(f"Audio exact 4 min: {final_audio.duration} sec - Fetching emotional girl clips")
-        
-        girl_clips = get_emotional_girl_clips()
-        bg_clips = get_creative_background_clips(topic_main)
-        logger.info(f"Girl clips: {len(girl_clips)}, BG clips: {len(bg_clips)}")
-        
-        all_clips = girl_clips + bg_clips
-        if len(all_clips) < 2:
-            logger.warning("⚠️ Not enough video clips downloaded, using fallback color")
-            video_clip = ColorClip(size=(W, H), color=(25, 10, 40))
-            video_clip = safe_duration(video_clip, final_audio.duration)
-            temp_files = []
-        else:
-            video_clip, temp_files = create_video_emotional_single(sentences, final_audio.duration, topic_main, girl_clips, bg_clips)
-        
-        final_video = safe_duration(video_clip, TARGET_DURATION)
-        final_video = safe_audio(final_video, final_audio)
-        final_video = safe_duration(final_video, TARGET_DURATION)
-        
-        seo_name = re.sub(r'[^a-z0-9]+', '-', topic_main.lower()).strip('-')[:40]
-        filename = f"{seo_name}-emotional-single-4min-4k.mp4"
-        logger.info(f"Writing EMOTIONAL SINGLE 4 MINUTE {filename} - {TARGET_DURATION} sec")
-        
-        final_video.write_videofile(filename, fps=24, codec='libx264', audio_codec='aac', preset='ultrafast', threads=2, bitrate="8000k", logger=None, verbose=False)
-        
-        for tf in temp_files:
-            try:
-                os.remove(tf)
-            except:
-                pass
-        
-        for p in all_clips:
-            try:
-                os.remove(p)
-            except:
-                pass
-        
-        gc.collect()
-        logger.info(f"✅ EMOTIONAL SINGLE 4 MINUTE DONE - {filename} - 4 TRENDING SOURCES - NO CHAPTERS!")
-        
-        try:
-            from upload_youtube import upload_video
-            upload_video(filename, f"{topic_main} Made Me Cry! My Emotional 4 Minute Story! Trending Now!", 
-                        f"Single topic emotional review with facial expressions and hand movements - 4 trending sources combined")
-        except Exception as e:
-            logger.error(f"Upload fail: {e}")
-    
-    except KeyboardInterrupt:
-        logger.info("Process interrupted by user")
-        exit(0)
-    except Exception as e:
-        logger.critical(f"Fatal error in main: {e}", exc_info=True)
-        exit(1)
+if __name__=="__main__":
+    top=get_trends(); full,sents,main=gen_script(top)
+    afs=tts(full)
+    if not afs: exit(1)
+    acl=[AudioFileClip(p) for p in afs if os.path.exists(p) and os.path.getsize(p)>1000]
+    if not acl: exit(1)
+    fa=concatenate_audioclips(acl); fa=fa.subclip(0,T) if fa.duration>T else fa; fa=sd(fa,T)
+    g=[]; [g.extend(dl(q,"emotional_girl")) for q in GIRL_Q if len(g)<8]
+    b=dl(f"{main.split()[0]} cinematic bokeh","creative_bg")
+    allc=g+b; vc,tm=make_vid(sents,fa.duration,main,g,b) if len(allc)>=2 else (sd(ColorClip(size=(W,H),color=(25,10,40)),fa.duration),[])
+    fv=sd(sa(sd(vc,T),fa),T); fn=re.sub(r'[^a-z0-9]+','-',main.lower()).strip('-')[:40]+"-emotional-single-4min-4k.mp4"
+    fv.write_videofile(fn,fps=24,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="8000k",logger=None)
+    for x in tm+allc:
+        try: os.remove(x)
+        except: pass
+    print(f"✅ DONE {fn}")
+    try: from upload_youtube import upload_video; upload_video(fn,f"{main} Made Me Cry! Emotional 4 Minute Story!",f"{full[:500]}",[main.lower(),"emotional","viral"])
+    except Exception as e: print(f"Upload {e}")

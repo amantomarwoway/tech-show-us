@@ -56,11 +56,6 @@ Format: Layer, Start, End, Style, Text
     lines=[header]
     for i,w in enumerate(words):
         s=i*per; e=s+per
-        sh=int(s//3600); sm=int((s%3600)//60); ss=s%60
-        eh=int(e//3600); em=int((e%3600)//60); es=e%60
-        st=f"{sh}:{sm:02d}:{ss:06.3f}".replace(".",":")[:-1] # ass format H:MM:SS.cc
-        et=f"{eh}:{em:02d}:{es:06.3f}".replace(".",":")[:-1]
-        # Fix time format
         st=f"{int(s//3600)}:{int((s%3600)//60):02d}:{int(s%60):02d}.{int((s%1)*100):02d}"
         et=f"{int(e//3600)}:{int((e%3600)//60):02d}:{int(e%60):02d}.{int((e%1)*100):02d}"
         lines.append(f"Dialogue: 0,{st},{et},Word,{w.upper()}")
@@ -77,7 +72,13 @@ def up(vp,ti,de,ta):
 raw=viral(); title,tags,desc=seo(raw)
 script=f"This {raw} in 8K with real machine sound is insane! Watch till the end. The {raw} delivers unbelievable 8K power. Its engine roars like a monster. You can hear the real machine sound. No machine can match its force. Who will win this ultra fight? Subscribe for daily 8K fights!"
 words=script.split()
-af=tts(script); audio=AudioFileClip(af[0]); dur=min(T, max(28, audio.duration - 0.15)); audio=audio.subclip(0,dur)
+af=tts(script); audio=AudioFileClip(af[0])
+
+# === FINAL FIX - DURATION = AUDIO DURATION ===
+# pehle max 28 force karta tha, ab audio jitna hai utna hi video
+dur = min(T, max(10, audio.duration - 0.1))
+print(f"AUDIO {audio.duration} DUR {dur}")
+audio = audio.subclip(0, dur)
 
 clips=dl(raw); vc=[]
 for p in clips:
@@ -91,15 +92,11 @@ try: machine_audio=bg_video.audio.volumex(0.30).set_duration(dur) if bg_video.au
 except: machine_audio=None
 final_audio=CompositeAudioClip([machine_audio, audio]).set_duration(dur) if machine_audio else audio
 
-# 1. VIDEO WITHOUT CAPTION - NO ERROR
 no_cap="no_cap.mp4"
 CompositeVideoClip([bg_video],size=(W,H)).set_duration(dur).set_audio(final_audio).write_videofile(no_cap,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",logger=None)
 
-# 2. BURN CAPTION WITH FFMPEG - BOTTOM CENTER SLIGHTLY UP
 ass=make_ass(words,dur)
 final_fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
-# ass filter + upscale to 8K
 subprocess.run(f'{FF} -y -i {no_cap} -vf "ass={ass},scale={W8}:{H8}:flags=lanczos" -c:a copy -b:v 80000k {final_fn}',shell=True,timeout=120)
-print(f"FINAL 8K {final_fn} {os.path.getsize(final_fn)}")
 
 up(final_fn,title,desc,tags)

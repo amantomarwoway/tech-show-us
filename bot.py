@@ -3,7 +3,6 @@ warnings.filterwarnings("ignore")
 from moviepy.editor import *
 from PIL import Image,ImageDraw,ImageFont
 import numpy as np
-# PROCESS 1080x1920 pe, EXPORT 2160x3840 pe = 8K bina error ke
 W,H,T=1080,1920,35
 W8,H8=2160,3840
 PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
@@ -63,14 +62,11 @@ for p in clips:
 if not vc: vc=[ColorClip((W,H),color=(20,20,40),duration=dur)]
 
 bg_video=concatenate_videoclips(vc,method="compose").loop(duration=dur).resize((W,H))
-# FIX - mask hata diya
-bg_video = bg_video.without_mask()
 
 try: machine_audio=bg_video.audio.volumex(0.30).set_duration(dur) if bg_video.audio else None
 except: machine_audio=None
 final_audio=CompositeAudioClip([machine_audio, audio]).set_duration(dur) if machine_audio else audio
 
-# === FINAL CAPTION FIX - NO RGBA, NO MASK ===
 per=dur/len(words); caps=[]
 CAP_W,CAP_H=900,140
 Y_POS=int(H*0.78)
@@ -81,14 +77,12 @@ for i,w in enumerate(words):
     try: fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",55)
     except: fnt=ImageFont.load_default()
     dr.text((CAP_W//2, CAP_H//2), w.upper(), fill=(255,235,0), font=fnt, anchor="mm", stroke_width=4, stroke_fill=(0,0,0))
-    # ismask=False = sabse important fix
+    # FIX - without_mask hata ke ismask=False only
     clip=ImageClip(np.array(cimg), ismask=False).set_start(i*per).set_duration(per).set_position(('center', Y_POS))
-    clip = clip.without_mask()
     caps.append(clip)
 
 final=CompositeVideoClip([bg_video]+caps,size=(W,H)).set_duration(dur).set_audio(final_audio)
 
 fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
-# EXPORT 1080p -> 2160x3840 upscale = 8K file but processing 1080p = no error
 final.write_videofile(fn,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",ffmpeg_params=["-vf",f"scale={W8}:{H8}"],logger=None)
 up(fn,title,desc,tags)

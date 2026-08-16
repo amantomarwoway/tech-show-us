@@ -3,7 +3,10 @@ warnings.filterwarnings("ignore")
 from moviepy.editor import *
 from PIL import Image,ImageDraw,ImageFont
 import numpy as np
-W,H,T=2160,3840,35; PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
+# PROCESS 1080x1920 pe, EXPORT 2160x3840 pe = 8K bina error ke
+W,H,T=1080,1920,35
+W8,H8=2160,3840
+PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
 
 def viral():
     base=["Excavator vs Bulldozer Fight","Big Machine Crash","Transformer Machine Transformation","Human to Robot Transformation","Fighter Jet Dogfight","Space Fight Satellite vs Missile","Powerful Gun vs Tank Fight","Ultra Machine Fight","Biggest Excavator Working","Monster Truck vs Bulldozer"]
@@ -33,14 +36,12 @@ def tts(txt):
 
 def dl(q):
     o=[]; q_clean=re.sub(r'vs|Fight','',q,flags=re.I).strip()
-    for size in ["medium","large"]:
-        try:
-            r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q_clean)}&per_page=8&size={size}",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
-            for v in r.get('videos',[])[:5]:
-                try: b=sorted(v['video_files'],key=lambda x:x['width'])[-1]; p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(b['link'],timeout=20).content); o.append(p)
-                except:continue
-            if o: break
-        except:continue
+    try:
+        r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q_clean)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
+        for v in r.get('videos',[])[:5]:
+            try: b=sorted(v['video_files'],key=lambda x:x['width'])[-1]; p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(b['link'],timeout=20).content); o.append(p)
+            except:continue
+    except:pass
     return o
 
 def up(vp,ti,de,ta):
@@ -62,28 +63,32 @@ for p in clips:
 if not vc: vc=[ColorClip((W,H),color=(20,20,40),duration=dur)]
 
 bg_video=concatenate_videoclips(vc,method="compose").loop(duration=dur).resize((W,H))
+# FIX - mask hata diya
+bg_video = bg_video.without_mask()
 
 try: machine_audio=bg_video.audio.volumex(0.30).set_duration(dur) if bg_video.audio else None
 except: machine_audio=None
 final_audio=CompositeAudioClip([machine_audio, audio]).set_duration(dur) if machine_audio else audio
 
-# === FIX - RGB CAPTION - NO MASK - NO ZERO SIZE ERROR ===
+# === FINAL CAPTION FIX - NO RGBA, NO MASK ===
 per=dur/len(words); caps=[]
-CAP_W,CAP_H=1800,220
+CAP_W,CAP_H=900,140
 Y_POS=int(H*0.78)
 for i,w in enumerate(words):
     if not w.strip(): continue
-    # RGB not RGBA - no mask issue
     cimg=Image.new('RGB',(CAP_W,CAP_H),color=(0,0,0))
     dr=ImageDraw.Draw(cimg)
-    try: fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",100)
+    try: fnt=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",55)
     except: fnt=ImageFont.load_default()
-    dr.text((CAP_W//2, CAP_H//2), w.upper(), fill=(255,235,0), font=fnt, anchor="mm", stroke_width=8, stroke_fill=(0,0,0))
-    # No alpha - simple ImageClip
-    clip=ImageClip(np.array(cimg)).set_start(i*per).set_duration(per).set_position(('center', Y_POS))
+    dr.text((CAP_W//2, CAP_H//2), w.upper(), fill=(255,235,0), font=fnt, anchor="mm", stroke_width=4, stroke_fill=(0,0,0))
+    # ismask=False = sabse important fix
+    clip=ImageClip(np.array(cimg), ismask=False).set_start(i*per).set_duration(per).set_position(('center', Y_POS))
+    clip = clip.without_mask()
     caps.append(clip)
 
 final=CompositeVideoClip([bg_video]+caps,size=(W,H)).set_duration(dur).set_audio(final_audio)
+
 fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
-final.write_videofile(fn,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="80000k",logger=None)
+# EXPORT 1080p -> 2160x3840 upscale = 8K file but processing 1080p = no error
+final.write_videofile(fn,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",ffmpeg_params=["-vf",f"scale={W8}:{H8}"],logger=None)
 up(fn,title,desc,tags)

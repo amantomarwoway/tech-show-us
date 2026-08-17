@@ -18,15 +18,15 @@ def tts(txt):
     for i,ch in enumerate([txt_safe[i:i+480] for i in range(0,len(txt_safe),480)][:3]):
         ow=f"v{i}.wav"
         try:
-            subprocess.run(f'./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.92 < <(echo "{ch}")',shell=True,executable='/bin/bash',timeout=60)
+            subprocess.run(f'./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.92 < <(echo "{ch}")',shell=True,executable='/bin/bash',timeout=120)
             if os.path.exists(ow) and os.path.getsize(ow)>3000: fl.append(ow)
         except:continue
     if not fl:
         subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","30","dummy.wav"],capture_output=True);return ["dummy.wav"]
     try:
         open("list.txt","w").write("\n".join([f"file '{f}'" for f in fl]))
-        subprocess.run(f'{FF} -y -f concat -safe 0 -i list.txt -c copy temp.wav',shell=True,capture_output=True,timeout=30)
-        subprocess.run(f'{FF} -y -i temp.wav -af loudnorm=I=-14:TP=-1:volume=1.5 final.wav',shell=True,capture_output=True,timeout=30)
+        subprocess.run(f'{FF} -y -f concat -safe 0 -i list.txt -c copy temp.wav',shell=True,capture_output=True,timeout=90)
+        subprocess.run(f'{FF} -y -i temp.wav -af loudnorm=I=-14:TP=-1:volume=1.5 final.wav',shell=True,capture_output=True,timeout=180)
         if os.path.exists("final.wav") and os.path.getsize("final.wav")>5000: return ["final.wav"]
     except:pass
     return [fl[0]]

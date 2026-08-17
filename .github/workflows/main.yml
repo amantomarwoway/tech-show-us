@@ -14,13 +14,23 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg -qq
       - run: pip install -r requirements.txt piper-tts google-api-python-client google-auth -q
       - run: |
-          mkdir -p piper; wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz; tar -xzf piper_linux_x86_64.tar.gz -C piper --strip-components=1; chmod +x piper/piper
-          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx; wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-      - env:
+          mkdir -p piper
+          wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz -O piper.tar.gz
+          tar -xzf piper.tar.gz -C piper --strip-components=1
+          chmod +x piper/piper
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O piper/en_US-lessac-medium.onnx
+          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O piper/en_US-lessac-medium.onnx.json
+      - name: Run bot
+        env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: python -u bot.py
       - if: always()
-        run: git config user.name bot; git config user.email bot@bot.com; git add used_short_titles.txt || true; git commit -m "short 8K dual audio [skip ci]" || true; git push || true
+        run: |
+          git config user.name bot
+          git config user.email bot@bot.com
+          git add used_short_titles.txt || true
+          git commit -m "short 8K dual audio [skip ci]" || true
+          git push || true

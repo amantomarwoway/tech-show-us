@@ -18,11 +18,11 @@ def tts(txt):
     for i,ch in enumerate([txt_safe[i:i+480] for i in range(0,len(txt_safe),480)][:3]):
         ow=f"v{i}.wav"
         try:
-            subprocess.run(f'./piper/piper --model en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.92 < <(echo "{ch}")',shell=True,executable='/bin/bash',timeout=120)
+            subprocess.run(f'./piper/piper --model piper/en_US-lessac-medium.onnx --output_file {ow} --length_scale 0.92 < <(echo "{ch}")',shell=True,executable='/bin/bash',timeout=120)
             if os.path.exists(ow) and os.path.getsize(ow)>3000: fl.append(ow)
         except:continue
     if not fl:
-        subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","30","dummy.wav"],capture_output=True);return ["dummy.wav"]
+        subprocess.run([FF,"-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","30","dummy.wav"],capture_output=True,timeout=60);return ["dummy.wav"]
     try:
         open("list.txt","w").write("\n".join([f"file '{f}'" for f in fl]))
         subprocess.run(f'{FF} -y -f concat -safe 0 -i list.txt -c copy temp.wav',shell=True,capture_output=True,timeout=90)
@@ -34,9 +34,9 @@ def tts(txt):
 def dl(q):
     o=[]; q_clean=re.sub(r'vs|Fight','',q,flags=re.I).strip()
     try:
-        r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q_clean)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=15).json()
+        r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q_clean)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=20).json()
         for v in r.get('videos',[])[:5]:
-            try: b=sorted(v['video_files'],key=lambda x:x['width'])[-1]; p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(b['link'],timeout=20).content); o.append(p)
+            try: b=sorted(v['video_files'],key=lambda x:x['width'])[-1]; p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(b['link'],timeout=60).content); o.append(p)
             except:continue
     except:pass
     return o
@@ -74,8 +74,6 @@ script=f"This {raw} in 8K with real machine sound is insane! Watch till the end.
 words=script.split()
 af=tts(script); audio=AudioFileClip(af[0])
 
-# === FINAL FIX - DURATION = AUDIO DURATION ===
-# pehle max 28 force karta tha, ab audio jitna hai utna hi video
 dur = min(T, max(10, audio.duration - 0.1))
 print(f"AUDIO {audio.duration} DUR {dur}")
 audio = audio.subclip(0, dur)
@@ -93,10 +91,10 @@ except: machine_audio=None
 final_audio=CompositeAudioClip([machine_audio, audio]).set_duration(dur) if machine_audio else audio
 
 no_cap="no_cap.mp4"
-CompositeVideoClip([bg_video],size=(W,H)).set_duration(dur).set_audio(final_audio).write_videofile(no_cap,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=2,bitrate="40000k",logger=None)
+CompositeVideoClip([bg_video],size=(W,H)).set_duration(dur).set_audio(final_audio).write_videofile(no_cap,fps=30,codec='libx264',audio_codec='aac',preset='ultrafast',threads=4,bitrate="40000k",logger=None)
 
 ass=make_ass(words,dur)
 final_fn='short-8K-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:25]+".mp4"
-subprocess.run(f'{FF} -y -i {no_cap} -vf "ass={ass},scale={W8}:{H8}:flags=lanczos" -c:a copy -b:v 80000k {final_fn}',shell=True,timeout=120)
+subprocess.run(f'{FF} -y -i {no_cap} -vf "ass={ass},scale={W8}:{H8}:flags=lanczos" -c:v libx264 -preset ultrafast -threads 4 -c:a copy -b:v 80000k {final_fn}',shell=True,timeout=600)
 
 up(final_fn,title,desc,tags)

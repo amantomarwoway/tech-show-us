@@ -3,7 +3,9 @@ warnings.filterwarnings("ignore")
 from moviepy.editor import *
 W,H,T=1080,1920,35
 W8,H8=2160,3840
-PEX=os.environ.get("PEXELS_API_KEY"); FF="ffmpeg"
+PEX=os.environ.get("PEXELS_API_KEY")
+PIXABAY=os.environ.get("PIXABAY_API_KEY")
+FF="ffmpeg"
 
 def viral():
     base=["Excavator vs Bulldozer Fight","Big Machine Crash","Transformer Machine Transformation","Human to Robot Transformation","Fighter Jet Dogfight","Space Fight Satellite vs Missile","Powerful Gun vs Tank Fight","Ultra Machine Fight","Biggest Excavator Working","Monster Truck vs Bulldozer"]
@@ -33,12 +35,25 @@ def tts(txt):
 
 def dl(q):
     o=[]; q_clean=re.sub(r'vs|Fight','',q,flags=re.I).strip()
+    # 1. Pexels
     try:
         r=requests.get(f"https://api.pexels.com/videos/search?query={requests.utils.quote(q_clean)}&per_page=8&size=medium",headers={"Authorization":PEX} if PEX else {},timeout=20).json()
         for v in r.get('videos',[])[:5]:
             try: b=sorted(v['video_files'],key=lambda x:x['width'])[-1]; p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(b['link'],timeout=60).content); o.append(p)
             except:continue
     except:pass
+    # 2. Pixabay add - same query - agar pexels se kam mile to
+    if len(o) < 5 and PIXABAY:
+        try:
+            r=requests.get(f"https://pixabay.com/api/videos/?key={PIXABAY}&q={requests.utils.quote(q_clean)}&per_page=10",timeout=20).json()
+            for hit in r.get('hits',[])[:5]:
+                try:
+                    vid_url = hit['videos'].get('medium',{}).get('url') or hit['videos'].get('large',{}).get('url')
+                    if not vid_url: continue
+                    p=f"s_{random.randint(10000,99999)}.mp4"; open(p,'wb').write(requests.get(vid_url,timeout=60).content);
+                    if os.path.exists(p) and os.path.getsize(p)>50000: o.append(p)
+                except:continue
+        except:pass
     return o
 
 def make_ass(words, dur, path="cap.ass"):

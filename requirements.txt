@@ -13,3 +13,5 @@ piper-tts
 onnxruntime
 pytrends
 lxml
+huggingface_hub
+gradio_client

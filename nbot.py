@@ -1,18 +1,17 @@
-# FIX 1: Pillow ANTIALIAS Error Fix
 from PIL import Image
 if not hasattr(Image, 'ANTIALIAS'):
     Image.ANTIALIAS = Image.LANCZOS
 
-import os, requests, time
+import os, requests, time, torch
 from pytrends.request import TrendReq
-from huggingface_hub import InferenceClient
+from diffusers import StableDiffusionPipeline
 from gradio_client import Client
 from moviepy.editor import *
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-hf_client = InferenceClient(token=HF_TOKEN)
+print("Loading FREE Local SD Model - 100% Related")
+pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float32, safety_checker=None)
+pipe.to("cpu")
 
-# FIX 2: Wan 2.1 Repo Not Found Fix
 def get_wan_client():
     try:
         return Client("Wan-AI/Wan2.1-I2V-14B-720P")
@@ -31,35 +30,30 @@ def get_usa_trend():
     return trend
 
 def make_script(trend):
-    prompt = f"Write a 30 second, 6 sentence viral YouTube Shorts script about '{trend}' trending in USA. American style. Each sentence new line."
-    try:
-        text = hf_client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.2", max_new_tokens=200)
-    except:
-        text = f"{trend} is trending in USA right now. Everyone in America is shocked. Experts say this could change everything. Social media is going crazy. People can't believe it. What do you think about {trend}"
-    lines = [s.strip() for s in text.replace('\n','. ').split('.') if len(s.strip())>10][:6]
-    while len(lines) < 6:
-        lines.append(f"What is your opinion on {trend} in USA")
+    lines = [
+        f"{trend} is trending in USA right now and shocking everyone",
+        f"Breaking update on {trend} in America has left people speechless",
+        f"Experts are saying this {trend} news could change everything in USA",
+        f"Social media is going crazy over {trend} across United States",
+        f"This {trend} story is breaking the internet in America right now",
+        f"What is your honest opinion on {trend} in USA comment below"
+    ]
     return lines
 
-# FIX 3: 100% FREE IMAGE MODEL - NO PAID FLUX DEV
-def make_images(lines):
+# 100% RELATED IMAGE - Har image script ki line se banegi
+def make_images(lines, trend):
     paths = []
     for i, line in enumerate(lines):
-        print(f"Image {i+1}/6 FREE Model")
-        try:
-            # Ye model hamesha FREE hai
-            img = hf_client.text_to_image(
-                prompt=f"{line}, cinematic photorealistic USA, highly detailed",
-                model="runwayml/stable-diffusion-v1-5"
-            )
-        except Exception as e:
-            print(f"SD 1.5 fail {e}, trying SDXL Free")
-            img = hf_client.text_to_image(
-                prompt=f"{line}, cinematic USA",
-                model="stabilityai/stable-diffusion-xl-base-1.0"
-            )
+        print(f"Image {i+1}/6 Related to: {line}")
+
+        # YEHI MAIN CHANGE HAI - Trend + Line dono prompt me
+        prompt = f"ultra photorealistic news photo directly related to '{trend}', scene showing {line}, detailed face, USA news background, cinematic, 8k, highly detailed, real photo"
+
+        negative = "cartoon, anime, blurry, low quality, text, watermark"
+
+        image = pipe(prompt, negative_prompt=negative, num_inference_steps=25, guidance_scale=8.5).images[0]
         p = f"img_{i}.jpg"
-        img.save(p)
+        image.save(p)
         paths.append(p)
     return paths
 
@@ -70,7 +64,7 @@ def make_videos(img_paths, lines):
         success = False
         if wan_client:
             try:
-                result = wan_client.predict(img_path, f"{line}, smooth motion", 5, 16, api_name="/generate")
+                result = wan_client.predict(img_path, f"{line}, smooth motion, {line}", 5, 16, api_name="/generate")
                 url = result[0] if isinstance(result, (list,tuple)) else result
                 if isinstance(url, dict): url = url.get('video') or list(url.values())[0]
                 r = requests.get(url, timeout=200)
@@ -106,8 +100,8 @@ def edit_and_upload(video_paths, lines, trend):
     creds = Credentials(None, refresh_token=os.getenv("YT_REFRESH_TOKEN"), client_id=os.getenv("YT_CLIENT_ID"), client_secret=os.getenv("YT_CLIENT_SECRET"), token_uri="https://oauth2.googleapis.com/token")
     yt = build('youtube','v3', credentials=creds)
     title = f"{trend} Just Broke The Internet in USA! #shorts"
-    description = f"{trend} is trending in USA!\n\n{full_text}\n\n#shorts #usa #trending #news #viral #usatrending"
-    tags = [trend, "usa trending", "breaking news", "viral shorts"]
+    description = f"{trend} trending in USA!\n\n{full_text}\n\n#shorts #usa #trending #viral #breakingnews #usatrending #shortsfeed"
+    tags = [trend, "usa trending", "breaking news", "viral shorts", trend+" news"]
     req = yt.videos().insert(part="snippet,status", body={"snippet": {"title": title[:95], "description": description, "tags": tags, "categoryId": "25"}, "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}, media_body=MediaFileUpload(out, resumable=True))
     res = req.execute()
     print(f"UPLOADED: https://youtu.be/{res['id']}")
@@ -115,6 +109,6 @@ def edit_and_upload(video_paths, lines, trend):
 if __name__ == "__main__":
     trend = get_usa_trend()
     lines = make_script(trend)
-    imgs = make_images(lines)
+    imgs = make_images(lines, trend) # Trend pass kiya for 100% related
     vids = make_videos(imgs, lines)
     edit_and_upload(vids, lines, trend)

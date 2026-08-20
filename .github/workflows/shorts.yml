@@ -1,4 +1,4 @@
-name: USA Shorts Bot
+name: USA Trending Shorts Bot
 
 on:
   schedule:
@@ -10,18 +10,20 @@ on:
 jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Deps
+      - name: Install System Deps
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
+      - name: Install Python Deps
+        run: |
           pip install --upgrade pip
-          pip install Pillow==9.5.0 moviepy==1.0.3 imageio-ffmpeg requests huggingface_hub gradio_client piper-tts google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends numpy
+          pip install moviepy==1.0.3 imageio-ffmpeg requests huggingface_hub gradio_client piper-tts google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends numpy
           pip install Pillow==9.5.0 --force-reinstall
       - name: Download Voice
         run: |

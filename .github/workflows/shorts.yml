@@ -1,32 +1,24 @@
-name: USA Trending Shorts Bot - 100% Related FREE
-
+name: USA News Bot - Final
 on:
   schedule:
     - cron: '0 13 * * *'
-    - cron: '0 18 * * *'
     - cron: '0 1 * * *'
   workflow_dispatch:
-
 jobs:
-  generate-and-upload:
+  run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install System Deps
+      - name: Install
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick espeak espeak-data
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
-      - name: Install Python Deps - 100% FREE
-        run: |
-          pip install --upgrade pip
-          pip install Pillow==9.5.0 --force-reinstall
-          pip install moviepy==1.0.3 imageio-ffmpeg requests google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends numpy gradio_client piper-tts
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install diffusers transformers accelerate safetensors
+          sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-7/policy.xml || true
+          pip install Pillow==9.5.0 moviepy==1.0.3 imageio-ffmpeg pytrends gnews yt-dlp piper-tts google-api-python-client google-auth-httplib2 google-auth-oauthlib
       - name: Download Voice
         run: |
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx

@@ -1,4 +1,4 @@
-name: USA Trending Shorts Bot - 100% FREE
+name: USA Trending Shorts Bot - 100% Related FREE
 
 on:
   schedule:
@@ -10,7 +10,7 @@ on:
 jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,19 +20,20 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
-      - name: Install Python Deps
+      - name: Install Python Deps - 100% FREE
         run: |
           pip install --upgrade pip
-          pip install moviepy==1.0.3 imageio-ffmpeg requests huggingface_hub gradio_client piper-tts google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends numpy
           pip install Pillow==9.5.0 --force-reinstall
+          pip install moviepy==1.0.3 imageio-ffmpeg requests google-api-python-client google-auth-httplib2 google-auth-oauthlib pytrends numpy gradio_client piper-tts
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install diffusers transformers accelerate safetensors
       - name: Download Voice
         run: |
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
           wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
       - name: Run Bot
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        run: python nbot.py
+        run: python bot.py

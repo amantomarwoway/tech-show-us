@@ -20,6 +20,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg espeak-ng
+          sed -i '/pexel_api/d' requirements.txt || true
           pip install -r requirements.txt
           playwright install --with-deps chromium
 

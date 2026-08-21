@@ -2,13 +2,12 @@ name: USA Trend Video Bot
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # Har 2 ghante me Google Trends US check
-  workflow_dispatch: # Manual run button
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -24,13 +23,19 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
+      - name: Download Piper Voice Model
+        run: |
+          mkdir -p piper_model
+          wget -q -O piper_model/en_US-amy-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
+          wget -q -O piper_model/en_US-amy-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
+          ls -lh piper_model/
+
       - name: Run Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          TIKTOK_SESSION_ID: ${{ secrets.TIKTOK_SESSION_ID }}
         run: |
-          python nbot.py
+          python bot.py
 
       - name: Upload Video Artifact
         uses: actions/upload-artifact@v4

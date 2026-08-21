@@ -15,3 +15,6 @@ pytrends
 lxml
 huggingface_hub
 gradio_client
+pexel_api
+playwright
+google-generativeai

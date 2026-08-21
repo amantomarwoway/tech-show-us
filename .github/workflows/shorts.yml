@@ -1,36 +1,39 @@
-name: USA Trend Shorts Auto
+name: USA Trend Video Bot
 
 on:
   schedule:
-    - cron: '*/20 * * * *'  # har 20 min me check - din ho ya raat
-  workflow_dispatch:
+    - cron: '0 */2 * * *' # Har 2 ghante me Google Trends US check
+  workflow_dispatch: # Manual run button
 
 jobs:
-  build:
+  build-and-upload:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Install deps
+
+      - name: Install System Deps
         run: |
-          pip install pytrends gnews moviepy==1.0.3 Pillow requests google-api-python-client google-auth-httplib2 google-auth-oauthlib
-          sudo apt-get update && sudo apt-get install -y espeak ffmpeg
-          wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-          wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-          pip install piper-tts
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
       - name: Run Bot
         env:
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-        run: python nbot.py
-      - name: Save last trend
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          TIKTOK_SESSION_ID: ${{ secrets.TIKTOK_SESSION_ID }}
         run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@bot.com"
-          git add last_trend.txt || true
-          git commit -m "update trend" || true
-          git push || true
+          python nbot.py
+
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-video-4k
+          path: output/*.mp4

@@ -8,7 +8,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +23,7 @@ jobs:
           sudo apt-get install -y ffmpeg espeak-ng
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Download Piper Voice
-        run: |
-          mkdir -p piper_model data output
-          wget -q -O piper_model/en_US-amy-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
-          wget -q -O piper_model/en_US-amy-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
+          mkdir -p data output
 
       - name: Run Bot
         env:

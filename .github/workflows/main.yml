@@ -1,38 +1,50 @@
-name: Shorts-8K-Machine-Fights
+name: USA News Bot
+
 on:
+  schedule:
+    - cron: '0 */3 * * *' # Har 3 ghante - GitHub exact time guarantee nahi karta
   workflow_dispatch:
-  schedule: [{cron: '0 */3 * * *'}]
-permissions: {contents: write}
+
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg -qq
-      - run: pip install -r requirements.txt piper-tts google-api-python-client google-auth moviepy==1.0.3 -q
-      - run: |
-          mkdir -p piper
-          wget -q https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz -O piper.tar.gz
-          tar -xzf piper.tar.gz -C piper --strip-components=1
-          chmod +x piper/piper
-          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx -O piper/en_US-lessac-medium.onnx
-          wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json -O piper/en_US-lessac-medium.onnx.json
-      - name: Run bot
-        env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-        run: python -u bot.py
-      - if: always()
+
+      - name: Install Deps
         run: |
-          git config user.name bot
-          git config user.email bot@bot.com
-          git add used_short_titles.txt || true
-          git commit -m "short 8K dual audio [skip ci]" || true
-          git push || true
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download Piper Voice
+        run: |
+          mkdir -p piper_model data output
+          wget -q -O piper_model/en_US-amy-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
+          wget -q -O piper_model/en_US-amy-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
+
+      - name: Run Bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          python src/main.py
+
+      - name: Upload Artifact on Fail/Success
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-output
+          path: |
+            output/
+            data/
+            logs.txt

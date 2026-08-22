@@ -16,12 +16,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Deps
+      - name: Install System Deps - FIXED
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg espeak-ng
-          sed -i '/pexel_api/d' requirements.txt || true
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          # Direct install - requirements.txt ko ignore karenge taaki dusre bots se ladai na ho
+          pip install pytrends google-generativeai moviepy==1.0.3 requests Pillow==9.5.0 piper-tts imageio-ffmpeg
           playwright install --with-deps chromium
 
       - name: Download Piper Voice Model
@@ -29,7 +30,6 @@ jobs:
           mkdir -p piper_model
           wget -q -O piper_model/en_US-amy-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
           wget -q -O piper_model/en_US-amy-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
-          ls -lh piper_model/
 
       - name: Run Bot
         env:

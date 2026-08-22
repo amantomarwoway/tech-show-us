@@ -10,7 +10,7 @@ def generate_script(news_text):
         Keep it under 80 words. No brackets.
         """
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt
         )
         print(f"Generated Script: {response.text}")

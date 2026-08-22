@@ -12,9 +12,9 @@ def upload_video(video_path, thumb_path, script_data, story):
         raise FileNotFoundError(video_path)
 
     # Secrets check
-    cid = os.getenv("YOUTUBE_CLIENT_ID")
-    csecret = os.getenv("YOUTUBE_CLIENT_SECRET")
-    rtoken = os.getenv("YOUTUBE_REFRESH_TOKEN")
+    cid = os.getenv("YT_CLIENT_ID")
+    csecret = os.getenv("YT_CLIENT_SECRET")
+    rtoken = os.getenv("YT_REFRESH_TOKEN")
     print(f"Secrets present? CID:{bool(cid)} CSECRET:{bool(csecret)} RTOKEN:{bool(rtoken)}")
     
     if not all([cid, csecret, rtoken]):

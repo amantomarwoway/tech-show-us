@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import os, traceback
 from news_fetcher import fetch_all_news
 from source_verifier import verify_stories

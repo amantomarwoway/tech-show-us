@@ -10,3 +10,5 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 imageio-ffmpeg
+piper-tts
+faster-whisper

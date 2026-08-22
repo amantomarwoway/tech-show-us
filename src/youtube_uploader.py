@@ -12,12 +12,12 @@ def upload_video(video_path, thumb_path, script_data, story):
         raise FileNotFoundError(video_path)
 
     # Secrets check
-    cid = os.getenv("YT_CLIENT_ID")
-    csecret = os.getenv("YT_CLIENT_SECRET")
-    rtoken = os.getenv("YT_REFRESH_TOKEN")
-    print(f"Secrets present? CID:{bool(cid)} CSECRET:{bool(csecret)} RTOKEN:{bool(rtoken)}")
+    CLIENT_ID = os.getenv("YT_CLIENT_ID")
+    CLIENT_SECRET = os.getenv("YT_CLIENT_SECRET")
+    REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN")
+    print(f"Secrets present? CID:{bool(CLIENT_ID)} CSECRET:{bool(CLIENT_SECRET)} RTOKEN:{bool(REFRESH_TOKEN)}")
     
-    if not all([cid, csecret, rtoken]):
+    if not all([CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN]):
         print("CRITICAL: YouTube Secrets missing in GitHub Actions!")
         sys.exit(1)
 

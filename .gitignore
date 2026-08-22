@@ -1,0 +1,7 @@
+data/*.db
+output/*.mp4
+output/*.jpg
+output/*.wav
+piper_model/
+__pycache__/
+.env

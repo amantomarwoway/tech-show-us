@@ -14,7 +14,7 @@ from database import init_db, save_story, mark_uploaded
 
 def main():
     init_db()
-    print("1. Fetching USA news from RSS...")
+    print(f"1. Fetching USA news from RSS...")
     raw_stories = fetch_all_news()
     if not raw_stories:
         print("No news fetched"); return
@@ -22,7 +22,7 @@ def main():
     print(f"2. Verifying {len(raw_stories)} stories...")
     verified = verify_stories(raw_stories)
 
-    print("3. Scoring & Ranking...")
+    print(f"3. Scoring & Ranking...")
     ranked = score_and_rank(verified)
 
     for story in ranked:
@@ -36,22 +36,22 @@ def main():
         script_data = generate_script(story)
         if not script_data: continue
 
-        print("5. Fact Checking script...")
+        print(f"5. Fact Checking script...")
         validation = fact_check(script_data['script'], story)
         if not validation['passed']:
             print(f"Fact check FAILED: {validation['report']}")
             continue
 
-        print("6. Creating video...")
+        print(f"6. Creating video...")
         video_path = create_video(script_data, story)
         thumb_path = create_thumbnail(script_data, story)
 
-        print("7. Uploading to YouTube...")
+        print(f"7. Uploading to YouTube...")
         yt_id = upload_video(video_path, thumb_path, script_data, story)
 
         if yt_id:
             mark_uploaded(story_id, yt_id)
-            print(f"UPLOADED: https://youtu.be/{yt_id}")
+            print(f"8. UPLOADED: https://youtu.be/{yt_id}")
             break # Sirf 1 video per run
 
 if __name__ == "__main__":

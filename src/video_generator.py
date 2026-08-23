@@ -1,78 +1,129 @@
 import os
+import random
+import requests
+import tempfile
 from moviepy.editor import *
-from tts_engine import generate_voice
-import config
-from PIL import Image, ImageDraw, ImageFont
+from piper import PiperVoice
+import re
 
-def create_text_image(text, width, fontsize=50, color='white'):
-    # PIL se text ki image banao - ImageMagick ki zarurat nahi
-    img = Image.new('RGBA', (width, 200), (0,0,0,0))
-    draw = ImageDraw.Draw(img)
+# Download Piper model once - American English
+MODEL_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"
+CONFIG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+
+def get_piper_voice():
+    os.makedirs("models", exist_ok=True)
+    model_path = "models/en_US-amy-medium.onnx"
+    config_path = "models/en_US-amy-medium.onnx.json"
+    if not os.path.exists(model_path):
+        print("Downloading Piper model...")
+        r = requests.get(MODEL_URL)
+        open(model_path, 'wb').write(r.content)
+        r = requests.get(CONFIG_URL)
+        open(config_path, 'wb').write(r.content)
+    return PiperVoice.load(model_path, config_path)
+
+def get_stock_clips(query, num=6):
+    """Fetch many clips from Pexels"""
+    api_key = os.getenv("PEXELS_API_KEY")
+    clips = []
+    if not api_key:
+        # Fallback: create color clips if no key
+        print("No PEXELS_API_KEY - using color clips")
+        return [ColorClip(size=(1080,1920), color=(random.randint(0,50), random.randint(0,50), random.randint(50,150)), duration=2) for _ in range(num)]
+
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", fontsize)
-    except:
-        font = ImageFont.load_default()
-    
-    # Word wrap
-    words = text.split()
-    lines = []
-    line = ""
-    for w in words:
-        if len(line + " " + w) * (fontsize*0.6) < width:
-            line += " " + w
-        else:
-            lines.append(line)
-            line = w
-    lines.append(line)
-    
-    y = 10
-    for l in lines:
-        draw.text((10, y), l.strip(), font=font, fill=color)
-        y += fontsize + 10
-    
-    img_path = f"/tmp/text_{abs(hash(text))}.png"
-    img.crop((0,0,width,y)).save(img_path)
-    return img_path
+        headers = {"Authorization": api_key}
+        # Clean query for search
+        search_q = " ".join(re.findall(r'\w+', query)[:3]) or ["technology", "usa", "news"]
+        url = f"https://api.pexels.com/videos/search?query={search_q}&per_page={num}&orientation=portrait"
+        res = requests.get(url, headers=headers, timeout=10).json()
+        for v in res.get('videos', [])[:num]:
+            # Get smallest portrait video file
+            files = sorted([f for f in v['video_files'] if f['height']>=720], key=lambda x: x['width'])
+            if files:
+                # Download file
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                r = requests.get(files[0]['link'], timeout=20)
+                tmp.write(r.content)
+                tmp.close()
+                clips.append(VideoFileClip(tmp.name).resize((1080,1920)).without_audio())
+        print(f"Got {len(clips)} stock clips")
+    except Exception as e:
+        print(f"Pexels error: {e}")
 
-def create_video(script_data, story):
-    W, H = config.VIDEO_W, config.VIDEO_H
+    if not clips:
+        clips = [ColorClip(size=(1080,1920), color=(20,20,40), duration=2) for _ in range(num)]
+    return clips
 
+def create_video(script_data, output_path="output/news_32.mp4"):
+    # Handle dict
     if isinstance(script_data, dict):
-        full_script = script_data.get('full_script') or script_data.get('script') or str(script_data)
-        sources = script_data.get('sources', 'Verified Sources')
+        script_text = script_data.get('full_script', '')
+        title = script_data.get('title','')
     else:
-        full_script = str(script_data)
-        sources = 'Verified Sources'
+        script_text = str(script_data)
+        title = script_text[:50]
 
-    if isinstance(story, dict):
-        title = story.get('title', 'Breaking News')
-        published = story.get('published', '')
-        single_source = story.get('single_source', False)
-    else:
-        title = str(story)[:100]
-        published = ''
-        single_source = False
+    os.makedirs("output", exist_ok=True)
+    os.makedirs("temp", exist_ok=True)
 
-    voice_path = generate_voice(full_script)
-    audio = AudioFileClip(voice_path)
-    duration = min(audio.duration + 0.5, config.MAX_VIDEO_DURATION)
+    # 1. PIPER TTS - American English
+    print("1. Generating Piper TTS American...")
+    voice = get_piper_voice()
+    audio_path = "temp/voice.wav"
+    with open(audio_path, "wb") as wav_file:
+        # Piper writes wav directly
+        voice.synthesize_wav(script_text, wav_file)
 
-    bg = ColorClip(size=(W,H), color=(10,10,30), duration=duration)
+    audio = AudioFileClip(audio_path)
+    total_duration = audio.duration + 0.5
+    print(f"Audio duration: {total_duration}")
 
-    # PIL se title image banao
-    title_img_path = create_text_image(title[:80], W-100, fontsize=55, color='white')
-    title_clip = ImageClip(title_img_path).set_position(('center', H*0.2)).set_duration(duration)
+    # 2. MANY MANY CLIPS - Professional editing
+    print("2. Fetching many clips...")
+    stock_clips = get_stock_clips(title or script_text, num=6)
 
-    src_img_path = create_text_image(f"Sources: {sources} | {published}", W-80, fontsize=25, color='lightgray')
-    src_clip = ImageClip(src_img_path).set_position(('center', H*0.9)).set_duration(duration)
+    # Cut clips to fit total duration, fast cuts every 1.5 sec
+    final_clips = []
+    time_left = total_duration
+    idx = 0
+    while time_left > 0:
+        clip = stock_clips[idx % len(stock_clips)]
+        cut_dur = min(random.uniform(1.0, 2.0), time_left, clip.duration)
+        sub = clip.subclip(0, cut_dur).set_duration(cut_dur)
+        # Add zoom effect for pro look
+        sub = sub.resize(lambda t: 1 + 0.1*t)
+        final_clips.append(sub)
+        time_left -= cut_dur
+        idx += 1
 
-    clips = [bg, title_clip, src_clip]
-    if single_source:
-        dev_img_path = create_text_image("DEVELOPING STORY - Single Source", 600, fontsize=40, color='yellow')
-        dev = ImageClip(dev_img_path).set_position(('center', 50)).set_duration(duration)
-        clips.append(dev)
+    video = concatenate_videoclips(final_clips).set_duration(total_duration)
 
-    final = CompositeVideoClip(clips, size=(W,H)).set_audio(audio)
-    out_path = f"{config.OUTPUT_DIR}/news_{int(audio.duration)}.mp4"
-    final.write_videofile(out_path, fps=24, codec='libx264', preset='ultrafast', threads=2, bitrate="3000k")
-    return out_path
+    # 3. WORD BY WORD CAPTION - low centre, a bit up
+    print("3. Creating word by word captions...")
+    words = script_text.split()
+    word_duration = total_duration / max(len(words), 1)
+
+    caption_clips = []
+    for i, word in enumerate(words):
+        start = i * word_duration
+        # Clean word
+        clean_word = re.sub(r'[^\w\s\']', '', word).upper()
+        if not clean_word:
+            continue
+        txt = TextClip(clean_word, fontsize=70, color='white', font='Arial-Bold', stroke_color='black', stroke_width=3)
+        txt = txt.set_start(start).set_duration(word_duration).set_pos(('center', 0.75), relative=True) # low centre, a bit up from lowest
+        caption_clips.append(txt)
+
+    # Composite
+    final = CompositeVideoClip([video] + caption_clips).set_audio(audio).set_duration(total_duration)
+    final.write_videofile(output_path, fps=24, codec='libx264', audio_codec='aac')
+    print(f"Moviepy - video ready {output_path}")
+    print(f"Video created at: {output_path}")
+
+    # Cleanup
+    for c in stock_clips:
+        try: c.close()
+        except: pass
+
+    return output_path

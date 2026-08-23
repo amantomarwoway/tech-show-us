@@ -1,0 +1,94 @@
+name: USATechDrop Long-Form Daily
+
+on:
+  schedule:
+    # Best US evening window: 8 PM ET = 00:00 UTC (DST) / 01:00 UTC (EST)
+    - cron: "15 0 * * *"
+  workflow_dispatch:
+    inputs:
+      topic_override:
+        description: "Optional manual topic override"
+        required: false
+        type: string
+
+concurrency:
+  group: long-video-daily-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  long_video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+          python -m pip install --upgrade pip
+
+      - name: Install Python deps (reuse existing)
+        run: |
+          pip install -r requirements.txt
+          pip install pytrends requests pillow moviepy==1.0.3 imageio-ffmpeg piper-tts || true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            data/
+            output_long/
+          key: longbot-data-${{ hashFiles('data/news_history.db') }}-${{ github.run_id }}
+          restore-keys: |
+            longbot-data-
+
+      - name: Configure Piper voice (American English)
+        run: |
+          mkdir -p voices
+          if [ ! -f voices/en_US-lessac-medium.onnx ]; then
+            curl -L -o voices/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+            curl -L -o voices/en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+          fi
+
+      - name: Run Long-Form Bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          CHANNEL_NAME: "USATechDrop"
+          TARGET_MINUTES: "10"
+          PYTHONPATH: "."
+          TOPIC_OVERRIDE: ${{ inputs.topic_override }}
+        run: |
+          python long_video_bot.py
+
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name "longbot"
+          git config user.email "longbot@usatechdrop.local"
+          git add data/news_history.db || true
+          git diff --staged --quiet || git commit -m "long-bot: update history $(date -u +%Y-%m-%d)" || true
+          git push || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: long-video-${{ github.run_number }}
+          path: |
+            output_long/**/final_long.mp4
+            output_long/**/thumbnail.jpg
+          retention-days: 7
+          if-no-files-found: warn

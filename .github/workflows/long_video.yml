@@ -3,11 +3,12 @@ name: USATechDrop Long-Form Daily
 on:
   schedule:
     # Best US evening window: 8 PM ET = 00:00 UTC (DST) / 01:00 UTC (EST)
+    # Run at 00:15 UTC daily = 8:15 PM ET (EDT) / 7:15 PM ET (EST)
     - cron: "15 0 * * *"
   workflow_dispatch:
     inputs:
       topic_override:
-        description: "Optional manual topic override"
+        description: "Optional manual topic override (leave empty for auto trending)"
         required: false
         type: string
 
@@ -21,28 +22,36 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install system deps
+      - name: Install system deps (FFmpeg, fonts, espeak for Piper fallback)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-dejavu-core espeak-ng
+          ffmpeg -version
           python -m pip install --upgrade pip
 
-      - name: Install Python deps (reuse existing)
+      - name: Install Python deps (reuse existing requirements)
         run: |
           pip install -r requirements.txt
+          # Extra zero-cost deps needed only for long bot (if not already in requirements)
           pip install pytrends requests pillow moviepy==1.0.3 imageio-ffmpeg piper-tts || true
+          # Ensure feedparser etc from short bot remain
+          pip list | grep -i -E "feedparser|google|gemini|pexels|piper"
 
-      - uses: actions/cache@v4
+      - name: Restore data cache (history DB)
+        uses: actions/cache@v4
         with:
           path: |
             data/
@@ -54,35 +63,43 @@ jobs:
       - name: Configure Piper voice (American English)
         run: |
           mkdir -p voices
+          # Download free US voice en_US-lessac-medium if not present (zero-cost)
           if [ ! -f voices/en_US-lessac-medium.onnx ]; then
+            echo "Downloading Piper en_US voice..."
             curl -L -o voices/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
             curl -L -o voices/en_US-lessac-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
           fi
+          ls -lh voices/
 
       - name: Run Long-Form Bot
         env:
+          # Reuse all secrets from short bot
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           CHANNEL_NAME: "USATechDrop"
           TARGET_MINUTES: "10"
+          TARGET_MAX_MINUTES: "14"
           PYTHONPATH: "."
           TOPIC_OVERRIDE: ${{ inputs.topic_override }}
         run: |
+          echo "Starting long_video_bot.py at $(date -u) UTC = $(TZ='America/New_York' date) ET"
           python long_video_bot.py
 
-      - name: Save state
+      - name: Save state (commit DB if changed)
         if: always()
         run: |
           git config user.name "longbot"
           git config user.email "longbot@usatechdrop.local"
           git add data/news_history.db || true
+          git add output_long/ || true
           git diff --staged --quiet || git commit -m "long-bot: update history $(date -u +%Y-%m-%d)" || true
-          git push || true
+          git push || echo "push skipped (no changes or no permission)"
 
-      - name: Upload artifacts
+      - name: Upload artifacts (final video + thumbnail for verification)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -90,5 +107,13 @@ jobs:
           path: |
             output_long/**/final_long.mp4
             output_long/**/thumbnail.jpg
+            output_long/**/final_narration.wav
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Cleanup temp clips to save space
+        if: always()
+        run: |
+          rm -rf /tmp/tmp* || true
+          du -sh output_long/* || true
+          df -h

@@ -31,12 +31,29 @@ import config as cfg
 from src.database import init_db, add_story, get_recent
 from src.news_fetcher import fetch_news
 from src.source_verifier import SourceVerifier
-from src.trend_score import calculate_trending_score if hasattr(__import__('src.trend_score'), 'calculate_trending_score') else None
-from src.duplicate_detector import is_duplicate as check_duplicate_func
+try:
+    from src.trend_score import calculate_trending_score
+except ImportError:
+    calculate_trending_score = None
+
+try:
+    from src.duplicate_detector import is_duplicate as check_duplicate_func
+except ImportError:
+    check_duplicate_func = None
+
 from src.script_generator import generate_script as gen_short_script
-from src.tts_engine import generate_audio, text_to_speech
+try:
+    from src.tts_engine import generate_audio, text_to_speech
+except ImportError:
+    from src.tts_engine import generate_audio
+    text_to_speech = generate_audio
+
 from src.thumbnail_generator import generate_thumbnail as gen_short_thumb
-from src.video_generator import create_video as create_short_video
+try:
+    from src.video_generator import create_video as create_short_video
+except ImportError:
+    create_short_video = None
+
 from src.youtube_uploader import upload_video as upload_existing
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [LONG] %(levelname)s: %(message)s')

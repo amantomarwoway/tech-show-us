@@ -17,7 +17,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y imagemagick ffmpeg
 
       - name: Install Python Deps
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install Pillow==9.5.0
+          pip install -r requirements.txt
 
       - name: Run Bot
         env:

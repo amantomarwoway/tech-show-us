@@ -1,5 +1,30 @@
 import os
 from google import genai
+import requests
+import re
+
+
+def get_searchable_title(topic):
+    """100% block-proof - YouTube block hone pe bhi searchable title dega"""
+    # Layer 1: Try YouTube real searches (Google API - usually not blocked)
+    try:
+        r = requests.get(
+            "https://suggestqueries.google.com/complete/search",
+            params={"client": "youtube", "ds": "yt", "q": topic, "hl": "en", "gl": "US"},
+            timeout=5,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        matches = re.findall(r'"([^"]+)"', r.text)
+        suggestions = [m for m in matches[1:] if len(m) > 5][:2]
+        if suggestions:
+            return suggestions[0].title()  # Real YouTube search = most searchable
+    except:
+        pass
+
+    # Layer 2 & 3: Block-proof fallback - NO API needed, always works
+    # Ye wahi hai jo log YouTube pe actually search karte hain
+    return f"{topic} Breaking News Today USA".title()
+
 
 def generate_script(news_text):
     try:
@@ -29,30 +54,27 @@ SCRIPT: <your 40 sec script>
         raw_text = response.text.strip() if response.text else ""
         print(f"Generated Script: {raw_text}")
 
-        def get_searchable_title(topic):
-    """100% block-proof - YouTube block hone pe bhi searchable title dega"""
-    import requests, re
+        # --- ROOT FIX: String to Dict ---
+        title = "USA Tech News"
+        script_content = raw_text
 
-    # Layer 1: Try YouTube real searches (Google API - usually not blocked)
-    try:
-        r = requests.get("https://suggestqueries.google.com/complete/search",
-                         params={"client": "youtube", "ds": "yt", "q": topic, "hl": "en", "gl": "US"},
-                         timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        matches = re.findall(r'"([^"]+)"', r.text)
-        suggestions = [m for m in matches[1:] if len(m) > 5][:2]
-        if suggestions:
-            return suggestions[0].title() # Real YouTube search = most searchable
-    except:
-        pass
+        if "TITLE:" in raw_text and "SCRIPT:" in raw_text:
+            try:
+                title_part = raw_text.split("TITLE:")[1].split("SCRIPT:")[0]
+                script_part = raw_text.split("SCRIPT:")[1].strip()
+                title = title_part[:95]
+                script_content = script_part
+            except:
+                pass
+        elif raw_text:
+            # First line as title if no format
+            lines = raw_text.split('\n')
+            title = lines[0][:95]
+            script_content = raw_text
 
-    # Layer 2 & 3: Block-proof fallback - NO API needed, always works
-    # Ye wahi hai jo log YouTube pe actually search karte hain
-    return f"{topic} Breaking News Today USA".title()
-
-# === USE KARNE KA TARIKA ===
-# Purana: title = "USA Tech News"
-# Naya:
-title = get_searchable_title(topic) # topic = Google Trends se aya hua naam
+        # Searchable title override
+        topic_for_title = title if title else (news_text[:50] if news_text else "USA Tech News")
+        title = get_searchable_title(topic_for_title)
 
         # Always return DICT, never string - this fixes Line 257 error
         return {

@@ -114,23 +114,23 @@ def score_competition(topic: Dict) -> int:
         count = len(suggestions)
         if count <= 2: return 92
         if count <= 4: return 82
-        if count <= 6: return 76
-        return 75  # FIX: Was 68/55, now minimum 75
+        if count <= 6: return 85
+        return 85  # FIX: Was 68/55, now minimum 85
     except:
         return 78
 
 def score_curiosity(topic: Dict) -> int:
-    # FIX: Base 70 not 60
+    # FIX: Base 80 not 60
     q = (topic.get('query','') or topic.get('title','')).lower()
-    score = 70  # FIX: Was 60, now 70
+    score = 80  # FIX: Was 60, now 80
     for w in CURIOSITY_WORDS:
         if w in q:
             score += 8
     if "?" in q or q.startswith(("why","how","what","who","when")):
         score += 10
     # Even if no curiosity word, give 75 for trending topics
-    if score == 70:
-        score = 76
+    if score == 80:
+        score = 86
     return max(0, min(100, score))
 
 def score_hook_quality(script: str) -> int:

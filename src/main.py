@@ -3,7 +3,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import os, traceback
 from news_fetcher import fetch_all_news
 from source_verifier import verify_stories
-from trend_score import score_and_rank
 from duplicate_detector import is_duplicate
 from script_generator import generate_script
 from fact_checker import fact_check

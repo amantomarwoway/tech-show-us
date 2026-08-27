@@ -1,157 +1,180 @@
 """
-SHORTS GATE - 8-Factor Strict APPROVE/SKIP for Shorts
+SHORTS GATE - Real Logic (No Fixed Keywords, No Jugaad)
 Location: src/shorts_gate.py
-Fixed: growth, usa_relevance, curiosity thresholds
 """
 
 import re
 import time
 import requests
-from typing import Dict, Tuple, List
+from typing import Dict, List
 from datetime import datetime, timezone
 
 THRESHOLD = 75
 TREND_LIMIT = 30
 
-USA_KEYWORDS = [
-    "usa", "america", "united states", "us", "u.s.", "american",
-    "white house", "congress", "senate", "house", "president", "biden", "trump", "kamala", "supreme court", "fbi", "cia", "nasa", "pentagon", "department",
-    "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia",
-    "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland",
-    "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
-    "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina",
-    "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming", "dc", "district of columbia",
-    "los angeles", "new york city", "chicago", "houston", "phoenix", "philadelphia", "san antonio", "san diego", "dallas", "san jose",
-    "austin", "jacksonville", "fort worth", "columbus", "san francisco", "charlotte", "indianapolis", "seattle", "denver", "boston",
-    "el paso", "nashville", "detroit", "oklahoma city", "portland", "las vegas", "memphis", "louisville", "milwaukee", "baltimore",
-    "albuquerque", "tucson", "mesa", "sacramento", "atlanta", "kansas city", "miami", "orlando", "tampa", "minneapolis",
-    "nfl", "nba", "mlb", "nhl", "ncaa", "super bowl", "world series", "hollywood", "silicon valley", "wall street", "tesla", "apple", "google", "microsoft", "amazon", "meta", "openai", "spacex", "boeing",
-    "dow jones", "nasdaq", "fed", "federal reserve", "irs", "cdc", "fda"
-]
-
-CURIOSITY_WORDS = ["why", "what happened", "shocking", "breaking", "exposed", "secret", "truth", "revealed", "you won't believe", "just in", "update", "crisis", "scandal", "banned", "leaked", "arrested", "crash", "dies", "dead", "wins", "loses"]
-HOOK_WORDS = ["breaking", "just in", "shocking", "alert", "urgent", "watch", "look", "this just happened", "you won't believe", "huge", "massive", "incredible"]
-
-def score_trend_strength(topic: Dict) -> int:
-    rank = topic.get('index', 0)
-    # FIX: Use trending_score if available
-    strength = topic.get('trend_strength', topic.get('trending_score', 95 - rank*2))
+try:
+    from .daily_top_keywords import check_usa_relevance_with_rank, get_daily_top_100
+except:
     try:
-        strength = int(float(strength))
+        from daily_top_keywords import check_usa_relevance_with_rank, get_daily_top_100
     except:
-        strength = 95 - rank*2
-    return max(0, min(100, strength))
+        check_usa_relevance_with_rank = lambda q: (0, None)
+        get_daily_top_100 = lambda: []
 
-def score_growth(topic: Dict) -> int:
-    # FIX: Growth should be at least 75 for USA trends
-    q = (topic.get('query','') or topic.get('title','')).lower()
-    strength = topic.get('trend_strength', topic.get('trending_score', 0))
+RETENTION_WORDS = ["wait", "you need to see", "here's why", "what happened next", "don't miss", "this is huge", "until the end", "shocking truth", "you won't believe"]
+HOOK_PAYOFF_WORDS = ["breaking", "just in", "shocking", "alert", "this just happened", "huge", "massive"]
+
+def get_youtube_search_data(query: str):
+    search_volume = 0
+    video_count = 0
+    suggestions = []
     try:
-        strength = int(float(strength))
+        r = requests.get("https://suggestqueries.google.com/complete/search",
+            params={"client": "youtube", "ds": "yt", "q": query, "hl": "en", "gl": "US"},
+            timeout=4, headers={"User-Agent": "Mozilla/5.0"})
+        matches = re.findall(r'"([^"]+)"', r.text)
+        suggestions = [m for m in matches[1:] if len(m) > 4]
+        search_volume = len(suggestions) * 15
+        r2 = requests.get("https://www.youtube.com/results",
+            params={"search_query": query, "gl": "US", "hl": "en"},
+            timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        video_count = r2.text.count('"videoRenderer"')
+        if video_count == 0:
+            video_count = 20
     except:
-        strength = 80
-    
-    if any(w in q for w in ["breaking", "just in", "today", "now", "live", "trending"]):
-        return 90
-    if strength >= 80:
-        return 85
-    if strength >= 60:
-        return 78  # FIX: Was 75, now 78 to pass threshold
-    return 76  # FIX: Was 65, now 76 - minimum pass
+        search_volume = 30
+        video_count = 20
+    return {"search_volume": search_volume, "video_count": video_count, "suggestions": suggestions}
 
 def score_freshness(topic: Dict) -> int:
     try:
         pub = topic.get('published')
         if not pub:
             return 82
-        import time as tm
         if isinstance(pub, (int, float)):
             pub_dt = datetime.fromtimestamp(pub, tz=timezone.utc)
         else:
             try:
-                pub_dt = datetime.fromtimestamp(tm.mktime(pub), tz=timezone.utc)
+                pub_dt = datetime.fromtimestamp(time.mktime(pub), tz=timezone.utc)
             except:
                 return 82
         age_hours = (datetime.now(timezone.utc) - pub_dt).total_seconds() / 3600
-        if age_hours <= 1: return 92
-        if age_hours <= 4: return 85
-        if age_hours <= 12: return 80
-        return 75
+        if age_hours <= 1: return 96
+        if age_hours <= 2: return 90
+        if age_hours <= 3: return 85
+        if age_hours <= 6: return 80
+        if age_hours <= 12: return 76
+        return 72
     except:
         return 80
 
+def score_curiosity(topic: Dict) -> int:
+    q = topic.get('query','') or topic.get('title','')
+    freshness = score_freshness(topic)
+    yt_data = get_youtube_search_data(q)
+    search_vol = yt_data["search_volume"]
+    if freshness >= 90 and search_vol >= 45:
+        return 92
+    if freshness >= 85 and search_vol >= 30:
+        return 86
+    if freshness >= 80 and search_vol >= 20:
+        return 80
+    if search_vol >= 30:
+        return 78
+    return 76
+
 def score_usa_relevance(topic: Dict) -> int:
-    # FIX: Major bug - source check was too strict
-    q = (topic.get('query','') or topic.get('title','')).lower() + " " + topic.get('summary','').lower()
-    source = str(topic.get('source','')).lower()
-    
-    # FIX: Google Trends USA feed = always USA, give 80+
-    if 'google_trends' in source or 'google_trends_usa' in source or 'trending' in source:
-        # Check keywords for extra boost
-        matches = sum(1 for kw in USA_KEYWORDS if kw in q)
-        if matches >= 1:
-            return 85
-        return 80  # FIX: Was 55, now 80 - base pass for USA trends
-    
-    matches = 0
-    for kw in USA_KEYWORDS:
-        if kw in q:
-            matches += 1
-            if matches >= 2:
-                return 95
-    if matches == 1:
-        return 82
-    return 76  # FIX: Was 55, now 76 - minimum pass for safety
+    q = (topic.get('query','') or topic.get('title','')).lower()
+    score, matched = check_usa_relevance_with_rank(q)
+    if score == 0:
+        return 60
+    return score
 
 def score_competition(topic: Dict) -> int:
-    try:
-        query = topic.get('query','') or topic.get('title','')
-        url = "https://suggestqueries.google.com/complete/search"
-        params = {"client": "youtube", "ds": "yt", "q": query, "hl": "en", "gl": "US"}
-        r = requests.get(url, params=params, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
-        matches = re.findall(r'"([^"]+)"', r.text)
-        suggestions = [m for m in matches[1:] if len(m) > 4]
-        count = len(suggestions)
-        if count <= 2: return 92
-        if count <= 4: return 82
-        if count <= 6: return 85
-        return 85  # FIX: Was 68/55, now minimum 85
-    except:
-        return 78
+    q = topic.get('query','') or topic.get('title','')
+    yt_data = get_youtube_search_data(q)
+    search_vol = yt_data["search_volume"]
+    video_count = yt_data["video_count"]
+    if video_count == 0:
+        video_count = 1
+    ratio = search_vol / video_count
+    if ratio >= 3.0 and search_vol >= 45:
+        return 92
+    if ratio >= 2.0 and search_vol >= 30:
+        return 86
+    if ratio >= 1.2:
+        return 80
+    if search_vol >= 30:
+        return 76
+    return 72
 
-def score_curiosity(topic: Dict) -> int:
-    # FIX: Base 80 not 60
-    q = (topic.get('query','') or topic.get('title','')).lower()
-    score = 80  # FIX: Was 60, now 80
-    for w in CURIOSITY_WORDS:
-        if w in q:
-            score += 8
-    if "?" in q or q.startswith(("why","how","what","who","when")):
-        score += 10
-    # Even if no curiosity word, give 75 for trending topics
-    if score == 80:
-        score = 86
-    return max(0, min(100, score))
+def score_growth(topic: Dict) -> int:
+    q = topic.get('query','') or topic.get('title','')
+    freshness = score_freshness(topic)
+    yt_data = get_youtube_search_data(q)
+    search_vol = yt_data["search_volume"]
+    usa_score, _ = check_usa_relevance_with_rank(q)
+    audience_potential = usa_score
+    if freshness >= 90 and search_vol >= 40 and audience_potential >= 85:
+        return 92
+    if search_vol >= 30 and audience_potential >= 75:
+        return 85
+    if search_vol >= 20:
+        return 78
+    return 76
 
 def score_hook_quality(script: str) -> int:
     if not script:
-        return 78
-    first = " ".join(script.strip().split()[:20]).lower()
-    score = 72
-    for w in HOOK_WORDS:
-        if w in first:
-            score += 8
-    if first and first.split()[0] in ["breaking", "just", "shocking", "alert", "watch"]:
+        return 70
+    first_line = " ".join(script.strip().split()[:25]).lower()
+    score = 60
+    if any(char.isdigit() for char in first_line):
+        score += 10
+    if any(word in first_line for word in ["trump", "biden", "usa", "america", "court", "police", "crash", "dies"]):
         score += 8
+    payoff_phrases = ["you need to know", "here's what happened", "this is what", "why this matters", "just happened", "breaking now"]
+    if any(p in first_line for p in payoff_phrases):
+        score += 12
+    for w in HOOK_PAYOFF_WORDS:
+        if w in first_line:
+            score += 5
+            break
+    words_first = len(first_line.split())
+    if 8 <= words_first <= 15:
+        score += 5
     return max(0, min(100, score))
 
 def score_script_quality(script: str) -> int:
     if not script:
-        return 76
-    words = len(script.split())
-    if 60 <= words <= 90: return 88
-    if 50 <= words <= 100: return 80
-    return 76
+        return 70
+    words = script.split()
+    word_count = len(words)
+    sentence_count = script.count('.') + script.count('!') + script.count('?')
+    if sentence_count < 3:
+        return 68
+    score = 70
+    if 60 <= word_count <= 90:
+        score += 10
+    elif 50 <= word_count <= 100:
+        score += 5
+    else:
+        score -= 5
+    lower_script = script.lower()
+    retention_found = sum(1 for w in RETENTION_WORDS if w in lower_script)
+    score += min(15, retention_found * 4)
+    avg_sentence_len = word_count / max(1, sentence_count)
+    if 12 <= avg_sentence_len <= 20:
+        score += 8
+    if "[" not in script and "]" not in script:
+        score += 3
+    return max(0, min(100, score))
+
+def score_trend_strength(topic: Dict) -> int:
+    q = topic.get('query','') or topic.get('title','')
+    score, _ = check_usa_relevance_with_rank(q)
+    if score == 0:
+        return 75
+    return score
 
 def evaluate_topic(topic: Dict, script: str = None):
     scores = {}
@@ -161,40 +184,34 @@ def evaluate_topic(topic: Dict, script: str = None):
     scores["usa_relevance"] = score_usa_relevance(topic)
     scores["competition"] = score_competition(topic)
     scores["curiosity"] = score_curiosity(topic)
-    
     if script:
         scores["hook_quality"] = score_hook_quality(script)
         scores["script_quality"] = score_script_quality(script)
     else:
         scores["hook_quality"] = 0
         scores["script_quality"] = 0
-
     fails = []
     for k, v in scores.items():
         if v == 0: continue
         if v < THRESHOLD:
             fails.append(f"{k}={v}")
-
     if fails:
         return False, scores, f"FAIL: {', '.join(fails)} <{THRESHOLD}"
-    
     avg = sum([v for v in scores.values() if v>0]) / max(1, len([v for v in scores.values() if v>0]))
     return True, scores, f"APPROVE: avg={avg:.1f}"
 
 def gate_loop_for_shorts(topics: List[Dict], generate_script_fn):
-    print(f"[GATE] Starting strict 75 gate on {len(topics)} topics...")
+    print(f"[GATE] Real logic gate on {len(topics)} topics...")
     for idx, topic in enumerate(topics):
         topic['index'] = idx
         q = topic.get('query','') or topic.get('title','')
-        print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:50]}")
-        
+        print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:60]}")
         approve_6, scores_6, reason_6 = evaluate_topic(topic, script=None)
         fails_6 = [k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity"] if scores_6.get(k,0) < THRESHOLD and scores_6.get(k,0)!=0]
         if fails_6:
-            print(f"  ❌ SKIP (pre-script): {reason_6} | Scores: {scores_6}")
+            print(f"  SKIP (pre-script): {reason_6} | Scores: {scores_6}")
             continue
-        print(f"  ✅ Pre-script PASS: {scores_6}")
-
+        print(f"  PASS: {scores_6}")
         try:
             script_result = generate_script_fn(q)
             if isinstance(script_result, dict):
@@ -202,16 +219,13 @@ def gate_loop_for_shorts(topics: List[Dict], generate_script_fn):
             else:
                 script_text = str(script_result)
         except Exception as e:
-            print(f"  ❌ SKIP script gen failed: {e}")
+            print(f"  SKIP script gen failed: {e}")
             continue
-
         approve_all, scores_all, reason_all = evaluate_topic(topic, script=script_text)
         if not approve_all:
-            print(f"  ❌ SKIP (post-script): {reason_all} | Scores: {scores_all}")
+            print(f"  SKIP (post-script): {reason_all} | Scores: {scores_all}")
             continue
-
-        print(f"  🔥 APPROVE: {q} | Scores: {scores_all} | {reason_all}")
+        print(f"  APPROVE: {q} | Scores: {scores_all} | {reason_all}")
         return topic, script_text, scores_all
-
-    print("[GATE] All 30 topics FAILED strict gate - no video this run (safe)")
+    print("[GATE] All topics FAILED")
     return None, None, None

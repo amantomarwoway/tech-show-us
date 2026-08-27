@@ -193,10 +193,12 @@ def evaluate_topic(topic: Dict, script: str = None):
     fails = []
     for k, v in scores.items():
         if v == 0: continue
-        if v < THRESHOLD:
-            fails.append(f"{k}={v}")
+        # Hook quality ka threshold sirf 65, baaki sab ka 75
+        threshold_for_k = 65 if k == "hook_quality" else THRESHOLD
+        if v < threshold_for_k:
+            fails.append(f"{k}={v} (<{threshold_for_k})")
     if fails:
-        return False, scores, f"FAIL: {', '.join(fails)} <{THRESHOLD}"
+        return False, scores, f"FAIL: {', '.join(fails)}"
     avg = sum([v for v in scores.values() if v>0]) / max(1, len([v for v in scores.values() if v>0]))
     return True, scores, f"APPROVE: avg={avg:.1f}"
 
@@ -207,7 +209,7 @@ def gate_loop_for_shorts(topics: List[Dict], generate_script_fn):
         q = topic.get('query','') or topic.get('title','')
         print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:60]}")
         approve_6, scores_6, reason_6 = evaluate_topic(topic, script=None)
-        fails_6 = [k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity"] if scores_6.get(k,0) < THRESHOLD and scores_6.get(k,0)!=0]
+        fails_6 = [k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity"] if scores_6.get(k,0) < THRESHOLD and scores_6.get(k,0)!=0] # hook_quality pre-script me check nahi hota
         if fails_6:
             print(f"  SKIP (pre-script): {reason_6} | Scores: {scores_6}")
             continue

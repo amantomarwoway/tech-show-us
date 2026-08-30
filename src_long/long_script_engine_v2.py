@@ -1,10 +1,45 @@
 """
-src_long/long_script_engine_v2.py - Human Body Structure Script
+src_long/long_script_engine_v2.py - Human Body Structure Script - FIXED IMPORT
+Fix for: ImportError: cannot import name 'genai' from 'google'
 """
 
 import os
 import re
-from google import genai
+
+# FIXED IMPORT - Works with both google-genai (new) and google-generativeai (old)
+try:
+    from google import genai
+    GENAI_NEW = True
+    print("Using NEW google-genai SDK")
+except ImportError:
+    try:
+        import google.generativeai as genai_old
+        GENAI_NEW = False
+        genai = None
+        print("Using OLD google-generativeai SDK")
+    except ImportError:
+        genai = None
+        genai_old = None
+        GENAI_NEW = None
+        print("No Gemini SDK found")
+
+def call_gemini(prompt: str) -> str:
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY missing")
+    
+    if GENAI_NEW:
+        # New SDK: from google import genai
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return response.text.strip() if response.text else ""
+    else:
+        # Old SDK: import google.generativeai
+        import google.generativeai as genai_old
+        genai_old.configure(api_key=api_key)
+        model = genai_old.GenerativeModel('gemini-2.0-flash')
+        response = model.generate_content(prompt)
+        return response.text.strip() if response.text else ""
 
 def generate_long_script_american(trend: dict, min_words: int = 900, max_words: int = 1300) -> dict:
     query = trend.get("query", "USA Breaking News")
@@ -19,7 +54,6 @@ def generate_long_script_american(trend: dict, min_words: int = 900, max_words: 
         "curiosity_reason": "Here's why everyone is searching this",
         "general_curiosity": "This is blowing up across America"
     }
-    # Extract key from why string
     why_key = why.split(" - ")[0] if " - " in why else why
     trigger_line = trigger_map.get(why_key, trigger_map["general_curiosity"])
     
@@ -31,7 +65,7 @@ WHY: {why} -> {trigger_line}
 INTEREST: {interest}/100
 YT Suggestions: {trend.get('youtube_suggestions', [])}
 
-HUMAN BODY STRUCTURE (MUST FOLLOW):
+HUMAN BODY STRUCTURE:
 
 HADDIYA - Skeleton - Chapters:
 0:00-0:30 HOOK - 25 words, number/name/shock + FOMO, must include keyword
@@ -45,12 +79,12 @@ MAANS - Muscle:
 American English, specific numbers, cities, names, 8-10 paragraphs
 
 NASE - Nerves:
-Every 90 sec retention: "wait", "here's why this matters", "what happened next will shock you", "don't miss this part"
+Every 90 sec retention: "wait", "here's why this matters", "what happened next will shock you"
 Emotion: shocking, huge, massive, breaking
 
 KHAAL - Skin:
 First 25 words must have keyword {query} + number/name
-Last para CTA: comment, subscribe, watch next
+Last para CTA: comment, subscribe
 No brackets, no emojis
 
 RETURN FORMAT:
@@ -71,9 +105,7 @@ TAGS:
 """
 
     try:
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-        raw = response.text.strip() if response.text else ""
+        raw = call_gemini(prompt)
         
         title = query.title() + " Breaking News Today"
         chapters = []

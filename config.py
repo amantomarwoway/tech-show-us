@@ -81,7 +81,7 @@ THRESHOLD = 75
 TREND_LIMIT_SHORTS = 30
 
 # ========== LONG VIDEO ==========
-CHANNEL_NAME = os.getenv("CHANNEL_NAME", "USATechDrop")
+CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Uncovered USA 24")
 
 # ========== LOGGING ==========
 LOG_LEVEL = "INFO"

@@ -23,6 +23,7 @@ jobs:
           pip install --upgrade pip
           pip install Pillow==9.5.0
           pip install -r requirements.txt
+          pip install pytrends
 
       - name: Run Bot
         env:

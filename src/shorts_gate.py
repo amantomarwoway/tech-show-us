@@ -1,6 +1,6 @@
 """
-SHORTS GATE - Real Logic (No Fixed Keywords, No Jugaad)
-Location: src/shorts_gate.py
+src/shorts_gate.py - FINAL SHORT BOT - Filter A+B+C integrated + Real Logic
+Threshold 75, Bot Friendly Rising Trend only
 """
 
 import re
@@ -24,23 +24,21 @@ except:
 RETENTION_WORDS = ["wait", "you need to see", "here's why", "what happened next", "don't miss", "this is huge", "until the end", "shocking truth", "you won't believe"]
 HOOK_PAYOFF_WORDS = ["breaking", "just in", "shocking", "alert", "this just happened", "huge", "massive"]
 
-def get_youtube_search_data(query: str):
+# FIXED: No YouTube page scrape for shorts gate (fast)
+def get_youtube_search_data_fast(query: str):
+    """Fast version - No YouTube page scrape (fix slow)"""
     search_volume = 0
-    video_count = 0
+    video_count = 20
     suggestions = []
     try:
         r = requests.get("https://suggestqueries.google.com/complete/search",
             params={"client": "youtube", "ds": "yt", "q": query, "hl": "en", "gl": "US"},
-            timeout=4, headers={"User-Agent": "Mozilla/5.0"})
+            timeout=3, headers={"User-Agent": "Mozilla/5.0"})
         matches = re.findall(r'"([^"]+)"', r.text)
         suggestions = [m for m in matches[1:] if len(m) > 4]
         search_volume = len(suggestions) * 15
-        r2 = requests.get("https://www.youtube.com/results",
-            params={"search_query": query, "gl": "US", "hl": "en"},
-            timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        video_count = r2.text.count('"videoRenderer"')
-        if video_count == 0:
-            video_count = 20
+        # FIXED: No r2 youtube.com/results fetch
+        video_count = 20
     except:
         search_volume = 30
         video_count = 20
@@ -71,8 +69,9 @@ def score_freshness(topic: Dict) -> int:
 def score_curiosity(topic: Dict) -> int:
     q = topic.get('query','') or topic.get('title','')
     freshness = score_freshness(topic)
-    yt_data = get_youtube_search_data(q)
-    search_vol = yt_data["search_volume"]
+    # Use fast version
+    yt_data = get_youtube_search_data_fast(q)
+    search_vol = yt_data["search_volume"] or topic.get("search_volume", 30)
     if freshness >= 90 and search_vol >= 45:
         return 92
     if freshness >= 85 and search_vol >= 30:
@@ -84,6 +83,12 @@ def score_curiosity(topic: Dict) -> int:
     return 76
 
 def score_usa_relevance(topic: Dict) -> int:
+    # Also check Filter A/B/C scores if present
+    if topic.get("filter_a_score"):
+        return min(100, topic.get("filter_a_score", 0) + 10)
+    if topic.get("filter_b_score"):
+        return min(100, topic.get("filter_b_score", 0) + 10)
+    
     q = (topic.get('query','') or topic.get('title','')).lower()
     score, matched = check_usa_relevance_with_rank(q)
     if score == 0:
@@ -92,9 +97,9 @@ def score_usa_relevance(topic: Dict) -> int:
 
 def score_competition(topic: Dict) -> int:
     q = topic.get('query','') or topic.get('title','')
-    yt_data = get_youtube_search_data(q)
-    search_vol = yt_data["search_volume"]
-    video_count = yt_data["video_count"]
+    yt_data = get_youtube_search_data_fast(q)
+    search_vol = yt_data["search_volume"] or topic.get("search_volume", 30)
+    video_count = yt_data["video_count"] or topic.get("video_count", 20)
     if video_count == 0:
         video_count = 1
     ratio = search_vol / video_count
@@ -109,12 +114,22 @@ def score_competition(topic: Dict) -> int:
     return 72
 
 def score_growth(topic: Dict) -> int:
+    # Check Filter A growth (Breakout)
+    if topic.get("trend_type") == "breakout" or "Breakout" in str(topic.get("growth","")):
+        return 95
+    if topic.get("growth") and "%" in str(topic.get("growth")):
+        try:
+            pct = int(str(topic.get("growth")).replace("%","").replace(",",""))
+            if pct > 500:
+                return 92
+        except: pass
+    
     q = topic.get('query','') or topic.get('title','')
     freshness = score_freshness(topic)
-    yt_data = get_youtube_search_data(q)
-    search_vol = yt_data["search_volume"]
+    yt_data = get_youtube_search_data_fast(q)
+    search_vol = yt_data["search_volume"] or topic.get("search_volume", 30)
     usa_score, _ = check_usa_relevance_with_rank(q)
-    audience_potential = usa_score
+    audience_potential = usa_score or topic.get("american_interest", 75)
     if freshness >= 90 and search_vol >= 40 and audience_potential >= 85:
         return 92
     if search_vol >= 30 and audience_potential >= 75:
@@ -123,6 +138,20 @@ def score_growth(topic: Dict) -> int:
         return 78
     return 76
 
+def score_bot_friendly(topic: Dict) -> int:
+    """NEW - Filter C: Bot friendly check"""
+    if topic.get("bot_friendly") == True:
+        return topic.get("filter_c_score", 85)
+    if topic.get("bot_friendly") == False:
+        return 40
+    # Heuristic
+    q = (topic.get('query','') or topic.get('title','')).lower()
+    if any(x in q for x in ["interview", "live", "press conference", "official statement"]):
+        return 45
+    if any(x in q for x in ["explained", "what happened", "why", "breaking", "news", "update"]):
+        return 85
+    return 70
+
 def score_hook_quality(script: str) -> int:
     if not script:
         return 70
@@ -130,7 +159,7 @@ def score_hook_quality(script: str) -> int:
     score = 60
     if any(char.isdigit() for char in first_line):
         score += 10
-    if any(word in first_line for word in ["trump", "biden", "usa", "america", "court", "police", "crash", "dies"]):
+    if any(word in first_line for word in ["trump", "biden", "usa", "america", "court", "police", "crash", "dies", "$", "million"]):
         score += 8
     payoff_phrases = ["you need to know", "here's what happened", "this is what", "why this matters", "just happened", "breaking now"]
     if any(p in first_line for p in payoff_phrases):
@@ -167,9 +196,17 @@ def score_script_quality(script: str) -> int:
         score += 8
     if "[" not in script and "]" not in script:
         score += 3
+    # Check viral structure
+    if "[0-3s" in script or "HOOK" in script.upper():
+        score += 5
     return max(0, min(100, score))
 
 def score_trend_strength(topic: Dict) -> int:
+    # Filter A/B/C scores contribute
+    if topic.get("filter_a_score") and topic.get("filter_a_score") > 80:
+        return topic["filter_a_score"]
+    if topic.get("filter_b_score") and topic.get("filter_b_score") > 80:
+        return topic["filter_b_score"]
     q = topic.get('query','') or topic.get('title','')
     score, _ = check_usa_relevance_with_rank(q)
     if score == 0:
@@ -184,38 +221,49 @@ def evaluate_topic(topic: Dict, script: str = None):
     scores["usa_relevance"] = score_usa_relevance(topic)
     scores["competition"] = score_competition(topic)
     scores["curiosity"] = score_curiosity(topic)
+    scores["bot_friendly"] = score_bot_friendly(topic)  # NEW Filter C
+    
     if script:
         scores["hook_quality"] = score_hook_quality(script)
         scores["script_quality"] = score_script_quality(script)
     else:
         scores["hook_quality"] = 0
         scores["script_quality"] = 0
+    
     fails = []
     for k, v in scores.items():
         if v == 0: continue
-        # Hook quality ka threshold sirf 65, baaki sab ka 75
         threshold_for_k = 65 if k == "hook_quality" else THRESHOLD
+        if k == "bot_friendly":
+            threshold_for_k = 70  # Bot friendly must be >=70
         if v < threshold_for_k:
             fails.append(f"{k}={v} (<{threshold_for_k})")
+    
     if fails:
         return False, scores, f"FAIL: {', '.join(fails)}"
-    avg = sum([v for v in scores.values() if v>0]) / max(1, len([v for v in scores.values() if v>0]))
-    return True, scores, f"APPROVE: avg={avg:.1f}"
+    
+    # Average excluding 0s
+    vals = [v for v in scores.values() if v>0]
+    avg = sum(vals) / max(1, len(vals))
+    return True, scores, f"APPROVE: avg={avg:.1f} | BotFriendly={scores['bot_friendly']}"
 
 def gate_loop_for_shorts(topics: List[Dict], generate_script_fn):
-    print(f"[GATE] Real logic gate on {len(topics)} topics...")
+    print(f"[GATE FINAL] Real logic gate + Filter A+B+C + Bot Friendly on {len(topics)} topics...")
     for idx, topic in enumerate(topics):
         topic['index'] = idx
         q = topic.get('query','') or topic.get('title','')
-        print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:60]}")
+        print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:60]} | A:{topic.get('filter_a_score','')} B:{topic.get('filter_b_score','')} C:{topic.get('filter_c_score','')} Bot:{topic.get('bot_friendly','')}")
+        
         approve_6, scores_6, reason_6 = evaluate_topic(topic, script=None)
-        fails_6 = [k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity"] if scores_6.get(k,0) < THRESHOLD and scores_6.get(k,0)!=0] # hook_quality pre-script me check nahi hota
+        fails_6 = [k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity","bot_friendly"] if scores_6.get(k,0) < (70 if k=="bot_friendly" else THRESHOLD) and scores_6.get(k,0)!=0]
+        
         if fails_6:
             print(f"  SKIP (pre-script): {reason_6} | Scores: {scores_6}")
             continue
         print(f"  PASS: {scores_6}")
+        
         try:
-            script_result = generate_script_fn(q)
+            script_result = generate_script_fn(q if isinstance(topic, str) else topic)
             if isinstance(script_result, dict):
                 script_text = script_result.get('full_script','') or script_result.get('script','')
             else:
@@ -223,11 +271,13 @@ def gate_loop_for_shorts(topics: List[Dict], generate_script_fn):
         except Exception as e:
             print(f"  SKIP script gen failed: {e}")
             continue
+        
         approve_all, scores_all, reason_all = evaluate_topic(topic, script=script_text)
         if not approve_all:
             print(f"  SKIP (post-script): {reason_all} | Scores: {scores_all}")
             continue
         print(f"  APPROVE: {q} | Scores: {scores_all} | {reason_all}")
         return topic, script_text, scores_all
+    
     print("[GATE] All topics FAILED")
     return None, None, None

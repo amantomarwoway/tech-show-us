@@ -1,7 +1,26 @@
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# Also add src to path for new filters
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 import os, traceback
-from news_fetcher import fetch_all_news
+
+# ========== EDITED: Filter A+B+C add kiya same file me ==========
+# Pehle tha: from news_fetcher import fetch_all_news
+# Ab: Filter A+B+C + fallback
+try:
+    from trend_filters import apply_all_filters_short_bot
+    FILTERS_AVAILABLE = True
+except ImportError:
+    try:
+        from src.trend_filters import apply_all_filters_short_bot
+        FILTERS_AVAILABLE = True
+    except ImportError:
+        FILTERS_AVAILABLE = False
+        apply_all_filters_short_bot = None
+
+from news_fetcher import fetch_all_news  # fallback ke liye rakha hai
+# ================================================================
+
 from source_verifier import verify_stories
 from duplicate_detector import is_duplicate
 from script_generator import generate_script
@@ -12,13 +31,57 @@ from youtube_uploader import upload_video
 from database import init_db, save_story, mark_uploaded
 from shorts_gate import gate_loop_for_shorts, THRESHOLD
 
+# score_and_rank missing tha - fallback add kiya
+try:
+    from trend_score import score_and_rank
+except ImportError:
+    def score_and_rank(stories):
+        print("score_and_rank not found, using stories as ranked")
+        return stories
+
 def main():
     init_db()
-    print(f"1. Fetching USA news from RSS (30 topics)...")
-    raw_stories = fetch_all_news()  # Now returns 30
+    
+    # ========== EDITED: main.py me Filter A+B+C add kiya ==========
+    manual_topic = os.getenv("MANUAL_TOPIC", "").strip()
+    if manual_topic:
+        print(f"1. MANUAL Topic: {manual_topic}")
+        raw_stories = [{
+            "title": manual_topic,
+            "query": manual_topic,
+            "url": "",
+            "source": "manual",
+            "published": None,
+            "summary": manual_topic,
+            "search_volume": 80,
+            "bot_friendly": True,
+            "filter_c_score": 85
+        }]
+    elif FILTERS_AVAILABLE:
+        print(f"1. Fetching USA news - Filter A+B+C (Bot Friendly Rising Trends)...")
+        print(f"   [Filter A] Google Trends API YouTube Search Filter US - Breakout detection")
+        print(f"   [Filter B] YouTube Autocomplete Feeder - Half keyword hot suggestions")
+        print(f"   [Filter C] Format & Engagement Test - Faceless/AI friendly check")
+        try:
+            raw_stories = apply_all_filters_short_bot()
+            if not raw_stories:
+                print("Filter A+B+C returned 0, falling back to old RSS")
+                raw_stories = fetch_all_news()
+        except Exception as e:
+            print(f"Filter A+B+C crashed: {e}, falling back to old RSS")
+            traceback.print_exc()
+            raw_stories = fetch_all_news()
+    else:
+        print(f"1. Fetching USA news from RSS (30 topics) - Fallback (trend_filters not found)...")
+        raw_stories = fetch_all_news()
+    # ==============================================================
+    
     if not raw_stories:
         print("No news fetched"); return
     print(f"Fetched: {len(raw_stories)} stories")
+    # Print first 3 for debug
+    for i, s in enumerate(raw_stories[:3]):
+        print(f"  {i+1}. {s.get('query','') or s.get('title','')[:60]} | Vol {s.get('search_volume','')} | Bot {s.get('bot_friendly','')} | {s.get('format_test','')}")
 
     print(f"2. Verifying {len(raw_stories)} stories...")
     try:
@@ -48,13 +111,16 @@ def main():
         print("No stories left after all fallbacks, exiting")
         return
 
-    # ===== NEW: 8-FACTOR STRICT GATE (75 threshold, no fallback) =====
-    print(f"4. STARTING 8-FACTOR STRICT GATE - THRESHOLD {THRESHOLD} - NO FALLBACK")
-    print(f"   🔥 Trend strength | 📈 Growth | 🕐 Freshness | 🇺🇸 USA relevance | 🥊 Competition | 🧠 Curiosity | ⚡ Hook | 📝 Script")
+    # ===== NEW: 8-FACTOR STRICT GATE (75 threshold, no fallback) + Filter C Bot Friendly =====
+    print(f"4. STARTING 8-FACTOR STRICT GATE - THRESHOLD {THRESHOLD} - NO FALLBACK + Bot Friendly {70}")
+    print(f"   🔥 Trend strength | 📈 Growth | 🕐 Freshness | 🇺🇸 USA relevance | 🥊 Competition | 🧠 Curiosity | ⚡ Hook | 📝 Script | 🤖 Bot Friendly")
 
     def script_gen_wrapper(news_text):
-        # Wrapper to match gate_loop expectation: news_text is title string
-        dummy_story = {"title": news_text, "summary": news_text}
+        # Wrapper to match gate_loop expectation: news_text can be dict or string
+        if isinstance(news_text, dict):
+            dummy_story = news_text
+        else:
+            dummy_story = {"title": news_text, "summary": news_text, "query": news_text}
         result = generate_script(dummy_story)
         return result
 
@@ -64,21 +130,19 @@ def main():
         print("❌ All 30 topics FAILED strict 75 gate - SAFE EXIT, no low quality video")
         return
 
-    print(f"🔥 FINAL APPROVED TOPIC: {approved_topic['title']}")
+    print(f"🔥 FINAL APPROVED TOPIC: {approved_topic.get('title') or approved_topic.get('query')}")
     print(f"   Scores: {scores}")
 
-    # Now proceed with the approved story only
     story = approved_topic
-    # Duplicate check (optional, but keep)
     try:
         if is_duplicate(story):
-            print(f"NOTE: Duplicate found but still processing (APPROVED topic): {story['title']}")
+            print(f"NOTE: Duplicate found but still processing (APPROVED topic): {story.get('title') or story.get('query')}")
     except:
         pass
 
     story_id = save_story(story)
 
-    print(f"5. Generating FINAL script for APPROVED topic: {story['title']}")
+    print(f"5. Generating FINAL script for APPROVED topic: {story.get('title') or story.get('query')} (Viral Structure 0-3s Hook, 3-10s Context, 10-25s Conflict, 25-38s Payoff, 38-40s CTA)")
     script_data = generate_script(story)
     if not script_data: 
         print("Script generation failed, exiting (no fallback)")

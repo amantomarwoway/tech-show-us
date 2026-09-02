@@ -30,7 +30,7 @@ CHANNEL_SHORT = "Uncovered USA 24"
 KEYWORDS_RED = ["TRUMP","BIDEN","BREAKING","SHOCKING","USA","AMERICA","DIES","DEAD","CRASH","POLICE","COURT","FBI","JUST","ALERT","MASSIVE","HUGE","KILLED","ARRESTED","NASCAR"]
 
 WIDTH, HEIGHT = 1080, 1920
-WHITE_BAR_HEIGHT = 180  # DOUBLE from 90 to 180 - as requested
+WHITE_BAR_HEIGHT = 150  # CLEAN LIKE SECOND IMAGE - pure white, perfect position (was 180 grey)
 
 def get_piper_voice():
     os.makedirs("models", exist_ok=True)
@@ -129,21 +129,68 @@ def get_music_by_mood(topic: str):
             return "celebration uplifting victory"
         return "news background corporate"
 
-def make_text_image(text, fontsize, color, stroke_w=5, size=(1080, 200), bg_color=None):
+def make_text_image(text, fontsize, color, stroke_w=5, size=(1080, 200), bg_color=None, font_style="bold"):
+    # font_style: bold, bold_italic, regular
     if bg_color:
         img=Image.new('RGBA', size, bg_color)
     else:
         img=Image.new('RGBA', size, (0,0,0,0))
     d=ImageDraw.Draw(img)
     try:
-        f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
+        if font_style == "bold_italic":
+            # Try bold oblique for second image like italic clean
+            try:
+                f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf", fontsize)
+            except:
+                f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
+        elif font_style == "bold":
+            f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
+        else:
+            f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", fontsize)
     except:
         f=ImageFont.load_default()
-    d.text((size[0]//2, size[1]//2), text, font=f, fill=color, stroke_width=stroke_w, stroke_fill="black", anchor="mm")
+    # For pure white bar - no stroke (stroke_w=0) for clean look like second image
+    if stroke_w == 0:
+        d.text((size[0]//2, size[1]//2), text, font=f, fill=color, anchor="mm")
+    else:
+        d.text((size[0]//2, size[1]//2), text, font=f, fill=color, stroke_width=stroke_w, stroke_fill="black", anchor="mm")
     p=f"temp/txt_{random.randint(1,999999999)}.png"
     os.makedirs("temp",exist_ok=True)
     img.save(p)
     return p
+
+def make_white_bar_text_image(text, fontsize=46):
+    """SECOND IMAGE LIKE - pure white bar, perfect black bold italic, 2 line support, clean"""
+    # Handle 2 lines like second image "As a kid, this completely\nflew over head"
+    lines = text.split('\n')
+    if len(text) > 30 and '\n' not in text:
+        # Auto split into 2 lines for clean look like second image
+        words = text.split()
+        mid = len(words)//2
+        lines = [" ".join(words[:mid]), " ".join(words[mid:])]
+    
+    # Create image for 1 or 2 lines
+    if len(lines) == 1:
+        return make_text_image(lines[0], fontsize, "black", 0, (1020, 80), bg_color=(255,255,255,255), font_style="bold_italic")
+    else:
+        # For 2 lines - create bigger image like second image
+        img = Image.new('RGBA', (1020, 120), (255,255,255,255))
+        d = ImageDraw.Draw(img)
+        try:
+            f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf", fontsize-2)
+        except:
+            try:
+                f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize-2)
+            except:
+                f = ImageFont.load_default()
+        # Draw 2 lines centered
+        d.text((1020//2, 25), lines[0], font=f, fill="black", anchor="mm")
+        d.text((1020//2, 75), lines[1], font=f, fill="black", anchor="mm")
+        p = f"temp/txt_white_{random.randint(1,999999999)}.png"
+        os.makedirs("temp", exist_ok=True)
+        img.save(p)
+        return p
+
 
 def word_clip_god(word, dur, is_keyword=False):
     color = "#FF0000" if is_keyword else "#FFEB3B"
@@ -158,30 +205,34 @@ def word_clip_god(word, dur, is_keyword=False):
     return clip
 
 def top_branding_best(duration):
+    # FIX: Don't overlap white bar - start below white bar to keep white pure like second image
     path = make_text_image(CHANNEL_SHORT, 28, "white", 3, (650, 80))
-    top = ImageClip(path).set_duration(duration).set_position(('center', 0.02), relative=True).set_opacity(0.92)
+    # Position below white bar, not at 0.02 which overlaps white and makes grey
+    top = ImageClip(path).set_duration(duration).set_position(('center', (WHITE_BAR_HEIGHT+10)/1920), relative=True).set_opacity(0.92)
     top = top.resize(lambda t: 1 + 0.03*abs(np.sin(t*2)))
     flag_path = make_text_image("USA", 20, "#FFEB3B", 2, (80, 50))
-    flag = ImageClip(flag_path).set_duration(duration).set_position((20, 18))
+    # Flag also below white bar
+    flag = ImageClip(flag_path).set_duration(duration).set_position((20, WHITE_BAR_HEIGHT+10))
     return [top, flag]
 
-# ===== EDITED: WHITE BAR DOUBLE 180 + BOLD 65 + 5-6 WORDS MIRROR SENTENCE =====
+# ===== EDITED: SECOND IMAGE LIKE - PURE WHITE CLEAN, PERFECT FONT, BEST POSITION =====
 def white_bar_viral_hook_clip(viral_hook_text: str, duration: float):
-    """WHITE BAR: Height double 180px, bold 65, 5-6 words full mirror sentence, thumbnail pe saaf dikhegi"""
-    # White bar background - double height
-    white_bg = ColorClip((WIDTH, WHITE_BAR_HEIGHT), color=(255,255,255), duration=duration).set_position((0,0))
-    # Text - 5-6 words full sentence mirror - BOLD BIGGER
-    safe = viral_hook_text.replace("'","").replace('"',"").strip()[:60]
+    """SECOND IMAGE LIKE: Pure white #FFFFFF, clean bold italic font, perfect position, no grey"""
+    # PURE WHITE background - 100% white like second image, not grey transparent
+    white_bg = ColorClip((WIDTH, WHITE_BAR_HEIGHT), color=(255,255,255), duration=duration).set_position((0,0)).set_opacity(1)
+    
+    # Text - 5-6 words full sentence mirror - CLEAN LIKE SECOND IMAGE
+    safe = viral_hook_text.replace("'","").replace('"',"").strip()[:70]
     words = safe.split()
-    # Ensure 5-6 words only as requested
-    if len(words) > 6:
-        safe = " ".join(words[:6])
-    elif len(words) < 5:
-        # Keep as is if already 5-6, else keep original
-        safe = safe
-    # Bold bigger font 65 (was 54), stroke 3 bold
-    hook_path = make_text_image(safe.title(), 65, "black", 3, (1020, 150), bg_color=(255,255,255,0))
-    hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', 15))
+    # Ensure 5-6 words clean like second image "As a kid, this completely flew over head"
+    if len(words) > 7:
+        safe = " ".join(words[:7])
+    
+    # PURE BLACK BOLD ITALIC, NO STROKE - clean like second image (second image has no stroke, pure black)
+    # Font 42-46 perfect for thumbnail like second image, not 65 bold with stroke
+    hook_path = make_white_bar_text_image(safe, fontsize=44)
+    # Perfect center position in white bar - like second image best position
+    hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', (WHITE_BAR_HEIGHT-80)//2))
     return [white_bg, hook_clip]
 
 def hook_best_free(hook_text, title_keyword):

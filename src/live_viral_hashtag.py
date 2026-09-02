@@ -173,3 +173,23 @@ def get_world_viral_hashtag():
 def get_live_viral_hashtag():
     """Backward compat - calls world viral"""
     return get_world_viral_hashtag()
+
+
+def get_google_structured_script(topic: str) -> dict:
+    """GOOGLE DIRECT - Proper structured script"""
+    try:
+        import requests, re
+        r = requests.get("https://suggestqueries.google.com/complete/search",
+            params={"client":"youtube","ds":"yt","q":topic,"hl":"en","gl":"US"},
+            timeout=5, headers={"User-Agent":"Mozilla/5.0"})
+        matches = re.findall(r'"([^"]+)"', r.text)
+        suggestions = [m for m in matches[1:] if len(m)>5][:5]
+        google_context = " ".join(suggestions) if suggestions else topic
+        hook = f"Stop scrolling folks. {topic.title()} just shocked America - this is huge."
+        news = f"Here's what happened in {topic} - {google_context[:100]}. This is breaking right now."
+        context = f"Wait, here's the crazy part - why America is talking about {topic}. This changes everything for USA."
+        cta = f"What do y'all think about {topic}? Comment below."
+        full = f"{hook} {news} {context} {cta}"
+        return {"hook": hook, "news": news, "context": context, "cta": cta, "full": full[:600]}
+    except:
+        return {"hook": f"Stop scrolling. {topic.title()} just happened.", "news": f"Breaking in {topic}.", "context": f"Why USA cares.", "cta": f"Comment below.", "full": f"Stop scrolling folks. Breaking in {topic} - this just happened and it's huge. What do y'all think? Comment below."}

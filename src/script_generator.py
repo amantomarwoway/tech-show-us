@@ -16,7 +16,6 @@ def call_gemini(prompt):
     api_key=os.getenv("GEMINI_API_KEY","")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
-    # FIXED: NEW lib me 2.0-flash use karo (v1beta me exist karta hai), OLD me 1.5-flash
     if GENAI_NEW:
         try:
             client=genai.Client(api_key=api_key)
@@ -24,7 +23,6 @@ def call_gemini(prompt):
             return response.text.strip() if response.text else ""
         except Exception as e:
             err=str(e)
-            # 404 v1beta error aaya to OLD lib pe fallback
             if "404" in err or "NOT_FOUND" in err or "not found" in err.lower() or "v1beta" in err.lower():
                 try:
                     import google.generativeai as genai_old
@@ -40,7 +38,6 @@ def call_gemini(prompt):
                     raise e2
             if "429" in err or "RESOURCE_EXHAUSTED" in err:
                 raise
-            # other error, try old lib
             try:
                 import google.generativeai as genai_old
                 genai_old.configure(api_key=api_key)
@@ -71,7 +68,6 @@ def get_yt_suggestions(q):
     except:
         return []
 
-# FIXED: LOCAL ONLY - NO GEMINI CALL
 def generate_viral_hook_from_script(script_text: str, topic: str) -> str:
     try:
         clean = re.sub(r'\[.*?\]','', script_text)
@@ -142,33 +138,43 @@ TAGS_SHORTS: <h>
     try:
         raw=call_gemini(prompt)
     except Exception as e:
-        # FIXED: 429 and 404 both handle
         err=str(e)
         if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower() or "404" in err or "NOT_FOUND" in err:
-            print(f"[GEMINI FALLBACK {err[:50]}] Fallback for: {topic}")
+            print(f"[GEMINI FALLBACK] Fallback for: {topic}")
             fb_title = f"{topic[:50]} Breaking News Today"
             fb_script = f"{topic} is officially back. You need to see this. Here's why this matters. This just happened and it's huge. Wait till the end."
             fb_hook = generate_viral_hook_from_script(fb_script, topic)
             return {"title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"news","captions":"breaking","pacing":"fast"},"description":f"{fb_script} #usanews #shorts","tags_primary":"","tags_secondary":"","tags_shorts":"","tags_all":"","sources":"Fallback","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_hook,"white_bar_text":fb_hook,"mood":"breaking news"}
         raise e
 
-    title_options=[]; selected=topic[:60]; full_vo=""; segments={}; music="Trending heavy-bass hip-hop, energetic, 100 BPM"; captions=f"{topic.split()[0]}, bold colorful"; pacing="Fast and punchy"; description=""; tp=""; ts=""; th=""; viral_hook_parsed=""
+    title_options=[]
+    selected=topic[:60]
+    full_vo=""
+    segments={}
+    music="Trending heavy-bass hip-hop, energetic, 100 BPM"
+    captions=f"{topic.split()[0]}, bold colorful"
+    pacing="Fast and punchy"
+    description=""
+    tp=""
+    ts=""
+    th=""
+    viral_hook_parsed=""
     try:
         if "TITLE_OPTIONS:" in raw:
             block=raw.split("TITLE_OPTIONS:")[1].split("SELECTED_TITLE:")[0]
-            for line in block.split("
-"):
+            for line in block.splitlines():
                 line=line.strip()
-                if not line: continue
+                if not line:
+                    continue
                 if line[0].isdigit():
                     clean=re.sub(r'^\d+\.\s*','',line).strip()
                     if len(clean)>10:
                         title_options.append(clean[:95])
         if "SELECTED_TITLE:" in raw:
             sel=raw.split("SELECTED_TITLE:")[1].split("VIRAL_HOOK:")[0] if "VIRAL_HOOK:" in raw else raw.split("SELECTED_TITLE:")[1].split("SCRIPT:")[0]
-            selected=sel.strip().split("\n")[0][:95]
+            selected=sel.strip().splitlines()[0][:95]
         if "VIRAL_HOOK:" in raw:
-            vh=raw.split("VIRAL_HOOK:")[1].split("SCRIPT:")[0].strip().split("\n")[0]
+            vh=raw.split("VIRAL_HOOK:")[1].split("SCRIPT:")[0].strip().splitlines()[0]
             viral_hook_parsed=vh.strip()[:50]
         if "SCRIPT:" in raw:
             sb=raw.split("SCRIPT:")[1].split("FULL_VOICEOVER:")[0] if "FULL_VOICEOVER:" in raw else raw.split("SCRIPT:")[1].split("VISUAL_INSTRUCTIONS:")[0]
@@ -184,31 +190,43 @@ TAGS_SHORTS: <h>
             full_vo=fv[:600]
         if "VISUAL_INSTRUCTIONS:" in raw:
             vi=raw.split("VISUAL_INSTRUCTIONS:")[1].split("DESCRIPTION:")[0]
-            if "Music:" in vi: music=vi.split("Music:")[1].split("\n")[0].strip()[:150]
-            if "Captions:" in vi: captions=vi.split("Captions:")[1].split("\n")[0].strip()[:200]
-            if "Pacing:" in vi: pacing=vi.split("Pacing:")[1].split("\n")[0].strip()[:200]
+            if "Music:" in vi:
+                music=vi.split("Music:")[1].split("\n")[0].strip()[:150]
+            if "Captions:" in vi:
+                captions=vi.split("Captions:")[1].split("\n")[0].strip()[:200]
+            if "Pacing:" in vi:
+                pacing=vi.split("Pacing:")[1].split("\n")[0].strip()[:200]
         if "DESCRIPTION:" in raw:
             description=raw.split("DESCRIPTION:")[1].split("TAGS_PRIMARY:")[0].strip()[:1200]
-        if "TAGS_PRIMARY:" in raw: tp=raw.split("TAGS_PRIMARY:")[1].split("TAGS_SECONDARY:")[0].strip()[:400]
-        if "TAGS_SECONDARY:" in raw: ts=raw.split("TAGS_SECONDARY:")[1].split("TAGS_SHORTS:")[0].strip()[:400]
-        if "TAGS_SHORTS:" in raw: th=raw.split("TAGS_SHORTS:")[1].strip()[:400]
+        if "TAGS_PRIMARY:" in raw:
+            tp=raw.split("TAGS_PRIMARY:")[1].split("TAGS_SECONDARY:")[0].strip()[:400]
+        if "TAGS_SECONDARY:" in raw:
+            ts=raw.split("TAGS_SECONDARY:")[1].split("TAGS_SHORTS:")[0].strip()[:400]
+        if "TAGS_SHORTS:" in raw:
+            th=raw.split("TAGS_SHORTS:")[1].strip()[:400]
     except Exception as e:
         print(f"Parse error {e}")
     clean_tts=re.sub(r'\[.*?\]','',full_vo)
     clean_tts=re.sub(r'Visual:.*?\|','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'Audio:\s*','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'\s+',' ',clean_tts).strip()
-    if len(clean_tts.split())>100: clean_tts=" ".join(clean_tts.split()[:95])
+    if len(clean_tts.split())>100:
+        clean_tts=" ".join(clean_tts.split()[:95])
     if len(clean_tts)<20:
         tmp=" ".join(segments.values())
         tmp=re.sub(r'Visual:.*?\|','',tmp, flags=re.I)
         tmp=re.sub(r'Audio:\s*','',tmp, flags=re.I)
         tmp=re.sub(r'\[.*?\]','',tmp)
         clean_tts=re.sub(r'\s+',' ',tmp).strip()[:500]
-    if not title_options: title_options=[f"{topic[:30]} is FINALLY Back! 🤯", f"{topic[:40]} Just Signed! Breaking!", f"{topic[:35]} - Will It Work? Comment!", f"{topic[:40]} Returns After Years! (USA Deal)"]
-    if not selected or len(selected)<10: selected=title_options[0]
-    if not description: description=f"{clean_tts}\n\nWhat do you think about {topic}? Drop predictions below!\n\nLIKE COMMENT SUBSCRIBE for more breaking USA news!"
-    if viral_hook_parsed and 2 <= len(viral_hook_parsed.split()) <= 6: viral_hook = viral_hook_parsed
-    else: viral_hook = generate_viral_hook_from_script(clean_tts, topic)
+    if not title_options:
+        title_options=[f"{topic[:30]} is FINALLY Back! 🤯", f"{topic[:40]} Just Signed! Breaking!", f"{topic[:35]} - Will It Work? Comment!", f"{topic[:40]} Returns After Years! (USA Deal)"]
+    if not selected or len(selected)<10:
+        selected=title_options[0]
+    if not description:
+        description=f"{clean_tts}\n\nWhat do you think about {topic}? Drop predictions below!\n\nLIKE COMMENT SUBSCRIBE for more breaking USA news!"
+    if viral_hook_parsed and 2 <= len(viral_hook_parsed.split()) <= 6:
+        viral_hook = viral_hook_parsed
+    else:
+        viral_hook = generate_viral_hook_from_script(clean_tts, topic)
     white_bar_text = viral_hook
     return {"title":selected,"title_options":title_options,"full_script":clean_tts,"raw_script_structured":raw,"script_segments":segments,"visual_instructions":{"music":music,"captions":captions,"pacing":pacing},"description":f"{description}\n\n#usanews #breakingnews #shorts {th}","tags_primary":tp,"tags_secondary":ts,"tags_shorts":th,"tags_all":f"{tp}, {ts}, {th}","sources":f"Filter A+B+C Tacko Style Vol {search_vol}","viral_check":{"words":len(clean_tts.split()),"has_segments":len(segments)==4},"viral_hook": viral_hook,"white_bar_text": white_bar_text,"mood": music}

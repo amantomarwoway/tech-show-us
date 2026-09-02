@@ -31,16 +31,11 @@ def get_youtube_search_data_fast(query: str):
 def score_freshness(topic: Dict) -> int:
     try:
         pub=topic.get('published')
-        if not pub:
-            return 82
-        import time
-        if isinstance(pub,(int,float)):
-            pub_dt=datetime.fromtimestamp(pub, tz=timezone.utc)
+        if not pub: return 82
+        if isinstance(pub,(int,float)): pub_dt=datetime.fromtimestamp(pub, tz=timezone.utc)
         else:
-            try:
-                pub_dt=datetime.fromtimestamp(time.mktime(pub), tz=timezone.utc)
-            except:
-                return 82
+            try: pub_dt=datetime.fromtimestamp(time.mktime(pub), tz=timezone.utc)
+            except: return 82
         age_hours=(datetime.now(timezone.utc)-pub_dt).total_seconds()/3600
         if age_hours<=1: return 96
         if age_hours<=2: return 90
@@ -48,8 +43,7 @@ def score_freshness(topic: Dict) -> int:
         if age_hours<=6: return 80
         if age_hours<=12: return 76
         return 72
-    except:
-        return 80
+    except: return 80
 
 def score_curiosity(topic): 
     q=topic.get('query','') or topic.get('title','')
@@ -71,8 +65,7 @@ def score_usa_relevance(topic):
 def score_competition(topic):
     q=topic.get('query','') or topic.get('title','')
     yt=get_youtube_search_data_fast(q)
-    sv=yt["search_volume"]
-    vc=yt["video_count"]
+    sv=yt["search_volume"]; vc=yt["video_count"]
     if vc==0: vc=1
     ratio=sv/vc
     if ratio>=3.0 and sv>=45: return 92
@@ -93,24 +86,17 @@ def score_growth(topic):
     return 76
 
 def score_bot_friendly(topic):
-    if "bot_friendly_score" in topic:
-        return topic.get("bot_friendly_score",75)
-    if "filter_c_score" in topic:
-        return topic.get("filter_c_score",75)
-    if topic.get("bot_friendly") is False:
-        return 50
+    if "bot_friendly_score" in topic: return topic.get("bot_friendly_score",75)
+    if "filter_c_score" in topic: return topic.get("filter_c_score",75)
+    if topic.get("bot_friendly") is False: return 50
     q=(topic.get('query','') or topic.get('title','')).lower()
     reject=["obituary","recipe","horoscope","lottery","crossword","live interview 3 hours","podcast 3 hours","full press conference"]
-    if any(r in q for r in reject):
-        return 40
+    if any(r in q for r in reject): return 40
     score=70
     accept=["signs","returns","announces","deal","contract","trade","injury","breaking","official","just in","signed","76ers","lakers","nba","nfl","exhibit 10","training camp"]
-    if any(a in q for a in accept):
-        score+=15
-    if topic.get("search_volume",0)>=40:
-        score+=10
-    if "rising" in topic.get("growth","") or "breakout" in topic.get("growth",""):
-        score+=5
+    if any(a in q for a in accept): score+=15
+    if topic.get("search_volume",0)>=40: score+=10
+    if "rising" in topic.get("growth","") or "breakout" in topic.get("growth",""): score+=5
     return min(95,score)
 
 def score_hook_quality(script):
@@ -122,17 +108,13 @@ def score_hook_quality(script):
     payoff=["you need to know","here's what happened","this is what","why this matters","just happened","breaking now","officially back"]
     if any(p in first for p in payoff): score+=12
     for w in HOOK_PAYOFF_WORDS:
-        if w in first:
-            score+=5
-            break
+        if w in first: score+=5; break
     if 8<=len(first.split())<=15: score+=5
     return max(0,min(100,score))
 
 def score_script_quality(script):
     if not script: return 70
-    words=script.split()
-    wc=len(words)
-    sc=script.count('.')+script.count('!')+script.count('?')
+    words=script.split(); wc=len(words); sc=script.count('.')+script.count('!')+script.count('?')
     if sc<3: return 68
     score=70
     if 60<=wc<=95: score+=10
@@ -163,20 +145,14 @@ def evaluate_topic(topic, script=None):
     scores["competition"]=score_competition(topic)
     scores["curiosity"]=score_curiosity(topic)
     scores["bot_friendly"]=score_bot_friendly(topic)
-    if "filter_a_score" in topic:
-        scores["filter_a"]=topic["filter_a_score"]
-    if "filter_b_score" in topic:
-        scores["filter_b"]=topic["filter_b_score"]
+    if "filter_a_score" in topic: scores["filter_a"]=topic["filter_a_score"]
+    if "filter_b_score" in topic: scores["filter_b"]=topic["filter_b_score"]
     if script:
         scores["hook_quality"]=score_hook_quality(script)
         scores["script_quality"]=score_script_quality(script)
-        if "Visual:" in script and "Audio:" in script:
-            scores["tacko_structure"]=90
-        else:
-            scores["tacko_structure"]=75
+        scores["tacko_structure"]=90 if "Visual:" in script and "Audio:" in script else 75
     else:
-        scores["hook_quality"]=0
-        scores["script_quality"]=0
+        scores["hook_quality"]=0; scores["script_quality"]=0
     fails=[]
     for k,v in scores.items():
         if v==0: continue
@@ -184,19 +160,19 @@ def evaluate_topic(topic, script=None):
         elif k=="hook_quality": thresh=65
         elif k in ["filter_a","filter_b"]: thresh=60
         else: thresh=THRESHOLD
-        if v<thresh:
-            fails.append(f"{k}={v} (<{thresh})")
-    if fails:
-        return False, scores, f"FAIL: {', '.join(fails)}"
+        if v<thresh: fails.append(f"{k}={v} (<{thresh})")
+    if fails: return False, scores, f"FAIL: {', '.join(fails)}"
     avg=sum([v for v in scores.values() if v>0])/max(1,len([v for v in scores.values() if v>0]))
     return True, scores, f"APPROVE: avg={avg:.1f}"
 
 def gate_loop_for_shorts(topics, generate_script_fn):
-    print(f"[GATE FINAL FAST] Gate on {len(topics)} topics - Filter A/B/C + Bot Friendly + Tacko")
-    for idx, topic in enumerate(topics):
+    # FIXED: Only 3 topics to save quota
+    topics_limited = topics[:3]
+    print(f"[GATE FINAL FAST] Gate on {len(topics_limited)} topics (limited to 3) - Filter A/B/C + Bot Friendly + Tacko")
+    for idx, topic in enumerate(topics_limited):
         topic['index']=idx
         q=topic.get('query','') or topic.get('title','')
-        print(f"\n[GATE] {idx+1}/{len(topics)} Checking: {q[:60]} | Vol {topic.get('search_volume','?')} | Bot {topic.get('filter_c_score', topic.get('bot_friendly_score','?'))}")
+        print(f"\n[GATE] {idx+1}/{len(topics_limited)} Checking: {q[:60]} | Vol {topic.get('search_volume','?')} | Bot {topic.get('filter_c_score', topic.get('bot_friendly_score','?'))}")
         approve_6, scores_6, reason_6=evaluate_topic(topic, script=None)
         fails_6=[k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity","bot_friendly"] if scores_6.get(k,0)<(BOT_FRIENDLY_THRESHOLD if k=="bot_friendly" else THRESHOLD) and scores_6.get(k,0)!=0]
         if fails_6:
@@ -210,6 +186,11 @@ def gate_loop_for_shorts(topics, generate_script_fn):
             else:
                 script_text=str(script_result)
         except Exception as e:
+            err=str(e)
+            if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+                print(f"  [QUOTA 429] Fallback for {q[:40]}")
+                fallback_text = f"{q} is breaking. Here's what happened. You need to know this. Wait till end."
+                return topic, {"title": q[:60], "full_script": fallback_text, "viral_hook": "Breaking Update", "white_bar_text": "Breaking Update"}, scores_6
             print(f"  SKIP script gen failed: {e}")
             continue
         approve_all, scores_all, reason_all=evaluate_topic(topic, script=script_text)

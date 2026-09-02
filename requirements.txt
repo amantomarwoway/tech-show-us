@@ -1,5 +1,5 @@
 pytrends
-google-genai
+google-genai==0.3.0
 moviepy==1.0.3
 requests
 Pillow
@@ -13,3 +13,4 @@ imageio-ffmpeg
 piper-tts
 faster-whisper
 pexels
+google-generativeai==0.8.5

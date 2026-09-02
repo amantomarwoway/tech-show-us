@@ -103,6 +103,50 @@ def get_world_viral_hashtag():
         print(f"World viral fail: {e}")
     return "#breakingnews"
 
+
+def get_google_structured_script(topic: str) -> dict:
+    """GOOGLE DIRECT - Proper structured script for full sound - no Gemini"""
+    try:
+        # Google se topic details lao
+        r = requests.get("https://suggestqueries.google.com/complete/search",
+            params={"client":"youtube","ds":"yt","q":topic,"hl":"en","gl":"US"},
+            timeout=5, headers={"User-Agent":"Mozilla/5.0"})
+        import re as re2
+        matches = re2.findall(r'"([^"]+)"', r.text)
+        suggestions = [m for m in matches[1:] if len(m)>5][:5]
+        google_context = " ".join(suggestions) if suggestions else topic
+        
+        # Structured script Google prompt - proper 4 segments
+        # Using Google search data to build proper script
+        hook = f"Stop scrolling folks. {topic.title()} just shocked America - this is huge."
+        news = f"Here's what happened in {topic} - {google_context[:100]}. This is breaking right now."
+        context = f"Wait, here's the crazy part - why America is talking about {topic}. This changes everything for USA, and you need to know why."
+        cta = f"What do y'all think about {topic}? Comment below and let me know."
+        
+        full = f"{hook} {news} {context} {cta}"
+        # Ensure 85-95 words for proper structure
+        words = full.split()
+        if len(words) < 80:
+            full += f" This is massive news for {topic} and USA is reacting."
+        
+        return {
+            "hook": hook,
+            "news": news,
+            "context": context,
+            "cta": cta,
+            "full": full[:600]
+        }
+    except Exception as e:
+        print(f"[GOOGLE SCRIPT] Fail: {e}")
+        return {
+            "hook": f"Stop scrolling. {topic.title()} just happened.",
+            "news": f"Breaking in {topic} right now.",
+            "context": f"Here's why USA cares about {topic}.",
+            "cta": f"What do you think? Comment below.",
+            "full": f"Stop scrolling folks. Breaking in {topic} - this just happened and it's huge. Here's why America is talking about it. What do y'all think? Comment below."
+        }
+
+
 def get_yt_suggestions(q):
     try:
         r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":q,"hl":"en","gl":"US"}, timeout=4, headers={"User-Agent":"Mozilla/5.0"})
@@ -134,6 +178,7 @@ def generate_script(news_input):
     if len(topic)<3:
         topic="USA Breaking News"
     yt_sug=get_yt_suggestions(topic)
+    google_struct = get_google_structured_script(topic)  # GOOGLE PROPER STRUCTURED SCRIPT
 
     # TITLE GOOGLE SE AAYEGA - NOT GEMINI FIXED 9-11 WORDS
     google_title = get_google_searchable_title(topic)
@@ -198,8 +243,9 @@ DESCRIPTION:
             fb_title = google_title
             if len(fb_title.split()) < 4:
                 fb_title = f"{topic.title()} Shocks America"
-            # Script
-            fb_script = f"Stop scrolling folks. Breaking in {topic[:30]} - this just happened and it's huge. Here's why America is talking about it - wait till you hear this part. What do y'all think? Comment below."
+            # Script - GOOGLE STRUCTURED (proper structure + full sound)
+            g_struct = get_google_structured_script(topic)
+            fb_script = g_struct["full"]
             # White bar 5-6 words
             fb_white = " ".join(topic.split()[:6]).title()[:50]
             # Description
@@ -280,8 +326,9 @@ DESCRIPTION:
     clean_tts=re.sub(r'Audio:\s*','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'\s+',' ',clean_tts).strip()
     
-    if len(clean_tts.split())>100:
-        clean_tts=" ".join(clean_tts.split()[:95])
+    # SOUND FIX: No cut to 95 words - keep full script for proper audio
+    if len(clean_tts.split())>120:
+        clean_tts=" ".join(clean_tts.split()[:110])  # was 95, now 110 for full sound
     if len(clean_tts)<20:
         tmp=" ".join(segments.values())
         tmp=re.sub(r'Visual:.*?\|','',tmp, flags=re.I)

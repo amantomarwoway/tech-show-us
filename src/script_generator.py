@@ -35,6 +35,53 @@ def get_yt_suggestions(q):
     except:
         return []
 
+# ===== ADD-ON: VIRAL HOOK 4-5 WORD CTR =====
+def generate_viral_hook_from_script(script_text: str, topic: str) -> str:
+    """ADD-ON: Script se 4-5 word ka viral hook jo white bar me ayega CTR ke liye"""
+    try:
+        hook_prompt = f"""
+You are YouTube Shorts CTR expert.
+Script: {script_text[:500]}
+Topic: {topic}
+
+TASK: Write ONLY 4-5 words viral hook for top white bar.
+Rules:
+- 4-5 words ONLY, Title Case
+- Shocking, emotional, curiosity, instantly clickable
+- Examples: "Most Justifiable Outburst", "He Lost Everything", "This Changes Everything", "Unbelievable Betrayal", "She Couldn't Believe It", "Trump's Shocking Move"
+- No hashtags, no emoji, no quotes
+- Must be related to script
+
+Return ONLY hook text, nothing else.
+"""
+        hook = call_gemini(hook_prompt)
+        hook = hook.strip().replace('"','').replace("'","").replace(":","").replace(".","")[:60]
+        hook_words = hook.split()
+        if 3 <= len(hook_words) <= 6:
+            return hook.title()
+    except Exception as e:
+        print(f"Viral hook gen error: {e}")
+    
+    # Fallback: heuristic from script
+    try:
+        clean = re.sub(r'\[.*?\]','', script_text)
+        clean = re.sub(r'Visual:.*?\|','', clean, flags=re.I)
+        clean = re.sub(r'Audio:\s*','', clean, flags=re.I)
+        words = clean.split()
+        # Find emotional words
+        triggers = ["shocking","unbelievable","justifiable","outburst","betrayal","arrested","breaking","dies","wins","lost","everything","changes","couldn't","believe"]
+        for t in triggers:
+            if t in clean.lower():
+                # Return 4-5 words around trigger
+                idx = clean.lower().find(t)
+                snippet = clean[max(0,idx-20):idx+30]
+                snippet_words = snippet.split()[:5]
+                if len(snippet_words) >= 3:
+                    return " ".join(snippet_words[:5]).title()[:35]
+        return " ".join(words[:5]).title()[:35]
+    except:
+        return "This Changes Everything"
+
 def generate_script(news_input):
     if isinstance(news_input, dict):
         topic=news_input.get('query','') or news_input.get('title','') or news_input.get('summary','')
@@ -168,4 +215,14 @@ TAGS_SHORTS: <h>
         selected=title_options[0]
     if not description:
         description=f"{clean_tts}\n\nWhat do you think about {topic}? Drop predictions below!\n\nLIKE COMMENT SUBSCRIBE for more breaking USA news!"
-    return {"title":selected,"title_options":title_options,"full_script":clean_tts,"raw_script_structured":raw,"script_segments":segments,"visual_instructions":{"music":music,"captions":captions,"pacing":pacing},"description":f"{description}\n\n#usanews #breakingnews #shorts {th}","tags_primary":tp,"tags_secondary":ts,"tags_shorts":th,"tags_all":f"{tp}, {ts}, {th}","sources":f"Filter A+B+C Tacko Style Vol {search_vol}","viral_check":{"words":len(clean_tts.split()),"has_segments":len(segments)==4}}
+
+    # ===== ADD-ON: VIRAL HOOK 4-5 WORDS CTR (OLD CODE ME ADD KIYA, KUCH DELETE NAHI KIYA) =====
+    viral_hook = generate_viral_hook_from_script(clean_tts, topic)
+    white_bar_text = viral_hook  # White bar me ye ayega
+
+    return {"title":selected,"title_options":title_options,"full_script":clean_tts,"raw_script_structured":raw,"script_segments":segments,"visual_instructions":{"music":music,"captions":captions,"pacing":pacing},"description":f"{description}\n\n#usanews #breakingnews #shorts {th}","tags_primary":tp,"tags_secondary":ts,"tags_shorts":th,"tags_all":f"{tp}, {ts}, {th}","sources":f"Filter A+B+C Tacko Style Vol {search_vol}","viral_check":{"words":len(clean_tts.split()),"has_segments":len(segments)==4},
+            # NEW FIELDS ADD-ON
+            "viral_hook": viral_hook,
+            "white_bar_text": white_bar_text,
+            "mood": music
+            }

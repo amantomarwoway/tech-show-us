@@ -16,16 +16,52 @@ def call_gemini(prompt):
     api_key=os.getenv("GEMINI_API_KEY","")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
+    # FIXED: NEW lib me 2.0-flash use karo (v1beta me exist karta hai), OLD me 1.5-flash
     if GENAI_NEW:
-        client=genai.Client(api_key=api_key)
-        response=client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-        return response.text.strip() if response.text else ""
+        try:
+            client=genai.Client(api_key=api_key)
+            response=client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            return response.text.strip() if response.text else ""
+        except Exception as e:
+            err=str(e)
+            # 404 v1beta error aaya to OLD lib pe fallback
+            if "404" in err or "NOT_FOUND" in err or "not found" in err.lower() or "v1beta" in err.lower():
+                try:
+                    import google.generativeai as genai_old
+                    genai_old.configure(api_key=api_key)
+                    model=genai_old.GenerativeModel('gemini-1.5-flash')
+                    response=model.generate_content(prompt)
+                    return response.text.strip() if response.text else ""
+                except Exception as e2:
+                    if "404" in str(e2):
+                        model=genai_old.GenerativeModel('gemini-1.5-flash-latest')
+                        response=model.generate_content(prompt)
+                        return response.text.strip() if response.text else ""
+                    raise e2
+            if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                raise
+            # other error, try old lib
+            try:
+                import google.generativeai as genai_old
+                genai_old.configure(api_key=api_key)
+                model=genai_old.GenerativeModel('gemini-1.5-flash')
+                response=model.generate_content(prompt)
+                return response.text.strip() if response.text else ""
+            except:
+                raise e
     else:
         import google.generativeai as genai_old
         genai_old.configure(api_key=api_key)
-        model=genai_old.GenerativeModel('gemini-1.5-flash')
-        response=model.generate_content(prompt)
-        return response.text.strip() if response.text else ""
+        try:
+            model=genai_old.GenerativeModel('gemini-1.5-flash')
+            response=model.generate_content(prompt)
+            return response.text.strip() if response.text else ""
+        except Exception as e:
+            if "404" in str(e):
+                model=genai_old.GenerativeModel('gemini-1.5-flash-latest')
+                response=model.generate_content(prompt)
+                return response.text.strip() if response.text else ""
+            raise
 
 def get_yt_suggestions(q):
     try:
@@ -106,19 +142,22 @@ TAGS_SHORTS: <h>
     try:
         raw=call_gemini(prompt)
     except Exception as e:
-        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
-            print(f"[QUOTA 429] Fallback for: {topic}")
+        # FIXED: 429 and 404 both handle
+        err=str(e)
+        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower() or "404" in err or "NOT_FOUND" in err:
+            print(f"[GEMINI FALLBACK {err[:50]}] Fallback for: {topic}")
             fb_title = f"{topic[:50]} Breaking News Today"
             fb_script = f"{topic} is officially back. You need to see this. Here's why this matters. This just happened and it's huge. Wait till the end."
             fb_hook = generate_viral_hook_from_script(fb_script, topic)
-            return {"title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"news","captions":"breaking","pacing":"fast"},"description":f"{fb_script} #usanews #shorts","tags_primary":"","tags_secondary":"","tags_shorts":"","tags_all":"","sources":"Fallback 429","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_hook,"white_bar_text":fb_hook,"mood":"breaking news"}
+            return {"title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"news","captions":"breaking","pacing":"fast"},"description":f"{fb_script} #usanews #shorts","tags_primary":"","tags_secondary":"","tags_shorts":"","tags_all":"","sources":"Fallback","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_hook,"white_bar_text":fb_hook,"mood":"breaking news"}
         raise e
 
     title_options=[]; selected=topic[:60]; full_vo=""; segments={}; music="Trending heavy-bass hip-hop, energetic, 100 BPM"; captions=f"{topic.split()[0]}, bold colorful"; pacing="Fast and punchy"; description=""; tp=""; ts=""; th=""; viral_hook_parsed=""
     try:
         if "TITLE_OPTIONS:" in raw:
             block=raw.split("TITLE_OPTIONS:")[1].split("SELECTED_TITLE:")[0]
-            for line in block.split("\n"):
+            for line in block.split("
+"):
                 line=line.strip()
                 if not line: continue
                 if line[0].isdigit():

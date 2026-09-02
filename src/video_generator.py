@@ -80,7 +80,7 @@ def get_best_free_clips_fixed(q, num=8):
                     test_clip = VideoFileClip(tmp_path)
                     test_clip.get_frame(0)
                     test_clip.close()
-                    final_clip = VideoFileClip(tmp_path).resize(height=1920).set_position('center').without_audio()
+                    final_clip = VideoFileClip(tmp_path).resize(height=1920-WHITE_BAR_HEIGHT).set_position('center').without_audio()
                     clips.append(final_clip)
                 except Exception as e:
                     try:
@@ -255,6 +255,139 @@ def outro_best_free():
     clips.extend([red, yellow])
     return CompositeVideoClip(clips).set_duration(duration)
 
+
+def get_giphy_pro_editor(script_text: str, total_duration: float):
+    """
+    PRO EDITOR GIPHY - Bot khud decide karega kaha lagana hai, ffmpeg style
+    Jaise pro editor lagata hai - emotion, keyword, timing ke hisaab se
+    """
+    clips=[]
+    try:
+        key = os.getenv("GIPHY_API_KEY")
+        if not key:
+            print("[GIPHY PRO] No API key - skip")
+            return []
+        
+        # Script se keywords nikalo jaha giphy lagna chahiye
+        words = script_text.lower().split()
+        # Emotional triggers jaha pro editor giphy lagata hai
+        triggers = {
+            "shocking": "shocked reaction",
+            "breaking": "breaking news",
+            "wow": "wow reaction",
+            "huge": "mind blown",
+            "crazy": "crazy reaction",
+            "unbelievable": "shocked",
+            "dies": "sad rip",
+            "dead": "sad rip",
+            "wins": "celebration party",
+            "arrested": "police siren",
+            "crash": "crash explosion",
+            "trump": "trump",
+            "biden": "biden"
+        }
+        
+        # Bot decides positions based on script timing - ffmpeg pro style
+        total_words = len(words)
+        word_duration = total_duration / max(total_words, 1)
+        
+        found_positions = []
+        for idx, w in enumerate(words):
+            clean_w = re.sub(r'[^a-z]', '', w)
+            if clean_w in triggers:
+                timestamp = idx * word_duration
+                # Avoid overlapping - min 2 sec gap
+                if not found_positions or timestamp - found_positions[-1][0] > 2.0:
+                    found_positions.append((timestamp, triggers[clean_w], clean_w))
+        
+        # If no triggers, use 2-3 emotional points automatically (pro editor auto adds)
+        if not found_positions and total_duration > 5:
+            found_positions = [
+                (total_duration*0.15, "breaking news", "auto1"),
+                (total_duration*0.5, "wow reaction", "auto2"),
+                (total_duration*0.8, "subscribe", "auto3")
+            ]
+        
+        print(f"[GIPHY PRO] Bot decided {len(found_positions)} positions: {found_positions}")
+        
+        for ts, query, original in found_positions[:4]:  # Max 4 - pro editor doesn't spam
+            try:
+                # Search giphy with transparent stickers
+                url = f"https://api.giphy.com/v1/stickers/search?api_key={key}&q={query}&limit=1&rating=pg"
+                res = requests.get(url, timeout=8).json()
+                data = res.get('data', [])
+                if not data:
+                    # Fallback to gifs
+                    url2 = f"https://api.giphy.com/v1/gifs/search?api_key={key}&q={query}&limit=1&rating=pg"
+                    res = requests.get(url2, timeout=8).json()
+                    data = res.get('data', [])
+                if not data:
+                    continue
+                item = data[0]
+                # Try to get transparent gif
+                images = item.get('images', {})
+                gif_url = None
+                for pref in ['original', 'downsized_large', 'fixed_height']:
+                    if pref in images and 'url' in images[pref]:
+                        gif_url = images[pref]['url']
+                        break
+                if not gif_url:
+                    continue
+                
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gif")
+                g_data = requests.get(gif_url, timeout=12).content
+                if len(g_data) < 5000:
+                    continue
+                tmp.write(g_data); tmp.close()
+                
+                # PRO EDITOR FFMPEG STYLE: Resize, position based on context, fade, bounce
+                # Duration 1.2-1.8 sec only (pro doesn't keep long)
+                dur = random.uniform(1.2, 1.8)
+                # Position logic: shocking top, celebration center, breaking top-right
+                if original in ["shocking", "unbelievable", "wow"]:
+                    pos = ('center', 0.25)
+                    size = 320
+                elif original in ["wins", "celebration"]:
+                    pos = ('center', 0.35)
+                    size = 350
+                elif original in ["dies", "dead"]:
+                    pos = (0.65, 0.4)
+                    size = 280
+                else:
+                    # Random pro positions - not overlapping captions (0.72)
+                    pos_x = random.choice([0.1, 0.65])
+                    pos_y = random.choice([0.15, 0.30, 0.50])
+                    pos = (pos_x, pos_y) if isinstance(pos_x, float) else (pos_x, pos_y)
+                    size = random.randint(220, 300)
+                
+                try:
+                    g_clip = VideoFileClip(tmp.name).resize(width=size).set_duration(dur).set_start(ts)
+                    # FFMPEG style effects: fade in/out + slight pop
+                    g_clip = g_clip.set_position(pos, relative=True).set_opacity(0.92)
+                    # Pop animation like pro editor
+                    g_clip = g_clip.resize(lambda t: 0.8 + 0.2*t/dur if t < dur*0.2 else (1.1 - 0.1*(t-dur*0.8)/dur if t > dur*0.8 else 1.0))
+                    clips.append(g_clip)
+                    print(f"[GIPHY PRO] Added '{query}' at {ts:.1f}s pos {pos}")
+                except Exception as inner_e:
+                    print(f"[GIPHY PRO] Clip fail {inner_e}")
+                    continue
+            except Exception as e:
+                print(f"[GIPHY PRO] Search fail {query}: {e}")
+                continue
+        
+        print(f"[GIPHY PRO] Total {len(clips)} pro stickers added via ffmpeg logic")
+        return clips
+    except Exception as e:
+        print(f"[GIPHY PRO] Error: {e}")
+        return []
+
+# Backward compat
+def get_giphy_stickers(keyword: str, limit=3):
+    # Old call redirects to pro with dummy timing - but we use pro editor now
+    return []
+
+
+
 def get_pexels_image_for_last(keyword: str):
     try:
         key = os.getenv("PEXELS_API_KEY")
@@ -293,8 +426,8 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     os.makedirs("output",exist_ok=True)
     os.makedirs("temp",exist_ok=True)
 
-    if len(script_text) > 450:
-        script_text = script_text[:450].rsplit(' ',1)[0] + "."
+    # SOUND CUT FIX: No truncation - full script sound (was 450 char cut)
+    # script_text kept full for proper audio
 
     print("1. BEST FREE TTS: Piper...")
     voice=get_piper_voice()
@@ -338,7 +471,9 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         i+=1
         if i>40: break
     
-    video=concatenate_videoclips(final_clips, method="compose").set_duration(total).resize((1080,1920))
+    # SECOND BOX EXACT SIZE FIX: height = 1920 - WHITE_BAR_HEIGHT (1740) - jitna box banaya utna hi
+    VIDEO_HEIGHT = 1920 - WHITE_BAR_HEIGHT
+    video=concatenate_videoclips(final_clips, method="compose").set_duration(total).resize((1080, VIDEO_HEIGHT))
 
     print("3. GOD LEVEL Captions + WHITE BAR DOUBLE 180 BOLD 5-6 WORDS...")
     words=script_text.split()
@@ -370,7 +505,13 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     else:
         final_audio = audio.set_duration(total)
     
-    main_video = CompositeVideoClip([video_shifted] + white_bar_clips + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps).set_duration(total).set_audio(final_audio)
+    # GIPHY PRO EDITOR - Bot decides where to place via ffmpeg logic, not 2 fixed
+    try:
+        giphy_clips = get_giphy_pro_editor(script_text, total)
+    except Exception as ge:
+        print(f"[GIPHY PRO] Failed: {ge}")
+        giphy_clips = []
+    main_video = CompositeVideoClip([video_shifted] + white_bar_clips + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps + giphy_clips).set_duration(total).set_audio(final_audio)
 
     print("4. FINAL + OUTRO + ASSET LAST...")
     hook = hook_best_free(first_sentence, title)

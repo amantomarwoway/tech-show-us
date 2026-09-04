@@ -17,49 +17,43 @@ def call_gemini(prompt):
     api_key=os.getenv("GEMINI_API_KEY","")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
-    if GENAI_NEW:
-        try:
-            client=genai.Client(api_key=api_key)
-            response=client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            return response.text.strip() if response.text else ""
-        except Exception as e:
-            err=str(e)
-            if "404" in err or "NOT_FOUND" in err or "not found" in err.lower() or "v1beta" in err.lower():
-                try:
-                    import google.generativeai as genai_old
-                    genai_old.configure(api_key=api_key)
-                    model=genai_old.GenerativeModel('gemini-1.5-flash')
-                    response=model.generate_content(prompt)
-                    return response.text.strip() if response.text else ""
-                except Exception as e2:
-                    if "404" in str(e2):
-                        model=genai_old.GenerativeModel('gemini-1.5-flash-latest')
-                        response=model.generate_content(prompt)
-                        return response.text.strip() if response.text else ""
-                    raise e2
-            if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                raise
+
+    models_to_try_new = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+    models_to_try_old = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b", "gemini-2.5-flash"]
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        for model_name in models_to_try_new:
             try:
-                import google.generativeai as genai_old
-                genai_old.configure(api_key=api_key)
-                model=genai_old.GenerativeModel('gemini-1.5-flash')
-                response=model.generate_content(prompt)
-                return response.text.strip() if response.text else ""
-            except:
-                raise e
-    else:
+                response = client.models.generate_content(model=model_name, contents=prompt)
+                text = getattr(response, 'text', None)
+                if text:
+                    return text.strip()
+                if hasattr(response, 'candidates') and response.candidates:
+                    return response.candidates[0].content.parts[0].text.strip()
+            except Exception as inner:
+                print(f"[GEMINI TRY] {model_name} failed: {str(inner)[:120]}")
+                continue
+    except Exception as e:
+        print(f"[GEMINI NEW SDK] total fail: {e}")
+
+    try:
         import google.generativeai as genai_old
         genai_old.configure(api_key=api_key)
-        try:
-            model=genai_old.GenerativeModel('gemini-1.5-flash')
-            response=model.generate_content(prompt)
-            return response.text.strip() if response.text else ""
-        except Exception as e:
-            if "404" in str(e):
-                model=genai_old.GenerativeModel('gemini-1.5-flash-latest')
-                response=model.generate_content(prompt)
-                return response.text.strip() if response.text else ""
-            raise
+        for old_model in models_to_try_old:
+            try:
+                model = genai_old.GenerativeModel(old_model)
+                response = model.generate_content(prompt)
+                if response.text:
+                    return response.text.strip()
+            except Exception as inner2:
+                print(f"[GEMINI OLD TRY] {old_model} failed: {str(inner2)[:120]}")
+                continue
+    except Exception as e:
+        print(f"[GEMINI OLD SDK] total fail: {e}")
+
+    raise RuntimeError("All Gemini models failed")
 
 def get_google_searchable_title(topic: str) -> str:
     try:
@@ -121,11 +115,9 @@ def generate_script(news_input):
     if isinstance(news_input, dict):
         topic=news_input.get('query','') or news_input.get('title','') or news_input.get('summary','')
         search_vol=news_input.get('search_volume',70)
-        why=news_input.get('why_searching','') or news_input.get('format_test','')
     else:
         topic=str(news_input)
         search_vol=70
-        why=""
     topic=topic.strip()[:200]
     if len(topic)<3:
         topic="USA Breaking News"
@@ -138,10 +130,11 @@ def generate_script(news_input):
     all_hashtags_str = ", ".join(all_hashtags_list)
     topic_hashtags_str = ", ".join(topic_hashtags)
 
-    # --- NAYA VIRAL LOOP SCRIPT PROMPT ---
+    # --- PURE LOOP SCRIPT PROMPT - NO FIXED WHITE HOUSE ---
     prompt=f"""
-You are VIRAL USA YouTube Shorts script writer. Write like this example:
-Example: "(Hook) Scientists just found something on the moon that changes everything. (Body) For decades, we thought it was just a dead rock. But recent scans revealed deep, hidden underground tunnels. They aren't just empty caves—they are perfectly insulated from radiation and freezing space temperatures. This means future humans won't live in surface domes; we're moving underground. But here's the crazy part... some researchers believe these tunnels could already hold ancient ice, meaning water is already there waiting for us. (Loop) And that's why..."
+You are VIRAL USA YouTube Shorts script writer. You write PERFECT LOOP scripts like this example:
+
+Example: "Scientists just found something on the moon that changes everything. For decades, we thought it was just a dead rock. But recent scans revealed deep, hidden underground tunnels. They aren't just empty caves—they are perfectly insulated from radiation and freezing space temperatures. This means future humans won't live in surface domes; we're moving underground. But here's the crazy part... some researchers believe these tunnels could already hold ancient ice, meaning water is already there waiting for us. And that's why scientists just found something on the moon..."
 
 NOW WRITE FOR:
 TOPIC: {topic}
@@ -149,41 +142,40 @@ GOOGLE TITLE: {google_title}
 YT Related: {yt_sug}
 Search Vol: {search_vol}
 
-RULES:
-- 90-100 words ONLY
-- Start with "The White House is panicking - {topic} just shocked America." OR more curiosity hook like example, but must include White House panicking
-- Body: Story telling, use "For decades / For years, we thought... But now... They aren't just... This means... But here's the crazy part..."
-- Loop: Last line MUST be "And that's why the White House is panicking..." so it loops back to start
-- No labels like WHAT HAPPENED, WHY IT MATTERS, HOOK, BODY, no timestamps [0:00]
-- No Visual: Audio:
-- TTS friendly, simple USA English
-- American slang y'all, folks allowed but keep professional
+RULES - FOLLOW EXACTLY:
+- 90-100 words ONLY - count it
+- STRUCTURE: Hook (1 line curiosity) -> Body (For decades/For years, we thought... But now/recent... They aren't just... This means... But here's the crazy part...) -> Loop (last line connects back to first line word-to-word)
+- The LAST sentence MUST be incomplete and loop back to FIRST sentence, so video loops seamlessly. Example: First line "Scientists just found something..." Last line "And that's why scientists just found..."
+- No fixed phrase like White House, no political angle unless topic is politics
+- No labels like WHAT HAPPENED, WHY IT MATTERS, HOOK, BODY, no timestamps
+- No Visual: Audio: tags
+- TTS friendly, simple USA English, storytelling
+- Topic se related hi likho, generic mat likho
 
-RETURN EXACTLY:
-TITLE: <final viral searchable title based on Google title>
-WHITE_BAR: <5-6 words full sentence mirror of topic>
+RETURN EXACTLY THIS FORMAT:
+TITLE: <final viral searchable title based on Google title - 60-90 chars>
+WHITE_BAR: <5-6 words full sentence, Title ka mirror, like "Secret Tunnels Found On Moon">
 SCRIPT: <your 90-100 words loop script here>
 DESCRIPTION:
-Para1: Hook line
-Para2: WHAT HAPPENED 2 lines
-Para3: WHY IT MATTERS 2 lines
+Para1: Hook line - 1 line
+Para2: WHAT HAPPENED 2 lines about {topic}
+Para3: WHY IT MATTERS 2 lines for USA
 """
 
     try:
         raw=call_gemini(prompt)
     except Exception as e:
         err=str(e)
-        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower() or "404" in err or "NOT_FOUND" in err or "No module" in err or "generativeai" in err.lower():
-            print(f"[GEMINI FALLBACK] {topic} - {err[:80]}")
-            fb_title = google_title
-            fb_white = " ".join(topic.split()[:6]).title()[:50]
-            fb_script = f"The White House is panicking - {topic} just shocked America. For years we thought this would never happen, but recent moves revealed something huge. They aren't just making headlines, they are changing how America works. This means everything we knew is about to shift. But here's the crazy part, this could already be in motion right now. And that's why the White House is panicking..."
-            fb_desc = f"The White House is panicking - {topic.title()} just shocked America.\n\nWHAT HAPPENED: What happened in {topic[:50]} is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters for USA - this changes everything."
-            desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
-            return {
-                "title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":"Google Searchable","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_white,"white_bar_text":fb_white,"mood":"tense"
-            }
-        raise e
+        print(f"[GEMINI ERROR] {topic} - {err[:200]}")
+        # Fallback - ALSO PURE LOOP, NO WHITE HOUSE
+        fb_title = google_title
+        fb_white = " ".join(topic.split()[:6]).title()[:50]
+        fb_script = f"{topic} just shocked everyone and nobody saw this coming. For years we thought this was impossible, but recent events revealed something huge. They aren't just making headlines, they are changing the entire game. This means everything we knew about {topic} is about to change forever. But here's the crazy part, this is already happening right now and it's bigger than anyone thought. And that's why {topic} just shocked..."
+        fb_desc = f"{topic.title()} just shocked everyone.\n\nWHAT HAPPENED: {topic.title()} is making massive moves right now that no one expected.\n\nWHY IT MATTERS: This changes everything for the future."
+        desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
+        return {
+            "title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":"Google Searchable","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_white,"white_bar_text":fb_white,"mood":"tense"
+        }
 
     selected=""; full_vo=""; description=""; white_bar_parsed=""
     try:
@@ -216,12 +208,12 @@ Para3: WHY IT MATTERS 2 lines
     if len(clean_tts.split())>115:
         clean_tts=" ".join(clean_tts.split()[:102])
     if len(clean_tts)<20:
-        clean_tts = f"The White House is panicking - {topic} just shocked America. For years we thought this would never happen, but now it's real. This changes everything for America. But here's the crazy part, it's already happening. And that's why the White House is panicking..."
+        clean_tts = f"{topic} just shocked everyone and nobody expected this. For years we thought this was impossible, but now it's real. This changes everything. But here's the crazy part, it's already happening. And that's why {topic} just..."
 
     if not selected or len(selected)<10:
         selected = google_title
     if not description:
-        description=f"The White House is panicking - {topic.title()} just made a massive move that has America talking.\n\nWHAT HAPPENED: What happened is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters for USA."
+        description=f"{topic.title()} is making massive moves that has America talking.\n\nWHAT HAPPENED: What happened in {topic[:50]} is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters."
     if white_bar_parsed and 5 <= len(white_bar_parsed.split()) <= 6:
         white_bar_text = white_bar_parsed.title()
     else:

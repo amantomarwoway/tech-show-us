@@ -18,11 +18,13 @@ def call_gemini(prompt):
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
 
-    models_to_try = ["gemini-3.6-flash"]
+    models_to_try_new = ["gemini-3.6-flash"]
+    models_to_try_old = ["gemini-3.6-flash"]
 
     try:
         from google import genai
-        client = genai.Client(api_key=api_key)
+        from google.genai import types
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(api_version='v1'))
         for model_name in models_to_try_new:
             try:
                 response = client.models.generate_content(model=model_name, contents=prompt)
@@ -52,7 +54,7 @@ def call_gemini(prompt):
     except Exception as e:
         print(f"[GEMINI OLD SDK] total fail: {e}")
 
-    raise RuntimeError("Gemini models failed")
+    raise RuntimeError("All Gemini models failed")
 
 def get_google_searchable_title(topic: str) -> str:
     try:

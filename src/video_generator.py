@@ -488,7 +488,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     
     bg_music = get_free_bg_music()
     if bg_music:
-        bg_loop = bg_music.loop(duration=total).volumex(0.06)
+        bg_loop = bg_music.loop(duration=total).volumex(0.28)
         final_audio = CompositeAudioClip([audio, bg_loop]).set_duration(total)
     else:
         final_audio = audio.set_duration(total)
@@ -502,6 +502,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     # FIX: White bar sabse upar (last layer) - pure white rahega, vignette/branding usko grey nahi karega - second image jaisa
     main_video = CompositeVideoClip([video_shifted] + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps + giphy_clips + white_bar_clips).set_duration(total).set_audio(final_audio)
 
+    final = main_video
     final.write_videofile(output_path,fps=30,codec='libx264',audio_codec='aac',threads=2,preset='ultrafast')
     print(f"READY WHITE BAR DOUBLE {WHITE_BAR_HEIGHT}px BOLD 65 5-6 WORDS MIRROR={viral_hook}: {output_path}")
     return output_path

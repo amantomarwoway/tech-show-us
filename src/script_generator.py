@@ -61,14 +61,12 @@ def call_gemini(prompt):
                 return response.text.strip() if response.text else ""
             raise
 
-# Google se functions
 def get_google_searchable_title(topic: str) -> str:
     try:
         from live_viral_hashtag import get_google_searchable_title as google_title_fn
         return google_title_fn(topic)
     except Exception as e:
         print(f"Google title import fail: {e}")
-    # Fallback direct Google
     try:
         r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":topic,"hl":"en","gl":"US"}, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
         matches=re.findall(r'"([^"]+)"', r.text)
@@ -85,7 +83,6 @@ def get_topic_hashtags_from_google(topic: str):
         return topic_tags_fn(topic)
     except Exception as e:
         print(f"Google topic hashtags fail: {e}")
-    # Fallback
     words=re.findall(r'\w+', topic.lower())[:4]
     tags=[]
     for w in words:
@@ -103,49 +100,27 @@ def get_world_viral_hashtag():
         print(f"World viral fail: {e}")
     return "#breakingnews"
 
-
 def get_google_structured_script(topic: str) -> dict:
-    """GOOGLE DIRECT - Proper structured script for full sound - no Gemini"""
     try:
-        # Google se topic details lao
         r = requests.get("https://suggestqueries.google.com/complete/search",
             params={"client":"youtube","ds":"yt","q":topic,"hl":"en","gl":"US"},
             timeout=5, headers={"User-Agent":"Mozilla/5.0"})
-        import re as re2
-        matches = re2.findall(r'"([^"]+)"', r.text)
+        matches = re.findall(r'"([^"]+)"', r.text)
         suggestions = [m for m in matches[1:] if len(m)>5][:5]
         google_context = " ".join(suggestions) if suggestions else topic
-        
-        # Structured script Google prompt - proper 4 segments
-        # Using Google search data to build proper script
-        hook = f"Stop scrolling folks. {topic.title()} just shocked America - this is huge."
-        news = f"Here's what happened in {topic} - {google_context[:100]}. This is breaking right now."
-        context = f"Wait, here's the crazy part - why America is talking about {topic}. This changes everything for USA, and you need to know why."
+        # --- ADD-ON D,H,J FIXED HOOK ---
+        hook = f"The White House is panicking - {topic.title()} just shocked America."
+        news = f"WHAT HAPPENED: Here's what happened in {topic} - {google_context[:100]}. This is breaking right now."
+        context = f"WHY IT MATTERS: Wait, here's the crazy part - why America is talking about {topic}. This changes everything for USA, and you need to know why."
         cta = f"What do y'all think about {topic}? Comment below and let me know."
-        
         full = f"{hook} {news} {context} {cta}"
-        # Ensure 85-95 words for proper structure
         words = full.split()
         if len(words) < 80:
             full += f" This is massive news for {topic} and USA is reacting."
-        
-        return {
-            "hook": hook,
-            "news": news,
-            "context": context,
-            "cta": cta,
-            "full": full[:600]
-        }
+        return {"hook": hook,"news": news,"context": context,"cta": cta,"full": full[:600]}
     except Exception as e:
         print(f"[GOOGLE SCRIPT] Fail: {e}")
-        return {
-            "hook": f"Stop scrolling. {topic.title()} just happened.",
-            "news": f"Breaking in {topic} right now.",
-            "context": f"Here's why USA cares about {topic}.",
-            "cta": f"What do you think? Comment below.",
-            "full": f"Stop scrolling folks. Breaking in {topic} - this just happened and it's huge. Here's why America is talking about it. What do y'all think? Comment below."
-        }
-
+        return {"hook": f"The White House is panicking - {topic.title()} just happened.","news": f"WHAT HAPPENED: Breaking in {topic} right now.","context": f"WHY IT MATTERS: Here's why USA cares about {topic}.","cta": f"What do you think? Comment below.","full": f"The White House is panicking - Breaking in {topic} - this just happened and it's huge. Here's why America is talking about it. What do y'all think? Comment below."}
 
 def get_yt_suggestions(q):
     try:
@@ -156,7 +131,6 @@ def get_yt_suggestions(q):
         return []
 
 def generate_viral_hook_from_script(script_text: str, topic: str) -> str:
-    """White bar 5-6 words full sentence mirror"""
     try:
         words=topic.split()
         if len(words)>=5:
@@ -178,12 +152,9 @@ def generate_script(news_input):
     if len(topic)<3:
         topic="USA Breaking News"
     yt_sug=get_yt_suggestions(topic)
-    google_struct = get_google_structured_script(topic)  # GOOGLE PROPER STRUCTURED SCRIPT
+    google_struct = get_google_structured_script(topic)
 
-    # TITLE GOOGLE SE AAYEGA - NOT GEMINI FIXED 9-11 WORDS
     google_title = get_google_searchable_title(topic)
-    
-    # HASHTAGS GOOGLE SE
     topic_hashtags = get_topic_hashtags_from_google(topic)
     world_viral = get_world_viral_hashtag()
     all_hashtags_list = topic_hashtags + [world_viral]
@@ -206,19 +177,21 @@ RULES FOR TITLE - GOOGLE SEARCHABLE VIRAL:
 
 RULES FOR SCRIPT (USA AUDIENCE):
 - Structure:
-  [0:00-0:03 HOOK] Stop scrolling line + shocking fact
-  [0:03-0:15 NEWS] What happened - American slang folks, y'all, gonna
-  [0:15-0:30 CONTEXT] Why USA cares - retention "wait, here's crazy part"
+  [0:00-0:03 HOOK] Fixed hook "The White House is panicking..." + shocking fact
+  [0:03-0:15 NEWS] WHAT HAPPENED - American slang folks, y'all, gonna
+  [0:15-0:30 CONTEXT] WHY IT MATTERS - retention "wait, here's crazy part"
   [0:30-0:40 CTA] Comment question
 - 85-95 words, American English
 
-RULES FOR DESCRIPTION (YouTube Algorithm):
-- 3 paras: Hook, What happened, Why USA matters
+RULES FOR DESCRIPTION (YouTube Algorithm) - D,H,J Fix:
+- 3 paras:
+  Para1: Hook (The White House is panicking...)
+  Para2: WHAT HAPPENED
+  Para3: WHY IT MATTERS for USA
 - No hashtags in description body (hashtags separate)
 
 RULES FOR WHITE BAR:
 - 5-6 words full sentence mirror of topic
-- Example: "White House Ballroom $200M Makeover"
 
 RETURN EXACTLY:
 TITLE: <final viral searchable title based on Google title>
@@ -239,46 +212,21 @@ DESCRIPTION:
         err=str(e)
         if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower() or "404" in err or "NOT_FOUND" in err or "No module" in err or "generativeai" in err.lower():
             print(f"[GEMINI FALLBACK] {topic} - {err[:80]}")
-            # TITLE GOOGLE SE HI
             fb_title = google_title
             if len(fb_title.split()) < 4:
                 fb_title = f"{topic.title()} Shocks America"
-            # Script - GOOGLE STRUCTURED (proper structure + full sound)
             g_struct = get_google_structured_script(topic)
             fb_script = g_struct["full"]
-            # White bar 5-6 words
             fb_white = " ".join(topic.split()[:6]).title()[:50]
-            # Description
-            fb_desc = f"{topic.title()} just made a massive move that has America talking.\n\nWhat happened in {topic[:50]} is shocking everyone right now.\n\nHere's why it matters for USA - this changes everything."
+            # D,H,J - 3 para description
+            fb_desc = f"The White House is panicking - {topic.title()} just shocked America.\n\nWHAT HAPPENED: What happened in {topic[:50]} is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters for USA - this changes everything."
             desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
             return {
-                "title":fb_title,
-                "title_options":[fb_title],
-                "full_script":fb_script,
-                "raw_script_structured":fb_script,
-                "script_segments":{},
-                "visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},
-                "description":desc_with_tags,
-                "tags_primary":topic_hashtags_str,
-                "tags_secondary":world_viral,
-                "tags_shorts":all_hashtags_str,
-                "tags_all":all_hashtags_str,
-                "tags_topic":topic_hashtags_str,
-                "viral_hashtag":world_viral,
-                "sources":"Google Searchable",
-                "viral_check":{"words":len(fb_script.split()),"has_segments":0},
-                "viral_hook":fb_white,
-                "white_bar_text":fb_white,
-                "mood":"tense"
+                "title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":"Google Searchable","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_white,"white_bar_text":fb_white,"mood":"tense"
             }
         raise e
 
-    selected=""
-    full_vo=""
-    segments={}
-    description=""
-    white_bar_parsed=""
-    
+    selected=""; full_vo=""; segments={}; description=""; white_bar_parsed=""
     try:
         if "TITLE:" in raw:
             after_title = raw.split("TITLE:")[1]
@@ -288,8 +236,7 @@ DESCRIPTION:
                     break
             selected = after_title.strip().splitlines()[0].strip()[:95]
             if "breaking news today" in selected.lower():
-                selected = google_title  # Use Google title if bakwaas
-        
+                selected = google_title
         if "WHITE_BAR:" in raw:
             wb_part = raw.split("WHITE_BAR:")[1]
             for delim in ["SCRIPT:", "FULL_VOICEOVER:", "DESCRIPTION:"]:
@@ -300,7 +247,6 @@ DESCRIPTION:
             wb_words = white_bar_parsed.split()
             if len(wb_words) > 6:
                 white_bar_parsed = " ".join(wb_words[:6])
-        
         if "SCRIPT:" in raw:
             sb=raw.split("SCRIPT:")[1].split("FULL_VOICEOVER:")[0] if "FULL_VOICEOVER:" in raw else raw.split("SCRIPT:")[1].split("DESCRIPTION:")[0]
             for marker,key in [("0:00-0:03","hook_0_3"),("0:03-0:15","news_3_15"),("0:15-0:30","context_15_30"),("0:30-0:40","cta_30_40")]:
@@ -310,14 +256,11 @@ DESCRIPTION:
                         if nm!=marker and nm in part:
                             part=part.split(nm)[0]
                     segments[key]=part.strip()[:400]
-        
         if "FULL_VOICEOVER:" in raw:
             fv=raw.split("FULL_VOICEOVER:")[1].split("DESCRIPTION:")[0].strip()
             full_vo=fv[:600]
-        
         if "DESCRIPTION:" in raw:
             description=raw.split("DESCRIPTION:")[1].strip()[:1200]
-    
     except Exception as e:
         print(f"Parse error {e}")
 
@@ -325,10 +268,8 @@ DESCRIPTION:
     clean_tts=re.sub(r'Visual:.*?\|','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'Audio:\s*','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'\s+',' ',clean_tts).strip()
-    
-    # SOUND FIX: No cut to 95 words - keep full script for proper audio
     if len(clean_tts.split())>120:
-        clean_tts=" ".join(clean_tts.split()[:110])  # was 95, now 110 for full sound
+        clean_tts=" ".join(clean_tts.split()[:110])
     if len(clean_tts)<20:
         tmp=" ".join(segments.values())
         tmp=re.sub(r'Visual:.*?\|','',tmp, flags=re.I)
@@ -336,14 +277,12 @@ DESCRIPTION:
         tmp=re.sub(r'\[.*?\]','',tmp)
         clean_tts=re.sub(r'\s+',' ',tmp).strip()[:500]
         if len(clean_tts)<20:
-            clean_tts = f"Stop scrolling folks. Breaking in {topic} - this just happened. Here's why America is talking about it. What do y'all think? Comment below."
+            clean_tts = f"The White House is panicking - Breaking in {topic} - this just happened. Here's why America is talking about it. What do y'all think? Comment below."
 
     if not selected or len(selected)<10 or "breaking news today" in selected.lower():
         selected = google_title
-
     if not description:
-        description=f"{topic.title()} just made a massive move that has America talking.\n\nWhat happened is shocking everyone right now.\n\nHere's why it matters for USA."
-
+        description=f"The White House is panicking - {topic.title()} just made a massive move that has America talking.\n\nWHAT HAPPENED: What happened is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters for USA."
     if white_bar_parsed and 5 <= len(white_bar_parsed.split()) <= 6:
         white_bar_text = white_bar_parsed.title()
     else:
@@ -353,26 +292,7 @@ DESCRIPTION:
         else:
             white_bar_text = f"{topic.title()} Shocks America"
         white_bar_text = white_bar_text[:50]
-
     desc_with_tags = f"{description}\n\n{' '.join(topic_hashtags)} {world_viral}"
-
     return {
-        "title":selected,
-        "title_options":[selected],
-        "full_script":clean_tts,
-        "raw_script_structured":raw,
-        "script_segments":segments,
-        "visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},
-        "description":desc_with_tags,
-        "tags_primary":topic_hashtags_str,
-        "tags_secondary":world_viral,
-        "tags_shorts":all_hashtags_str,
-        "tags_all":all_hashtags_str,
-        "tags_topic":topic_hashtags_str,
-        "viral_hashtag":world_viral,
-        "sources":f"Google Searchable Vol {search_vol}",
-        "viral_check":{"words":len(clean_tts.split()),"has_segments":len(segments)},
-        "viral_hook": white_bar_text,
-        "white_bar_text": white_bar_text,
-        "mood": "tense"
+        "title":selected,"title_options":[selected],"full_script":clean_tts,"raw_script_structured":raw,"script_segments":segments,"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":f"Google Searchable Vol {search_vol}","viral_check":{"words":len(clean_tts.split()),"has_segments":len(segments)},"viral_hook": white_bar_text,"white_bar_text": white_bar_text,"mood": "tense"
     }

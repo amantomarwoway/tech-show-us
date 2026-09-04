@@ -3,17 +3,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 import os, traceback
 
-# Filter A+B+C
-try:
-    from trend_filters import apply_all_filters_short_bot
-    FILTERS_AVAILABLE = True
-except ImportError:
-    try:
-        from src.trend_filters import apply_all_filters_short_bot
-        FILTERS_AVAILABLE = True
-    except ImportError:
-        FILTERS_AVAILABLE = False
-        apply_all_filters_short_bot = None
+# --- ADD-ON Problem 6 - trend_filters.py DEAD hai, isko False karo warna crash hoga ---
+FILTERS_AVAILABLE = False
+apply_all_filters_short_bot = None
+print("[MAIN Problem 6] FILTERS_AVAILABLE=False - trend_filters.py deleted, direct news_fetcher use hoga")
+# --- END - Pehle wala try-except import hata diya ---
 
 from news_fetcher import fetch_all_news
 
@@ -68,16 +62,16 @@ except ImportError:
 
 def main():
     init_db()
-    
+
     manual_topic = os.getenv("MANUAL_TOPIC", "").strip()
     if manual_topic:
         print(f"1. MANUAL Topic: {manual_topic}")
         raw_stories = [{"title": manual_topic, "query": manual_topic, "url": "", "source": "manual", "published": None, "summary": manual_topic, "search_volume": 80, "bot_friendly": True, "filter_c_score": 85, "bot_friendly_score": 85}]
     elif FILTERS_AVAILABLE:
         print(f"1. Fetching USA news - Filter A+B+C (Tacko Style Every Video)")
-        print(f"   [Filter A] YouTube Search Filter US Breakout")
-        print(f"   [Filter B] Autocomplete Feeder Half keyword hot")
-        print(f"   [Filter C] Format & Engagement Bot friendly >=70")
+        print(f" [Filter A] YouTube Search Filter US Breakout")
+        print(f" [Filter B] Autocomplete Feeder Half keyword hot")
+        print(f" [Filter C] Format & Engagement Bot friendly >=70")
         try:
             raw_stories = apply_all_filters_short_bot()
             if not raw_stories:
@@ -88,14 +82,14 @@ def main():
             traceback.print_exc()
             raw_stories = fetch_all_news()
     else:
-        print(f"1. Fetching USA news from RSS (Fallback)")
+        print(f"1. Fetching USA news from RSS (Fallback) - Problem 6 Synced - Direct Google Trends + Live Fallback")
         raw_stories = fetch_all_news()
-    
+
     if not raw_stories:
         print("No news fetched"); return
     print(f"Fetched: {len(raw_stories)} stories")
     for i, s in enumerate(raw_stories[:5]):
-        print(f"  {i+1}. {s.get('query','')[:60]} | Vol {s.get('search_volume','')} | Bot {s.get('filter_c_score', s.get('bot_friendly_score',''))} | {s.get('growth','')}")
+        print(f" {i+1}. {s.get('query','')[:60]} | Vol {s.get('search_volume','')} | Bot {s.get('filter_c_score', s.get('bot_friendly_score',''))} | {s.get('growth','')}")
 
     print(f"2. Verifying {len(raw_stories)} stories...")
     try:
@@ -117,7 +111,7 @@ def main():
         ranked = verified
 
     print(f"4. STARTING GATE THRESHOLD {THRESHOLD} + BOT_FRIENDLY {BOT_FRIENDLY_THRESHOLD} + Tacko 4 segments")
-    
+
     def script_gen_wrapper(topic_input):
         if isinstance(topic_input, dict):
             dummy = topic_input
@@ -133,7 +127,7 @@ def main():
         return
 
     print(f"\n🔥 FINAL APPROVED: {approved_topic.get('title') or approved_topic.get('query')}")
-    print(f"   Scores: {scores}")
+    print(f" Scores: {scores}")
 
     if isinstance(script_result, dict):
         script_data = script_result
@@ -148,10 +142,10 @@ def main():
         print(f"Selected Title: {title}")
         print("Title Options:")
         for i, to in enumerate(title_options[:4],1):
-            print(f"  {i}. {to}")
+            print(f" {i}. {to}")
         print("\nSegments:")
         for k,v in segments.items():
-            print(f"  {k}: {v[:150]}...")
+            print(f" {k}: {v[:150]}...")
         print(f"\nVisual: Music={visual.get('music')} | Captions={visual.get('captions')} | Pacing={visual.get('pacing')}")
         print(f"\nDescription: {description[:400]}...")
         print(f"Tags: {tags_all[:250]}...")
@@ -197,7 +191,7 @@ def main():
     print(f"Video: {video_path} | Thumb: {thumb_path}")
 
     print(f"8. Uploading with SEO title + description + tags...")
-    print(f"   Title: {title}")
+    print(f" Title: {title}")
     try:
         yt_id = upload_video(video_path, thumb_path, script_data, approved_topic)
     except:
@@ -209,7 +203,7 @@ def main():
     if yt_id:
         mark_uploaded(story_id, yt_id)
         print(f"9. UPLOADED: https://youtu.be/{yt_id}")
-        print(f"   Used Title Options: {title_options}")
+        print(f" Used Title Options: {title_options}")
     else:
         print("Upload failed")
 

@@ -215,24 +215,38 @@ def top_branding_best(duration):
     flag = ImageClip(flag_path).set_duration(duration).set_position((20, WHITE_BAR_HEIGHT+10))
     return [top, flag]
 
-# ===== EDITED: SECOND IMAGE LIKE - PURE WHITE CLEAN, PERFECT FONT, BEST POSITION =====
+# ===== FIXED: SECOND IMAGE LIKE - PURE WHITE #FFFFFF, CLEAN BOLD, NO GREY =====
 def white_bar_viral_hook_clip(viral_hook_text: str, duration: float):
-    """SECOND IMAGE LIKE: Pure white #FFFFFF, clean bold italic font, perfect position, no grey"""
-    # PURE WHITE background - 100% white like second image, not grey transparent
+    """SECOND IMAGE LIKE: Pure white bar #FFFFFF, no grey, perfect black bold font"""
+    # PURE SOLID WHITE - opacity 1, no transparent
     white_bg = ColorClip((WIDTH, WHITE_BAR_HEIGHT), color=(255,255,255), duration=duration).set_position((0,0)).set_opacity(1)
     
-    # Text - 5-6 words full sentence mirror - CLEAN LIKE SECOND IMAGE
+    # Clean text - if only 1 word like "Rockies", use it but make it bold black clean
     safe = viral_hook_text.replace("'","").replace('"',"").strip()[:70]
-    words = safe.split()
-    # Ensure 5-6 words clean like second image "As a kid, this completely flew over head"
-    if len(words) > 7:
-        safe = " ".join(words[:7])
+    if not safe:
+        safe = "Breaking News"
     
-    # PURE BLACK BOLD ITALIC, NO STROKE - clean like second image (second image has no stroke, pure black)
-    # Font 42-46 perfect for thumbnail like second image, not 65 bold with stroke
-    hook_path = make_white_bar_text_image(safe, fontsize=44)
-    # Perfect center position in white bar - like second image best position
-    hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', (WHITE_BAR_HEIGHT-80)//2))
+    # For second image like clean look - use white bar text image with solid white bg
+    # Font 42 bold italic, NO STROKE (stroke 0) - pure black like second image
+    try:
+        # Create solid white image with black text - like second image "As a kid, this completely flew over head"
+        img = Image.new('RGB', (1020, WHITE_BAR_HEIGHT-20), (255,255,255))
+        d = ImageDraw.Draw(img)
+        try:
+            f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 46)
+        except:
+            f = ImageFont.load_default()
+        # Center text - pure black, no stroke
+        d.text((1020//2, (WHITE_BAR_HEIGHT-20)//2), safe, font=f, fill=(0,0,0), anchor="mm")
+        p = f"temp/whitebar_{random.randint(1,999999999)}.png"
+        os.makedirs("temp", exist_ok=True)
+        img.save(p)
+        hook_clip = ImageClip(p).set_duration(duration).set_position(('center', 10))
+    except Exception as e:
+        # Fallback to old method but with solid white
+        hook_path = make_text_image(safe, 46, "black", 0, (1020, WHITE_BAR_HEIGHT-20), bg_color=(255,255,255,255), font_style="bold")
+        hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', 10))
+    
     return [white_bg, hook_clip]
 
 def hook_best_free(hook_text, title_keyword):
@@ -260,7 +274,8 @@ def retention_loops_best(total):
     return clips
 
 def vignette_best(duration):
-    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.25).set_position((0,0))
+    # FIX: Grey hatane ke liye top vignette white bar ke neeche se start, white bar pe nahi
+    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.25).set_position((0,WHITE_BAR_HEIGHT))
     bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.3).set_position((0,1620))
     return [top, bottom]
 
@@ -562,7 +577,8 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     except Exception as ge:
         print(f"[GIPHY PRO] Failed: {ge}")
         giphy_clips = []
-    main_video = CompositeVideoClip([video_shifted] + white_bar_clips + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps + giphy_clips).set_duration(total).set_audio(final_audio)
+    # FIX: White bar sabse upar (last layer) - pure white rahega, vignette/branding usko grey nahi karega - second image jaisa
+    main_video = CompositeVideoClip([video_shifted] + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps + giphy_clips + white_bar_clips).set_duration(total).set_audio(final_audio)
 
     print("4. FINAL + OUTRO + ASSET LAST...")
     hook = hook_best_free(first_sentence, title)

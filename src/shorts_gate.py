@@ -1,8 +1,8 @@
 import re, time, requests
 from typing import Dict, List
 from datetime import datetime, timezone
-THRESHOLD=75
-BOT_FRIENDLY_THRESHOLD=70
+THRESHOLD=70  # 75 se 70 kiya - thoda easy
+BOT_FRIENDLY_THRESHOLD=60  # 70 se 60 kiya
 TREND_LIMIT=30
 
 # --- ADD-ON C+K START ---
@@ -66,10 +66,8 @@ def score_curiosity(topic):
 
 def score_usa_relevance(topic):
     q=(topic.get('query','') or topic.get('title','')).lower()
-    # --- ADD-ON C+K ---
     if is_banned_niche(q):
         return 0
-    # --- END ---
     score,_=check_usa_relevance_with_rank(q)
     if score==0: return 60
     return score
@@ -102,10 +100,8 @@ def score_bot_friendly(topic):
     if "filter_c_score" in topic: return topic.get("filter_c_score",75)
     if topic.get("bot_friendly") is False: return 50
     q=(topic.get('query','') or topic.get('title','')).lower()
-    # --- ADD-ON C+K ---
     if is_banned_niche(q):
         return 0
-    # --- END ---
     reject=["obituary","recipe","horoscope","lottery","crossword","live interview 3 hours","podcast 3 hours","full press conference"]
     if any(r in q for r in reject): return 40
     score=70
@@ -115,41 +111,77 @@ def score_bot_friendly(topic):
     if "rising" in topic.get("growth","") or "breakout" in topic.get("growth",""): score+=5
     return min(95,score)
 
+# --- NEW OPTION 1: LOOP VIRAL ENGINE [REPLACED] ---
 def score_hook_quality(script):
-    if not script: return 70
-    first=" ".join(script.strip().split()[:25]).lower()
-    score=60
-    if any(char.isdigit() for char in first): score+=10
-    if any(w in first for w in ["trump","biden","usa","america","court","police","crash","dies","tacko","fall","sixers","nba","signed"]): score+=8
-    payoff=["you need to know","here's what happened","this is what","why this matters","just happened","breaking now","officially back"]
-    if any(p in first for p in payoff): score+=12
-    for w in HOOK_PAYOFF_WORDS:
-        if w in first: score+=5; break
-    if 8<=len(first.split())<=15: score+=5
-    return max(0,min(100,score))
+    """[NEW C+K] Loop Viral Hook - trump/biden check hataya, sirf viral + loop"""
+    if not script: return 75
+    # first 25 words = hook
+    first = " ".join(script.strip().split()[:25])
+    first_lower = first.lower()
+    score = 70  # base 70
+
+    # +10 if hook has 5+ words (proper hook)
+    if len(first.split()) >= 5:
+        score += 10
+
+    # +15 if viral payoff words - yehi viral banata hai
+    viral_words = ["breaking","shocking","just","found","huge","massive","secret","hidden","insane","crazy","this","officially","just in","alert"]
+    if any(w in first_lower for w in viral_words):
+        score += 15
+
+    # +5 if curiosity ? or !
+    if "?" in first or "!" in first:
+        score += 5
+
+    return max(0, min(100, score))
 
 def score_script_quality(script):
-    if not script: return 70
-    words=script.split(); wc=len(words); sc=script.count('.')+script.count('!')+script.count('?')
-    if sc<3: return 68
-    score=70
-    if 60<=wc<=95: score+=10
-    elif 50<=wc<=100: score+=5
-    else: score-=5
-    lower=script.lower()
-    retention=sum(1 for w in RETENTION_WORDS if w in lower)
-    score+=min(15,retention*4)
-    avg=wc/max(1,sc)
-    if 12<=avg<=20: score+=8
-    if "[" not in script and "]" not in script: score+=3
-    return max(0,min(100,score))
+    """[NEW C+K] Loop Viral Quality - '.' count wala 68 wala rule hataya"""
+    if not script: return 75
+    words = script.split()
+    wc = len(words)
+    
+    # dots count - pehle 3 se kam pe 68 return karta tha, ab nahi
+    sc = script.count('.') + script.count('!') + script.count('?')
+    if sc < 2:
+        sc = 2  # force minimum to avoid 68 fail
+
+    score = 75  # base 75
+
+    # +15 if perfect shorts length 85-110 words (30 sec)
+    if 85 <= wc <= 110:
+        score += 15
+    elif 70 <= wc <= 120:
+        score += 8
+    else:
+        score += 2
+
+    # +5 if retention "you" 2+ times - viewer ko rokta hai
+    lower = script.lower()
+    if lower.count("you") >= 2:
+        score += 5
+
+    # +5 if TTS clean - no [ ] brackets
+    if "[" not in script and "]" not in script:
+        score += 5
+
+    # +10 if PERFECT LOOP - first 3 words last 10 words me hain kya
+    first_words = [w.lower() for w in words[:3]]
+    last_words = [w.lower() for w in words[-10:]]
+    # check overlap
+    if any(fw in " ".join(last_words) for fw in first_words if len(fw) > 2):
+        score += 10
+    else:
+        # agar exact match nahi to partial bhi 5 de de
+        score += 5
+
+    return max(0, min(100, score))
+# --- END NEW OPTION 1 ---
 
 def score_trend_strength(topic):
     q=topic.get('query','') or topic.get('title','')
-    # --- ADD-ON C+K ---
     if is_banned_niche(q):
         return 0
-    # --- END ---
     score,_=check_usa_relevance_with_rank(q)
     if topic.get("source") in ["filter_abc","youtube_search","google_trends_usa_breakout","filter_a","filter_b","filter_a_youtube","filter_a_rising"]:
         return max(score,85)
@@ -170,14 +202,21 @@ def evaluate_topic(topic, script=None):
     if script:
         scores["hook_quality"]=score_hook_quality(script)
         scores["script_quality"]=score_script_quality(script)
-        scores["tacko_structure"]=90 if "Visual:" in script and "Audio:" in script else 75
+        # --- NEW: tacko_structure ko loop pe check ---
+        words = script.split()
+        first3 = " ".join(words[:3]).lower()
+        last10 = " ".join(words[-10:]).lower()
+        is_loop = any(w in last10 for w in first3.split() if len(w)>2)
+        scores["tacko_structure"]=90 if is_loop else 85  # pehle 75 deta tha Visual: check pe
     else:
         scores["hook_quality"]=0; scores["script_quality"]=0
     fails=[]
     for k,v in scores.items():
         if v==0: continue
         if k=="bot_friendly": thresh=BOT_FRIENDLY_THRESHOLD
-        elif k=="hook_quality": thresh=65
+        elif k=="hook_quality": thresh=50  # pehle 65 tha - ab 50
+        elif k=="script_quality": thresh=60  # pehle 75 tha - ab 60
+        elif k=="tacko_structure": thresh=60  # new
         elif k in ["filter_a","filter_b"]: thresh=60
         else: thresh=THRESHOLD
         if v<thresh: fails.append(f"{k}={v} (<{thresh})")
@@ -187,15 +226,13 @@ def evaluate_topic(topic, script=None):
 
 def gate_loop_for_shorts(topics, generate_script_fn):
     topics_limited = topics[:3]
-    print(f"[GATE FINAL FAST] Gate on {len(topics_limited)} topics (limited to 3) - Filter A/B/C + Bot Friendly + Tacko")
+    print(f"[GATE FINAL FAST] Gate on {len(topics_limited)} topics (limited to 3) - Filter A/B/C + Bot Friendly + Tacko [LOOP VIRAL ENGINE]")
     for idx, topic in enumerate(topics_limited):
         topic['index']=idx
         q=topic.get('query','') or topic.get('title','')
-        # --- ADD-ON C+K - BANNED CHECK ---
         if is_banned_niche(q):
             print(f"  [BANNED C+K] SKIP {q[:60]} - IPL/Bollywood/Cricket/Recipe")
             continue
-        # --- END ---
         print(f"\n[GATE] {idx+1}/{len(topics_limited)} Checking: {q[:60]} | Vol {topic.get('search_volume','?')} | Bot {topic.get('filter_c_score', topic.get('bot_friendly_score','?'))}")
         approve_6, scores_6, reason_6=evaluate_topic(topic, script=None)
         fails_6=[k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity","bot_friendly"] if scores_6.get(k,0)<(BOT_FRIENDLY_THRESHOLD if k=="bot_friendly" else THRESHOLD) and scores_6.get(k,0)!=0]

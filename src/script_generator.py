@@ -18,8 +18,7 @@ def call_gemini(prompt):
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
 
-    models_to_try_new = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
-    models_to_try_old = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-8b", "gemini-2.5-flash"]
+    models_to_try = ["gemini-3.6-flash"]
 
     try:
         from google import genai
@@ -53,7 +52,7 @@ def call_gemini(prompt):
     except Exception as e:
         print(f"[GEMINI OLD SDK] total fail: {e}")
 
-    raise RuntimeError("All Gemini models failed")
+    raise RuntimeError("Gemini models failed")
 
 def get_google_searchable_title(topic: str) -> str:
     try:

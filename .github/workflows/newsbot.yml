@@ -1,9 +1,9 @@
 name: Tech Show US Bot
 on:
   schedule:
-    # America Eastern Time: 6AM to 10PM ET = 10:00 to 02:00 UTC (EDT is UTC-4)
-    # Har 2 ghante me: 6AM, 8AM, 10AM, 12PM, 2PM, 4PM, 6PM, 8PM, 10PM ET
-    - cron: '0 10,12,14,16,18,20,22,0,2 * * *'
+    # FINAL FIX B+L - Sirf 2 slot US audience ke liye - 10:30 UTC = 6:30 AM ET, 16:30 UTC = 12:30 PM ET
+    - cron: '30 10 * * *'
+    - cron: '30 16 * * *'
   workflow_dispatch:
 
 jobs:

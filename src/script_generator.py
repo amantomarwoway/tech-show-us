@@ -24,7 +24,7 @@ def call_gemini(prompt):
     try:
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(api_version='v1'))
+        client = genai.Client(api_key=api_key)
         for model_name in models_to_try_new:
             try:
                 response = client.models.generate_content(model=model_name, contents=prompt)

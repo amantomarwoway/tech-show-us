@@ -1,7 +1,11 @@
 import os
 VERIFICATION_THRESHOLD=0.90
 WEIGHTS={"recency":0.35,"source_count":0.30,"reliability":0.20,"duplicate_freq":0.15}
-SOURCE_RELIABILITY={"reuters":1.0,"apnews":1.0,"bbc":0.95,"npr":0.95,"nbcnews":0.9,"abcnews":0.9,"cbsnews":0.9,"cnn":0.85,"gov":1.0,"google_trends_usa":0.95,"youtube_search":0.90}
+
+# --- ADD-ON Problem 6 + E+I START - google_news_us_live ko trusted banao ---
+SOURCE_RELIABILITY={"reuters":1.0,"apnews":1.0,"bbc":0.95,"npr":0.95,"nbcnews":0.9,"abcnews":0.9,"cbsnews":0.9,"cnn":0.85,"gov":1.0,"google_trends_usa":0.95,"google_news_us_live":0.90,"youtube_search":0.90}
+# --- END ---
+
 RSS_FEEDS={"reuters":"http://feeds.reuters.com/reuters/topNews"}
 GOOGLE_TRENDS_GEO="US"
 GOOGLE_TRENDS_URL="https://trends.google.com/trending/rss?geo=US"
@@ -12,7 +16,7 @@ TREND_FILTER_C={"enabled":True,"bot_friendly_threshold":70}
 TACKO_STYLE={"enabled":True,"segments":{"hook_0_3":{"duration":3},"news_3_15":{"duration":12},"context_15_30":{"duration":15},"cta_30_45":{"duration":15}},"titles":{"count":4}}
 DAILY_KEYWORDS_PATH="data/daily_top_100.json"
 TOP_KEYWORDS_COUNT=100
-YOUTUBE_CATEGORY_ID="25"
+YOUTUBE_CATEGORY_ID="25" # US LOCK - News & Politics
 YOUTUBE_PRIVACY="public"
 YOUTUBE_API_KEY=os.getenv("YOUTUBE_API_KEY","")
 YOUTUBE_CLIENT="youtube"
@@ -36,7 +40,17 @@ BOT_FRIENDLY_THRESHOLD=70
 CHANNEL_NAME=os.getenv("CHANNEL_NAME","Uncovered USA")
 LOG_LEVEL="INFO"
 
-# ===== ADD-ON: MUSIC MOOD MAP + SFX MAP (OLD CODE DELETE NAHI KIYA, SIRF ADD KIYA) =====
+# --- ADD-ON: Problem 6 - US Metadata Lock import (1 line sync) ---
+try:
+    from youtube_metadata_lock import YOUTUBE_METADATA_LOCK
+    YOUTUBE_CATEGORY_ID = YOUTUBE_METADATA_LOCK["categoryId"]
+    YOUTUBE_PRIVACY = YOUTUBE_METADATA_LOCK["privacyStatus"]
+    print(f"[CONFIG Problem 6] US LOCK Loaded: {YOUTUBE_METADATA_LOCK}")
+except:
+    # Fallback agar file abhi tak create nahi hui
+    YOUTUBE_METADATA_LOCK = {"categoryId":"25","privacyStatus":"public","defaultLanguage":"en","defaultAudioLanguage":"en-US"}
+# --- END ---
+
 PEXELS_KEY = PEXELS_API_KEY
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY","") or os.getenv("PIXABAY_KEY","")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY","")
@@ -74,22 +88,19 @@ SFX_MAP = {
 }
 
 def get_music_mood_from_topic(topic: str) -> str:
-    """ADD-ON: mood se music decide karna - topic ke hisab se"""
     topic_l = str(topic).lower()
     for key, mood in MUSIC_MOOD_MAP.items():
-        if key != "default" and key in topic_l:
+        if key!= "default" and key in topic_l:
             return mood
     return MUSIC_MOOD_MAP["default"]
 
 def get_sfx_for_script(script_text: str):
-    """ADD-ON: script se SFX decide"""
     txt = str(script_text).lower()
     for key, sfx_file in SFX_MAP.items():
         if key in txt:
             return sfx_file
     return None
 
-# OUTRO + CAPTION CONFIG ADD-ON
 CAPTION_STYLE = {
     "font": "DejaVuSans-Bold",
     "font_size": 72,

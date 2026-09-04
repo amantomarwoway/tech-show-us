@@ -4,6 +4,14 @@ from datetime import datetime, timezone
 THRESHOLD=75
 BOT_FRIENDLY_THRESHOLD=70
 TREND_LIMIT=30
+
+# --- ADD-ON C+K START ---
+BANNED_NICHES = ["ipl","bcci","cricket","csk","mi vs","bollywood","bhojpuri","tamil movie","recipe","cooking","horoscope","astrology","lottery","crossword","obituary"]
+def is_banned_niche(query: str) -> bool:
+    q = query.lower()
+    return any(b in q for b in BANNED_NICHES)
+# --- ADD-ON C+K END ---
+
 try:
     from .daily_top_keywords import check_usa_relevance_with_rank, get_daily_top_100
 except:
@@ -58,6 +66,10 @@ def score_curiosity(topic):
 
 def score_usa_relevance(topic):
     q=(topic.get('query','') or topic.get('title','')).lower()
+    # --- ADD-ON C+K ---
+    if is_banned_niche(q):
+        return 0
+    # --- END ---
     score,_=check_usa_relevance_with_rank(q)
     if score==0: return 60
     return score
@@ -90,6 +102,10 @@ def score_bot_friendly(topic):
     if "filter_c_score" in topic: return topic.get("filter_c_score",75)
     if topic.get("bot_friendly") is False: return 50
     q=(topic.get('query','') or topic.get('title','')).lower()
+    # --- ADD-ON C+K ---
+    if is_banned_niche(q):
+        return 0
+    # --- END ---
     reject=["obituary","recipe","horoscope","lottery","crossword","live interview 3 hours","podcast 3 hours","full press conference"]
     if any(r in q for r in reject): return 40
     score=70
@@ -130,6 +146,10 @@ def score_script_quality(script):
 
 def score_trend_strength(topic):
     q=topic.get('query','') or topic.get('title','')
+    # --- ADD-ON C+K ---
+    if is_banned_niche(q):
+        return 0
+    # --- END ---
     score,_=check_usa_relevance_with_rank(q)
     if topic.get("source") in ["filter_abc","youtube_search","google_trends_usa_breakout","filter_a","filter_b","filter_a_youtube","filter_a_rising"]:
         return max(score,85)
@@ -166,12 +186,16 @@ def evaluate_topic(topic, script=None):
     return True, scores, f"APPROVE: avg={avg:.1f}"
 
 def gate_loop_for_shorts(topics, generate_script_fn):
-    # FIXED: Only 3 topics to save quota
     topics_limited = topics[:3]
     print(f"[GATE FINAL FAST] Gate on {len(topics_limited)} topics (limited to 3) - Filter A/B/C + Bot Friendly + Tacko")
     for idx, topic in enumerate(topics_limited):
         topic['index']=idx
         q=topic.get('query','') or topic.get('title','')
+        # --- ADD-ON C+K - BANNED CHECK ---
+        if is_banned_niche(q):
+            print(f"  [BANNED C+K] SKIP {q[:60]} - IPL/Bollywood/Cricket/Recipe")
+            continue
+        # --- END ---
         print(f"\n[GATE] {idx+1}/{len(topics_limited)} Checking: {q[:60]} | Vol {topic.get('search_volume','?')} | Bot {topic.get('filter_c_score', topic.get('bot_friendly_score','?'))}")
         approve_6, scores_6, reason_6=evaluate_topic(topic, script=None)
         fails_6=[k for k in ["trend_strength","growth","freshness","usa_relevance","competition","curiosity","bot_friendly"] if scores_6.get(k,0)<(BOT_FRIENDLY_THRESHOLD if k=="bot_friendly" else THRESHOLD) and scores_6.get(k,0)!=0]

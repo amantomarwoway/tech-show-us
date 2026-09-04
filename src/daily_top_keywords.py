@@ -14,6 +14,10 @@ from pathlib import Path
 CACHE_PATH = Path("data/daily_top_100.json")
 CACHE_PATH.parent.mkdir(exist_ok=True)
 
+# --- ADD-ON C+K ---
+BANNED_NICHES_DAILY = ["ipl","bcci","cricket","bollywood","bhojpuri","tamil movie","recipe","horoscope","lottery"]
+# --- END ---
+
 def fetch_google_trends_usa_top_30():
     url = "https://trends.google.com/trending/rss?geo=US"
     try:
@@ -21,6 +25,10 @@ def fetch_google_trends_usa_top_30():
         topics = []
         for i, entry in enumerate(feed.entries[:30]):
             q = entry.title.strip()
+            # --- ADD-ON C+K - BANNED FILTER ---
+            if any(b in q.lower() for b in BANNED_NICHES_DAILY):
+                continue
+            # --- END ---
             if len(q) >= 3:
                 topics.append({"keyword": q.lower(), "rank": i+1, "source": "google_trends"})
         return topics
@@ -43,6 +51,10 @@ def expand_to_100_with_youtube_suggestions(base_keywords):
             suggestions = [m.lower() for m in matches[1:] if len(m) > 4][:3]
             for s in suggestions:
                 if s not in seen and len(expanded) < 100:
+                    # --- ADD-ON C+K ---
+                    if any(b in s for b in BANNED_NICHES_DAILY):
+                        continue
+                    # --- END ---
                     expanded.append({"keyword": s, "rank": len(expanded)+1, "source": "youtube_suggest", "parent": kw})
                     seen.add(s)
         except:
@@ -70,6 +82,10 @@ def get_daily_top_100(force_refresh=False):
 
 def check_usa_relevance_with_rank(query):
     query_lower = query.lower()
+    # --- ADD-ON C+K - INSTANT BANNED REJECT ---
+    if any(b in query_lower for b in BANNED_NICHES_DAILY):
+        return 0, None
+    # --- END ---
     top_100 = get_daily_top_100()
     best_rank = None
     matched_kw = None
@@ -82,6 +98,7 @@ def check_usa_relevance_with_rank(query):
                 matched_kw = kw
     if best_rank is None:
         return 0, None
+    # C+K - Threshold 75 strict
     score = max(75, 95 - (best_rank - 1) * 0.20)
     if best_rank <= 10:
         score = min(98, score + 5)

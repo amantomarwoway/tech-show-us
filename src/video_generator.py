@@ -248,19 +248,7 @@ def white_bar_viral_hook_clip(viral_hook_text: str, duration: float):
         hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', 10))
     
     return [white_bg, hook_clip]
-
-def hook_best_free(hook_text, title_keyword):
-    bg = ColorClip((1080,1920), color=(0,0,0), duration=0.8)
-    p1 = make_text_image(hook_text[:55].upper(), 68, "#FFEB3B", 7, (1050, 400))
-    c1 = ImageClip(p1).set_duration(0.8).set_position(('center', 0.38), relative=True)
-    c1 = c1.resize(lambda t: 1 + 0.25*t)
-    p2 = make_text_image("BREAKING", 52, "#FF0000", 5, (420, 110))
-    c2 = ImageClip(p2).set_duration(0.8).set_position(('center', 0.52), relative=True)
-    flash = ColorClip((1080,1920), color=(255,255,255), duration=0.08).set_opacity(0.7).set_start(0.35)
-    p3 = make_text_image(title_keyword[:30].upper(), 22, "white", 2, (500, 50))
-    c3 = ImageClip(p3).set_duration(0.8).set_position(('center', 0.62), relative=True).set_opacity(0.8)
-    return CompositeVideoClip([bg, c1, c2, flash, c3]).set_duration(0.8)
-
+    
 def retention_loops_best(total):
     clips=[]
     loops = [(2, "WAIT"), (5, "HERE'S WHY"), (9, "WHAT HAPPENED NEXT?"), (14, "DON'T MISS THIS"), (19, "THIS IS HUGE")]
@@ -278,49 +266,6 @@ def vignette_best(duration):
     top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.25).set_position((0,WHITE_BAR_HEIGHT))
     bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.3).set_position((0,1620))
     return [top, bottom]
-
-def outro_best_free():
-    duration = 2.8
-    bg = ColorClip((1080,1920), color=(10,25,49), duration=duration)
-    clips = [bg]
-    black_reset = ColorClip((1080,1920), color=(0,0,0), duration=0.15).set_start(0)
-    clips.append(black_reset)
-    full = "UNCOVERED USA 24"
-    for i in range(1, len(full)+1):
-        part = full[:i]
-        st = 0.2 + (i-1)*0.06
-        if st > 1.0: break
-        p = make_text_image(part, 68, "white", 5, (1080, 140))
-        c = ImageClip(p).set_duration(duration - st).set_start(st).set_position(('center', 0.30), relative=True)
-        clips.append(c)
-    p_final = make_text_image(full, 78, "white", 6, (1080, 160))
-    c_final = ImageClip(p_final).set_duration(0.8).set_start(1.1).set_position(('center', 0.30), relative=True)
-    c_final = c_final.resize(lambda t: 1 + 0.15*np.sin(t*8))
-    clips.append(c_final)
-    items = [
-        (0.3, "LIKE", "#FF0000", (80, 950)),
-        (0.5, "SHARE", "#FFEB3B", (420, 950)),
-        (0.7, "SUBSCRIBE", "#FF0000", (80, 1080)),
-        (0.9, "COMMENT", "#FFEB3B", (80, 1210)),
-        (1.1, "NOW", "#FF0000", (480, 1210))
-    ]
-    for st, txt, col, pos in items:
-        p = make_text_image(txt, 52, col, 5, (320, 90))
-        c = ImageClip(p).set_duration(duration - st).set_start(st).set_position(pos)
-        c = c.resize(lambda t: 1.35 if t < 0.15 else 1.0)
-        clips.append(c)
-    p_sub_btn = make_text_image("SUBSCRIBE NOW", 30, "white", 3, (380, 70), bg_color=(255,0,0,220))
-    c_btn = ImageClip(p_sub_btn).set_duration(1.5).set_start(1.3).set_position(('center', 0.78), relative=True)
-    c_btn = c_btn.resize(lambda t: 1.1 + 0.1*abs(np.sin(t*6)))
-    clips.append(c_btn)
-    p_th = make_text_image("Thanks for Watching", 36, "white", 3, (600, 70))
-    c_th = ImageClip(p_th).set_duration(duration).set_start(1.5).set_position(('center', 0.88), relative=True)
-    clips.append(c_th)
-    red = ColorClip((540, 10), color=(255,0,0), duration=duration).set_position((0,1910))
-    yellow = ColorClip((540, 10), color=(255,235,59), duration=duration).set_position((540,1910))
-    clips.extend([red, yellow])
-    return CompositeVideoClip(clips).set_duration(duration)
-
 
 def get_giphy_pro_editor(script_text: str, total_duration: float):
     """
@@ -452,29 +397,6 @@ def get_giphy_stickers(keyword: str, limit=3):
     # Old call redirects to pro with dummy timing - but we use pro editor now
     return []
 
-
-
-def get_pexels_image_for_last(keyword: str):
-    try:
-        key = os.getenv("PEXELS_API_KEY")
-        if not key:
-            return None
-        h = {"Authorization": key}
-        url = f"https://api.pexels.com/v1/search?query={keyword}&per_page=1&orientation=portrait"
-        res = requests.get(url, headers=h, timeout=10).json()
-        if res.get("photos"):
-            photo_url = res["photos"][0]["src"]["large"]
-            img_data = requests.get(photo_url, timeout=15).content
-            path = Path(f"temp/last_asset_{keyword.replace(' ','_')}.jpg")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(img_data)
-            clip = ImageClip(str(path)).set_duration(2).resize((1080,1920))
-            print(f"[ASSET LAST] Image fetched: {path}")
-            return clip
-    except Exception as e:
-        print(f"[ASSET LAST] Error: {e}")
-    return None
-
 def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     if isinstance(script_data, dict):
         script_text=script_data.get('full_script','') or script_data.get('script','') or ""
@@ -580,23 +502,6 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     # FIX: White bar sabse upar (last layer) - pure white rahega, vignette/branding usko grey nahi karega - second image jaisa
     main_video = CompositeVideoClip([video_shifted] + vignette + [prog_bg, prog_red, line_2p] + top_elems + retention + caps + giphy_clips + white_bar_clips).set_duration(total).set_audio(final_audio)
 
-    print("4. FINAL + OUTRO + ASSET LAST...")
-    hook = hook_best_free(first_sentence, title)
-    outro = outro_best_free()
-    black_gap = ColorClip((1080,1920), color=(0,0,0), duration=0.15)
-    
-    last_asset_clip = None
-    try:
-        kw = keywords[0] if keywords else title.split()[0]
-        last_asset_clip = get_pexels_image_for_last(kw)
-    except:
-        last_asset_clip = None
-    
-    if last_asset_clip:
-        final = concatenate_videoclips([hook, main_video, black_gap, outro, last_asset_clip], method="compose")
-    else:
-        final = concatenate_videoclips([hook, main_video, black_gap, outro], method="compose")
-    
     final.write_videofile(output_path,fps=30,codec='libx264',audio_codec='aac',threads=2,preset='ultrafast')
     print(f"READY WHITE BAR DOUBLE {WHITE_BAR_HEIGHT}px BOLD 65 5-6 WORDS MIRROR={viral_hook}: {output_path}")
     return output_path

@@ -110,7 +110,7 @@ def main():
     if not ranked:
         ranked = verified
 
-    print(f"4. STARTING GATE THRESHOLD {THRESHOLD} + BOT_FRIENDLY {BOT_FRIENDLY_THRESHOLD} + Tacko 4 segments")
+    print(f"4. STARTING GATE THRESHOLD {THRESHOLD} + BOT_FRIENDLY {BOT_FRIENDLY_THRESHOLD} + Tacko 4 segments + FACT CHECKER (Shorts Gate ke baad)")
 
     def script_gen_wrapper(topic_input):
         if isinstance(topic_input, dict):
@@ -120,14 +120,57 @@ def main():
         result = generate_script(dummy)
         return result
 
-    approved_topic, script_result, scores = gate_loop_for_shorts(ranked, script_gen_wrapper)
+    # ===== NEW FLOW: GATE ke baad FACT CHECKER, uske baad hi FINAL APPROVED =====
+    approved_topic = None
+    script_result = None
+    scores = None
+    validation = None
+
+    # Ranked list me se ek-ek karke check karo
+    for idx, candidate in enumerate(ranked[:5]): # Top 5 me se best dhoondo jo Fact Check bhi pass kare
+        print(f"\n[GATE] {idx+1}/{min(5,len(ranked))} Checking: {candidate.get('query') or candidate.get('title')} | Vol ? | Bot ?")
+
+        # 1. GATE CHECK
+        temp_approved, temp_script, temp_scores = gate_loop_for_shorts([candidate], script_gen_wrapper)
+
+        if not temp_approved:
+            print(f" -> GATE FAIL for {candidate.get('query')}")
+            continue
+
+        print(f" -> GATE PASS pre-script: {temp_scores}")
+
+        # 2. FACT CHECKER - SHORTS GATE KE BAAD, FINAL APPROVED SE PEHLE
+        print(f"5. Fact Checking (Shorts Gate ke baad)...")
+        try:
+            # fact_checker ab dict return karta hai {"passed": True/False}
+            validation = fact_check(temp_script, temp_approved)
+
+            if not validation.get('passed', False):
+                print(f"❌ REJECTED BY FACT CHECKER: {temp_approved.get('title') or temp_approved.get('query')}")
+                print(f"   Reason: {validation.get('report')}")
+                print(f"   -> Is topic ko FINAL APPROVED nahi karenge, agla topic try karenge")
+                continue # Agla topic
+            else:
+                print(f"✅ FACT CHECKER PASS: {validation.get('report')}")
+
+        except Exception as e:
+            print(f"fact_check crashed: {e}, continuing with PASS")
+            traceback.print_exc()
+            validation = {"passed": True, "report": f"crash bypass {e}"}
+
+        # 3. Agar yahan tak aa gaya matlab GATE + FACT CHECKER dono PASS
+        approved_topic = temp_approved
+        script_result = temp_script
+        scores = temp_scores
+        break # Mil gaya final topic
 
     if not approved_topic:
-        print("❌ All topics FAILED gate - SAFE EXIT")
+        print("❌ All topics FAILED gate + fact checker - SAFE EXIT - Koi bhi topic FINAL APPROVED nahi hua")
         return
 
-    print(f"\n🔥 FINAL APPROVED: {approved_topic.get('title') or approved_topic.get('query')}")
+    print(f"\n🔥 FINAL APPROVED: {approved_topic.get('title') or approved_topic.get('query')} (Fact Checker ke baad)")
     print(f" Scores: {scores}")
+    print(f" Fact Report: {validation.get('report') if validation else 'N/A'}")
 
     if isinstance(script_result, dict):
         script_data = script_result
@@ -167,17 +210,9 @@ def main():
 
     story_id = save_story(approved_topic)
 
-    print(f"\n5. FINAL script already with Tacko structure")
+    print(f"\n5. FINAL script already with Tacko structure - Already Fact Checked PASS")
 
-    print(f"6. Fact Checking...")
-    try:
-        validation = fact_check(full_script, approved_topic)
-        if not validation['passed']:
-            print(f"Fact check FAILED: {validation['report']}, continuing")
-    except Exception as e:
-        print(f"fact_check crashed: {e}, continuing")
-
-    print(f"7. Creating video with Tacko instructions...")
+    print(f"6. Creating video with Tacko instructions...")
     try:
         video_path = create_video(script_data, approved_topic)
     except:

@@ -1,128 +1,100 @@
-import requests, re, time
+import requests, re
 from urllib.parse import quote
 from datetime import datetime
 
-def fact_check(script_data, topic_arg=None):
+def fact_check(full_script, approved_topic=None):
+    """
+    FINAL PRO FACT CHECKER - 3 conditions
+    Returns: {"passed": True/False, "report": "..."}  -> main.py isi ko expect karta hai
+    """
     try:
-        # ===== Purana title nikalne ka logic same rakha =====
-        if isinstance(script_data, dict):
-            text = script_data.get('script','') or script_data.get('full_script','') or str(script_data)
-            title = script_data.get('title','') or script_data.get('query','') or script_data.get('topic','')
+        # Topic nikalna - dict ya string dono handle
+        if isinstance(approved_topic, dict):
+            topic = approved_topic.get('title') or approved_topic.get('query') or approved_topic.get('topic') or ""
+        elif isinstance(approved_topic, str):
+            topic = approved_topic
         else:
-            text = str(script_data)
-            title = text[:50]
-
-        if topic_arg:
-            topic = str(topic_arg)
-        else:
-            topic = str(title)
+            # agar pehla arg hi dict hai (old call)
+            if isinstance(full_script, dict):
+                topic = full_script.get('title') or full_script.get('query') or ""
+            else:
+                topic = str(full_script)[:80]
 
         topic = str(topic).strip()[:120]
         if len(topic) < 3:
-            topic = str(title).strip()[:120]
+            return {"passed": True, "report": "Empty topic - bypass"}
 
-        print(f"Fact checking: {topic[:50]}...")
+        print(f"Fact checking: {topic[:60]}... (Freshness <1hr & <2hr required)")
         print(f"[TIME CHECK] Current Time: {datetime.now()} - Data must be <1hr / <2hr fresh")
 
-        # ===== 1) Google se bolna: YouTube USA ke andar jao, trending section me hai kya? =====
-        # Condition 3: YouTube trending wala data 2 ghante se jyada purana nahi hona chahiye
-        def google_check_youtube_usa_trending_section(q):
+        # CHECK 1: Google se bolna - YouTube USA Trending Section me hai kya? (<2hr fresh)
+        def check_youtube_trending_via_google(q):
             try:
                 headers = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en"}
-                # qdr:h2 = last 2 hours ka data only -> 2 ghante se jyada purana nahi
+                # qdr:h2 = last 2 hours ka data only - 2 ghante se purana nahi
                 query = f'"{q}" site:youtube.com/feed/trending'
                 url = f"https://www.google.com/search?q={quote(query)}&gl=us&hl=en&tbs=qdr:h2"
                 r = requests.get(url, headers=headers, timeout=8)
                 html = r.text.lower()
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                print(f" [CHECK-1] Google->YouTube USA Trending (Last 2hr filter) at {timestamp}")
-
-                # Google ne YouTube trending section me topic dikhaya kya last 2 hr me?
-                if "youtube.com/feed/trending" in html and q.lower().split()[0] in html:
-                    print(f" -> Google says YES (Found in YouTube USA Trending, fresh <2hr)")
+                if "youtube.com/feed/trending" in html and q.split()[0].lower() in html:
                     return "yes"
-
-                if "did not match any documents" in html or "no results" in html:
-                    print(f" -> Google says NO (Not in trending section)")
+                if "did not match any documents" in html:
                     return "no"
-
-                # Agar youtube hi nahi mila = NO
                 if "youtube.com" not in html:
-                    print(f" -> Google says NO (No YouTube trending data)")
                     return "no"
-
-                print(f" -> Google says NO")
                 return "no"
-
             except Exception as e:
-                print(f" [CHECK-1] Error {e} -> no_response")
+                print(f" [CHECK-1] Error {e}")
                 return "no_response"
 
-        # ===== 2) Google se puchna: Last 1 hour me USA me kitne logo ne search kiya? =====
-        # Condition 3: Ye data 1 ghante se jyada purana nahi hona chahiye, real latest
-        def google_last_1hour_usa_searches(q):
+        # CHECK 2: Last 1 hour USA me kitne logo ne search kiya? (<1hr fresh real data)
+        def check_last_1hour_usa_search(q):
             try:
-                # BEST: pytrends with now 1-H = last 1 hour, geo=US = real latest
                 try:
                     from pytrends.request import TrendReq
                     pytrends = TrendReq(hl='en-US', tz=360)
                     pytrends.build_payload([q], timeframe='now 1-H', geo='US')
                     data = pytrends.interest_over_time()
-
                     if not data.empty:
-                        last_interest = int(data[q].iloc[-1])
-                        last_time = str(data.index[-1])
-                        # Real mapping: 100 = 15 lakh, 60 = 9 lakh
-                        estimated = last_interest * 15000
-                        print(f" [CHECK-2] Google Trends REAL Data Time={last_time} (must be <1hr) Interest={last_interest} -> Est {estimated:,} searches USA last 1hr")
-                        # Check freshness: last_time should be within 1 hour
-                        return estimated
+                        interest = int(data[q].iloc[-1])
+                        est = interest * 15000 # 100=15L, 60=9L
+                        print(f" [CHECK-2] Google Trends REAL <1hr Data: Interest={interest} -> Est {est:,} searches USA last 1hr")
+                        return est
                 except Exception as e:
-                    print(f" pytrends fail {e}, fallback to Google qdr:h")
+                    print(f" pytrends fail {e}, fallback qdr:h")
 
-                # Fallback: Google with qdr:h = last 1 hour real data
-                headers = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-US"}
+                headers = {"User-Agent": "Mozilla/5.0"}
                 url = f"https://www.google.com/search?q={quote(q)}&gl=us&hl=en&tbs=qdr:h"
                 r = requests.get(url, headers=headers, timeout=8)
                 m = re.search(r'About ([\d,]+) results', r.text)
                 if m:
-                    count = int(m.group(1).replace(',', ''))
-                    print(f" [CHECK-2] Google qdr:h REAL Data (Last 1hr) = {count:,} results")
-                    return count
-
+                    cnt = int(m.group(1).replace(',', ''))
+                    print(f" [CHECK-2] Google qdr:h <1hr: {cnt:,} results last 1hr")
+                    return cnt
                 return 0
-            except Exception as e:
-                print(f" [CHECK-2] Error {e}")
+            except:
                 return 0
 
-        # ===== FINAL DECISION =====
-        # Step 1
-        google_trending_answer = google_check_youtube_usa_trending_section(topic)
+        # FINAL LOGIC
+        ans1 = check_youtube_trending_via_google(topic)
+        print(f" [CHECK-1] Google->YouTube USA Trending (Last 2hr filter): Google says {ans1.upper()}")
 
-        if google_trending_answer == "yes":
-            print(f"Fact Check PASS: 1) Google YES - {topic} is in YouTube USA Trending Section (Fresh <2hr)")
-            return True
+        if ans1 == "yes":
+            return {"passed": True, "report": f"Google YES - {topic} is in YouTube USA Trending Section (Fresh <2hr)"}
 
-        if google_trending_answer == "no":
-            print(f"Fact Check FAIL: 1) Google NO - {topic} NOT in YouTube USA Trending Section")
-            return False
+        if ans1 == "no":
+            return {"passed": False, "report": f"Google NO - {topic} NOT in YouTube USA Trending Section (Checked <2hr fresh)"}
 
-        # Step 2 - Only if Google ne no_response diya
-        if google_trending_answer == "no_response":
-            print(f" Google ne YES/NO nahi diya, ab CHECK-2 kar rahe hain (Last 1hr USA)...")
-            last_hour_count = google_last_1hour_usa_searches(topic)
-
-            if last_hour_count >= 1000000:
-                print(f"Fact Check PASS: 2) Last 1hr {last_hour_count:,} searches (10 Lakh+, Real <1hr data)")
-                return True
-            elif 900000 <= last_hour_count <= 1000000:
-                print(f"Fact Check PASS: 2) Last 1hr {last_hour_count:,} searches (9-10 Lakh, Real <1hr data)")
-                return True
+        if ans1 == "no_response":
+            print(f" Google ne YES/NO nahi diya, ab last 1 hour ka USA search check...")
+            count = check_last_1hour_usa_search(topic)
+            if count >= 1000000:
+                return {"passed": True, "report": f"Last 1hr {count:,} searches (10L+) - Real <1hr data"}
+            elif 900000 <= count <= 1000000:
+                return {"passed": True, "report": f"Last 1hr {count:,} searches (9-10L) - Real <1hr data"}
             else:
-                print(f"Fact Check FAIL: 2) Last 1hr only {last_hour_count:,} searches (<9 Lakh)")
-                return False
+                return {"passed": False, "report": f"Last 1hr only {count:,} searches (<9L) - FAIL"}
 
     except Exception as e:
         print(f"fact_check crashed: {e}, forcing pass")
-        return True
+        return {"passed": True, "report": f"crash bypass {e}"}

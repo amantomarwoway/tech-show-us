@@ -7,7 +7,6 @@ import os, traceback
 FILTERS_AVAILABLE = False
 apply_all_filters_short_bot = None
 print("[MAIN Problem 6] FILTERS_AVAILABLE=False - trend_filters.py deleted, direct news_fetcher use hoga")
-# --- END - Pehle wala try-except import hata diya ---
 
 from news_fetcher import fetch_all_news
 
@@ -67,20 +66,6 @@ def main():
     if manual_topic:
         print(f"1. MANUAL Topic: {manual_topic}")
         raw_stories = [{"title": manual_topic, "query": manual_topic, "url": "", "source": "manual", "published": None, "summary": manual_topic, "search_volume": 80, "bot_friendly": True, "filter_c_score": 85, "bot_friendly_score": 85}]
-    elif FILTERS_AVAILABLE:
-        print(f"1. Fetching USA news - Filter A+B+C (Tacko Style Every Video)")
-        print(f" [Filter A] YouTube Search Filter US Breakout")
-        print(f" [Filter B] Autocomplete Feeder Half keyword hot")
-        print(f" [Filter C] Format & Engagement Bot friendly >=70")
-        try:
-            raw_stories = apply_all_filters_short_bot()
-            if not raw_stories:
-                print("Filter A+B+C returned 0, fallback to RSS")
-                raw_stories = fetch_all_news()
-        except Exception as e:
-            print(f"Filter A+B+C crashed: {e}")
-            traceback.print_exc()
-            raw_stories = fetch_all_news()
     else:
         print(f"1. Fetching USA news from RSS (Fallback) - Problem 6 Synced - Direct Google Trends + Live Fallback")
         raw_stories = fetch_all_news()
@@ -97,7 +82,6 @@ def main():
     except Exception as e:
         print(f"verify_stories crashed: {e}, using raw")
         verified = raw_stories
-
     if not verified:
         verified = raw_stories
 
@@ -106,11 +90,10 @@ def main():
         ranked = score_and_rank(verified)
     except:
         ranked = verified
-
     if not ranked:
         ranked = verified
 
-    print(f"4. STARTING GATE THRESHOLD {THRESHOLD} + BOT_FRIENDLY {BOT_FRIENDLY_THRESHOLD} + Tacko 4 segments + FACT CHECKER (Shorts Gate ke baad)")
+    print(f"4. STARTING GATE THRESHOLD {THRESHOLD} + BOT_FRIENDLY {BOT_FRIENDLY_THRESHOLD} + Tacko 4 segments + FACT CHECKER STRICT (3 checks)")
 
     def script_gen_wrapper(topic_input):
         if isinstance(topic_input, dict):
@@ -120,55 +103,55 @@ def main():
         result = generate_script(dummy)
         return result
 
-    # ===== NEW FLOW: GATE ke baad FACT CHECKER, uske baad hi FINAL APPROVED =====
+    # ===== NEW FLOW: GATE ke baad FACT CHECKER (3 mandatory), 1 bhi FAIL to new topic =====
     approved_topic = None
     script_result = None
     scores = None
     validation = None
 
-    # Ranked list me se ek-ek karke check karo
-    for idx, candidate in enumerate(ranked[:5]): # Top 5 me se best dhoondo jo Fact Check bhi pass kare
-        print(f"\n[GATE] {idx+1}/{min(5,len(ranked))} Checking: {candidate.get('query') or candidate.get('title')} | Vol ? | Bot ?")
+    for idx, candidate in enumerate(ranked[:10]):  # Top 10 try
+        print(f"\n{'='*60}")
+        print(f"[TRY] {idx+1}/10 Topic: {candidate.get('query') or candidate.get('title')}")
+        print(f"{'='*60}")
 
-        # 1. GATE CHECK
         temp_approved, temp_script, temp_scores = gate_loop_for_shorts([candidate], script_gen_wrapper)
 
         if not temp_approved:
-            print(f" -> GATE FAIL for {candidate.get('query')}")
+            print(f" -> GATE FAIL, next topic...")
             continue
 
         print(f" -> GATE PASS pre-script: {temp_scores}")
 
-        # 2. FACT CHECKER - SHORTS GATE KE BAAD, FINAL APPROVED SE PEHLE
-        print(f"5. Fact Checking (Shorts Gate ke baad)...")
+        # FACT CHECKER STRICT - SHORTS GATE KE BAAD, FINAL APPROVED SE PEHLE
+        print(f"\n5. Fact Checking (STRICT 3 CHECKS - 1 FAIL = REJECT)...")
         try:
-            # fact_checker ab dict return karta hai {"passed": True/False}
             validation = fact_check(temp_script, temp_approved)
 
             if not validation.get('passed', False):
                 print(f"❌ REJECTED BY FACT CHECKER: {temp_approved.get('title') or temp_approved.get('query')}")
                 print(f"   Reason: {validation.get('report')}")
-                print(f"   -> Is topic ko FINAL APPROVED nahi karenge, agla topic try karenge")
-                continue # Agla topic
+                print(f"   Rule: Teenon me se ek bhi FAIL to FINAL APPROVAL nahi - new topic utha rahe hain...")
+                continue  # Agla topic uthao
             else:
-                print(f"✅ FACT CHECKER PASS: {validation.get('report')}")
+                print(f"✅ FACT CHECKER PASS ALL 3: {validation.get('report')}")
 
         except Exception as e:
-            print(f"fact_check crashed: {e}, continuing with PASS")
+            print(f"fact_check crashed: {e} -> FAIL (strict)")
             traceback.print_exc()
-            validation = {"passed": True, "report": f"crash bypass {e}"}
+            print(f"❌ REJECTED due to crash - new topic...")
+            continue
 
-        # 3. Agar yahan tak aa gaya matlab GATE + FACT CHECKER dono PASS
+        # GATE + FACT CHECKER dono PASS
         approved_topic = temp_approved
         script_result = temp_script
         scores = temp_scores
-        break # Mil gaya final topic
+        break
 
     if not approved_topic:
-        print("❌ All topics FAILED gate + fact checker - SAFE EXIT - Koi bhi topic FINAL APPROVED nahi hua")
+        print("\n❌ All topics FAILED gate + fact checker (3 checks) - SAFE EXIT - Koi FINAL APPROVED nahi hua")
         return
 
-    print(f"\n🔥 FINAL APPROVED: {approved_topic.get('title') or approved_topic.get('query')} (Fact Checker ke baad)")
+    print(f"\n🔥 FINAL APPROVED (After Fact Checker STRICT PASS All 3): {approved_topic.get('title') or approved_topic.get('query')}")
     print(f" Scores: {scores}")
     print(f" Fact Report: {validation.get('report') if validation else 'N/A'}")
 
@@ -210,7 +193,7 @@ def main():
 
     story_id = save_story(approved_topic)
 
-    print(f"\n5. FINAL script already with Tacko structure - Already Fact Checked PASS")
+    print(f"\n5. FINAL script already with Tacko structure - Already Fact Checked PASS (All 3)")
 
     print(f"6. Creating video with Tacko instructions...")
     try:

@@ -35,7 +35,7 @@ CLIP_DENSITY = 0.8  # sec per clip
 DURATION_MIN = 11
 DURATION_MAX = 13
 FPS_CHOICES = [29.97, 29.98, 59.94, 59.95]
-NOISE_HUE_FILTER = "noise=alls=5:allf=t,hue=h=2:s=1.08" # FIXED: allp=7 removed - invalid ffmpeg param causing exit 8
+NOISE_HUE_FILTER = "noise=alls=2:allf=t,hue=h=0:s=1.02" # FIXED: allp=7 removed - invalid ffmpeg param causing exit 8
 FONT_LIST = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
@@ -499,7 +499,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         sub = c.subclip(0, dur).set_start(t)
         if idx==0:
             # VvSA: Shock first frame - brightness + contrast + zoom 110%
-            sub = sub.fx(vfx.colorx, 1.35).resize(lambda tt: 1.1 if tt<0.3 else 1.0)
+            sub = sub.fx(vfx.colorx, 1.05).resize(lambda tt: 1.02 if tt<0.3 else 1.0)
         final_video_clips.append(sub)
         t+=dur
 

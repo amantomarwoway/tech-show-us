@@ -2,7 +2,7 @@
 ULTIMATE GOD LEVEL - RETENTION + VvSA + ANTI-BOT + SOUND RETENTION - NO 4K
 Location: src/video_generator.py
 Edits as per request (4K excluded):
-- Retention: 0.8 sec per clip, TTS 1.15X, 11-13 sec / 40 words, Seamless loop
+- Retention: 0.8 sec per clip, TTS 1.10X, 11-13 sec / 40 words, Seamless loop
 - VvSA: Shock first frame, Audio punch first 1 sec, SFX by topic, Cinematic contrast/saturation
 - Anti Bot: Frame variation, Randomisation, No same font, Random font colour
 - FFmpeg: noise + hue filter (light)
@@ -35,7 +35,7 @@ CLIP_DENSITY = 0.8  # sec per clip
 DURATION_MIN = 11
 DURATION_MAX = 13
 FPS_CHOICES = [29.97, 29.98, 59.94, 59.95]
-NOISE_HUE_FILTER = "noise=alls=5:allf=t:allp=7,hue=h=2:s=1.08" # light change for Pexels dedup
+NOISE_HUE_FILTER = "noise=alls=5:allf=t,hue=h=2:s=1.08" # FIXED: allp=7 removed - invalid ffmpeg param causing exit 8
 FONT_LIST = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
@@ -80,15 +80,17 @@ def trim_to_40_words(text: str) -> str:
     return trimmed
 
 def get_best_free_clips_fixed(q, num=15):
-    """Pexel randomisation + 0.8 sec density + frame variation"""
+    """Pexel randomisation + 0.8 sec density + frame variation - FIXED NoneType get_frame"""
     key=os.getenv("PEXELS_API_KEY")
     clips=[]
+    temp_files=[]  # keep files alive till end
     if not key:
         print("No PEXELS_API_KEY - Using BEST FREE color clips")
         return [ColorClip((1080,1920),color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)),duration=CLIP_DENSITY) for _ in range(num)]
     try:
         h={"Authorization":key}
-        sq=" ".join(re.findall(r'\w+',str(q))[:3]) or "usa breaking news"
+        words_found = re.findall(r'\w+', str(q))[:3]
+        sq = " ".join(words_found) if words_found else "usa breaking news"
         # Fetch 3x for randomisation
         url=f"https://api.pexels.com/videos/search?query={sq}&per_page={num*3}&orientation=portrait&size=medium"
         res=requests.get(url,headers=h,timeout=20).json()
@@ -121,35 +123,49 @@ def get_best_free_clips_fixed(q, num=15):
                     os.remove(tmp_path)
                     continue
                 try:
-                    # Frame variation: random in_point 0-2 sec
-                    test_clip = VideoFileClip(tmp_path)
-                    rand_start = random.uniform(0, max(0, test_clip.duration-1))
-                    final_clip = test_clip.subclip(rand_start, min(rand_start+2, test_clip.duration)).resize(height=1920-WHITE_BAR_HEIGHT).set_position('center').without_audio()
-                    # VvSA: Cinematic contrast + saturation + dark grave look via colorx
-                    final_clip = final_clip.fx(vfx.colorx, random.uniform(1.1,1.25)) # light contrast boost
+                    # FIXED: Don't close parent clip - keep file alive to avoid NoneType get_frame
+                    video_clip = VideoFileClip(tmp_path)
+                    if video_clip.duration < 0.5:
+                        video_clip.close()
+                        os.remove(tmp_path)
+                        continue
+                    rand_start = random.uniform(0, max(0, video_clip.duration-1))
+                    final_clip = video_clip.subclip(rand_start, min(rand_start+2, video_clip.duration)).resize(height=1920-WHITE_BAR_HEIGHT).set_position('center').without_audio()
+                    final_clip = final_clip.fx(vfx.colorx, random.uniform(1.1,1.25))
                     final_clip = final_clip.fx(vfx.lum_contrast, lum=0, contrast=15, contrast_thr=127)
-                    test_clip.close()
+                    # Keep original file path alive
+                    temp_files.append(tmp_path)
                     clips.append(final_clip)
+                    # DO NOT close video_clip here - final_clip needs it
                 except Exception as e:
+                    print(f"Pexels clip error: {e}")
                     try:
                         os.remove(tmp_path)
                     except:
                         pass
                     continue
             except Exception as e:
+                print(f"Pexels video loop error: {e}")
                 continue
         if clips:
-            # Frame variation rule: shuffle order + random 0.8 sec cut
             random.shuffle(clips)
             final_cuts=[]
             for c in clips:
-                # each clip 0.8 sec density
-                d = min(CLIP_DENSITY, c.duration)
-                start = random.uniform(0, max(0, c.duration-d))
-                final_cuts.append(c.subclip(start, start+d))
+                try:
+                    d = min(CLIP_DENSITY, c.duration if hasattr(c, 'duration') else CLIP_DENSITY)
+                    start = random.uniform(0, max(0, c.duration-d)) if hasattr(c, 'duration') else 0
+                    cut = c.subclip(start, start+d) if hasattr(c, 'subclip') else c
+                    final_cuts.append(cut)
+                except Exception as e:
+                    final_cuts.append(c)
+            print(f"Pexels SUCCESS: {len(final_cuts)} clips ready for {sq}")
             return final_cuts[:num]
     except Exception as e:
         print(f"Pexels overall error: {e}")
+        import traceback
+        traceback.print_exc()
+    if not clips:
+        print("Pexels fallback to color clips - no valid clips downloaded")
     return [ColorClip((1080,1920),color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)),duration=CLIP_DENSITY) for _ in range(num)]
 
 def get_free_bg_music():

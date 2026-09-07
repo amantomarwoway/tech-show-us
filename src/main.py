@@ -24,21 +24,43 @@ except ImportError:
         apply_all_filters_short_bot = None
         print("[MAIN] FILTERS_AVAILABLE=False - fallback to news_fetcher + breakout_detector + 6 NEW FILES")
 
-# BREAKOUT DETECTOR IMPORT - ANY TOPIC (news + politics + tech)
+# BREAKOUT DETECTOR IMPORT - ANY TOPIC (news + politics + tech) - FIXED PATH
+BREAKOUT_AVAILABLE = False
+get_all_breakouts_any_topic = None
 try:
-    from breakout_detector import get_all_breakouts_any_topic
+    # When running as python src/main.py, same folder import works
+    from breakout_detector import get_all_breakouts_any_topic as _brk
+    get_all_breakouts_any_topic = _brk
     BREAKOUT_AVAILABLE = True
-    print("[MAIN] BREAKOUT_AVAILABLE=True - breakout_detector loaded")
-except ImportError:
+    print("[MAIN] BREAKOUT_AVAILABLE=True - breakout_detector loaded from same dir")
+except ImportError as e1:
     try:
-        from src.breakout_detector import get_all_breakouts_any_topic
+        from src.breakout_detector import get_all_breakouts_any_topic as _brk
+        get_all_breakouts_any_topic = _brk
         BREAKOUT_AVAILABLE = True
         print("[MAIN] BREAKOUT_AVAILABLE=True - src.breakout_detector loaded")
-    except ImportError:
-        BREAKOUT_AVAILABLE = False
-        def get_all_breakouts_any_topic():
-            return []
-        print("[MAIN] BREAKOUT_AVAILABLE=False - using inline Visualping fallback")
+    except ImportError as e2:
+        try:
+            import sys
+            sys.path.insert(0, 'src')
+            from breakout_detector import get_all_breakouts_any_topic as _brk
+            get_all_breakouts_any_topic = _brk
+            BREAKOUT_AVAILABLE = True
+            print("[MAIN] BREAKOUT_AVAILABLE=True - after sys.path insert")
+        except ImportError:
+            BREAKOUT_AVAILABLE = False
+            def get_all_breakouts_any_topic():
+                print("[MAIN] BREAKOUT fallback - trying visualping directly")
+                try:
+                    from visualping_monitor import get_visualping_breakouts
+                    return get_visualping_breakouts()
+                except:
+                    try:
+                        from src.visualping_monitor import get_visualping_breakouts
+                        return get_visualping_breakouts()
+                    except:
+                        return []
+            print(f"[MAIN] BREAKOUT_AVAILABLE=False - using inline fallback, e1={e1}, e2={e2}")
 
 def clean_id_breakout(text: str) -> str:
     if not text:

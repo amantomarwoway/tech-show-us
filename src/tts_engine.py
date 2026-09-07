@@ -2,7 +2,7 @@
 ULTIMATE GOD LEVEL - TTS RETENTION + VvSA + SOUND RETENTION
 Location: src/tts_engine.py
 Edits:
-- Pacing 1.15X speed
+- Pacing 1.10X speed
 - Pitch slightly up (energetic)
 - Audio punch first 1 sec 150% volume
 - Sound retention: BGM volume every 3 sec 5% up/down + sub bass drop
@@ -13,7 +13,7 @@ import os, wave, subprocess, tempfile, math, random
 from pathlib import Path
 
 # Retention constants
-TTS_SPEED = 1.15
+TTS_SPEED = 1.10
 PUNCH_VOLUME = 1.5  # first 1 sec 150%
 PITCH_SEMITONES = 1.2  # slight pitch up for energy
 VOL_MODULATION_EVERY_SEC = 3  # har 3 sec
@@ -22,7 +22,7 @@ VOL_MODULATION_PERCENT = 0.05  # 5%
 def apply_ffmpeg_retention_filters(input_path, output_path):
     """
     FFmpeg filters for retention:
-    - atempo 1.15 (pacing)
+    - atempo 1.10 (pacing)
     - asetrate + pitch up
     - volume punch first 1 sec
     - volume modulation every 3 sec 5%

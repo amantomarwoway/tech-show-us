@@ -1,9 +1,15 @@
-name: Tech Show US Bot
+name: Tech Show US Bot - PURE BREAKOUT FORCE
+
 on:
   schedule:
-    # FINAL FIX B+L - Sirf 2 slot US audience ke liye - 10:30 UTC = 6:30 AM ET, 16:30 UTC = 12:30 PM ET
+    # B+L US audience - 10:30 UTC = 6:30 AM ET, 16:30 UTC = 12:30 PM ET
     - cron: '30 10 * * *'
     - cron: '30 16 * * *'
+    # BREAKOUT EXTRA - Har 3 ghante me breakout check
+    - cron: '0 13 * * *'  # 9 AM ET
+    - cron: '0 19 * * *'  # 3 PM ET
+    - cron: '0 22 * * *'  # 6 PM ET
+    - cron: '30 0 * * *'  # 8:30 PM ET
   workflow_dispatch:
 
 jobs:
@@ -11,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Visualping Hashes
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: visualping-hashes-${{ github.run_id }}
+          restore-keys: |
+            visualping-hashes-
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -23,20 +38,31 @@ jobs:
           pip install --upgrade pip
           pip install Pillow==9.5.0
           pip install -r requirements.txt
-          pip install pytrends
+          pip install pytrends feedparser requests
 
-      - name: Run Bot
+      - name: Create data dir
+        run: mkdir -p data output temp
+
+      - name: Run BREAKOUT Bot - PURE BREAKOUT NO FALLBACK
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-        run: python src/main.py
+        run: |
+          echo "🔥 PURE BREAKOUT MODE - NO FALLBACK"
+          echo "Checking: breakout_detector.py + visualping_monitor.py + news_fetcher.py"
+          python src/main.py
 
-      - name: Upload Artifact on Fail/Success
+      - name: Upload Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: output
-          path: output/
+          name: output-${{ github.run_number }}
+          path: |
+            output/
+            data/breakout_cache.json
+            data/visualping_hashes.json
+            data/visualping_cache.json
+            logs.txt

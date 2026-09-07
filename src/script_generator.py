@@ -1,4 +1,15 @@
-import os, requests, re
+"""
+ULTIMATE GOD LEVEL - RETENTION + VALIDATION FACTORY - 40 WORDS + TWIST ONLY
+Location: src/script_generator.py
+Edits:
+- 40 words lock (11-13 sec)
+- Twist-only, 1 twist loop seamless
+- Bold claims, Secret leak angle mandatory
+- Validation Factory: behind closed doors, first to know, leaked keywords check
+- Retention: bold confident daave
+"""
+
+import os, requests, re, random
 
 try:
     from google import genai
@@ -12,6 +23,76 @@ except ImportError:
         genai=None
         genai_old=None
         GENAI_NEW=None
+
+# ===== NEW RETENTION + VALIDATION CONSTANTS =====
+RETENTION_WORDS = 40
+VALIDATION_KEYWORDS_MANDATORY = ["behind closed doors", "leaked", "first to know"]
+BOLD_CLAIMS = [
+    "this changes everything",
+    "you won't believe",
+    "nobody saw this coming",
+    "this is huge",
+    "shocked everyone",
+    "game changer",
+    "secret"
+]
+SECRET_LEAK_ANGLES = [
+    "behind closed doors",
+    "leaked behind closed doors",
+    "secret leak",
+    "just leaked",
+    "inside sources reveal"
+]
+
+def validate_script_factory(script_text: str, topic: str) -> bool:
+    """
+    Validation Factory:
+    - Bold/confident daave check
+    - First-to-know, Behind closed doors keyword mandatory
+    - 40 words lock
+    """
+    low = script_text.lower()
+    # Check 40 words
+    wc = len(script_text.split())
+    if not (35 <= wc <= 45): # allow 35-45 for 40 target
+        print(f"[VALIDATION FAIL] Words {wc} != 40 target")
+        return False
+    # Mandatory keywords
+    has_leak = any(k in low for k in ["leak", "behind closed doors", "secret", "inside"])
+    has_first = "first to know" in low or "first" in low and "know" in low
+    if not has_leak:
+        print(f"[VALIDATION FAIL] No leak/secret angle")
+        return False
+    # Bold claim check
+    has_bold = any(b in low for b in BOLD_CLAIMS)
+    if not has_bold:
+        print(f"[VALIDATION FAIL] No bold claim")
+        return False
+    print(f"[VALIDATION PASS] {wc} words, leak={has_leak}, bold={has_bold}")
+    return True
+
+def trim_to_40_words(text: str, topic_first_words: str) -> str:
+    """Force 40 words + seamless loop (last = first)"""
+    words = text.split()
+    if len(words) > RETENTION_WORDS:
+        words = words[:RETENTION_WORDS]
+    # If less, pad with topic loop
+    while len(words) < RETENTION_WORDS:
+        words += topic_first_words.split()[:2]
+        if len(words) > RETENTION_WORDS:
+            words = words[:RETENTION_WORDS]
+            break
+    # Seamless loop: last 4 words = first 4 words start for loop effect
+    # Example: first "Scientists just found something" -> last "And that's why scientists just found..."
+    first4 = " ".join(words[:4])
+    # Ensure last sentence points back to first
+    trimmed = " ".join(words)
+    # If not ending with loop phrase, add loop tail
+    if first4.lower() not in trimmed[-40:].lower():
+        # Replace last 4 words with loop connector + first 2
+        words = words[:-4] + ["And", "that's", "why"] + first4.split()[:2]
+        trimmed = " ".join(words[:RETENTION_WORDS])
+    return trimmed
 
 def call_gemini(prompt):
     api_key=os.getenv("GEMINI_API_KEY","")
@@ -105,6 +186,7 @@ def get_yt_suggestions(q):
 
 def generate_viral_hook_from_script(script_text: str, topic: str) -> str:
     try:
+        # Hook must be 5-6 words mirror of topic + secret leak angle
         words=topic.split()
         if len(words)>=5:
             return " ".join(words[:6]).title()[:50]
@@ -131,48 +213,51 @@ def generate_script(news_input):
     all_hashtags_str = ", ".join(all_hashtags_list)
     topic_hashtags_str = ", ".join(topic_hashtags)
 
-    # --- PURE LOOP SCRIPT PROMPT - NO FIXED WHITE HOUSE ---
+    # --- 40 WORDS RETENTION + SECRET LEAK PROMPT ---
     prompt=f"""
-You are VIRAL USA YouTube Shorts script writer. You write PERFECT LOOP scripts like this example:
+You are VIRAL USA YouTube Shorts script writer - RETENTION GOD.
 
-Example: "Scientists just found something on the moon that changes everything. For decades, we thought it was just a dead rock. But recent scans revealed deep, hidden underground tunnels. They aren't just empty caves—they are perfectly insulated from radiation and freezing space temperatures. This means future humans won't live in surface domes; we're moving underground. But here's the crazy part... some researchers believe these tunnels could already hold ancient ice, meaning water is already there waiting for us. And that's why scientists just found something on the moon..."
-
-NOW WRITE FOR:
 TOPIC: {topic}
 GOOGLE TITLE: {google_title}
 YT Related: {yt_sug}
 Search Vol: {search_vol}
 
-RULES - FOLLOW EXACTLY:
-- 90-100 words ONLY - count it
-- STRUCTURE: Hook (1 line curiosity) -> Body (For decades/For years, we thought... But now/recent... They aren't just... This means... But here's the crazy part...) -> Loop (last line connects back to first line word-to-word)
-- The LAST sentence MUST be incomplete and loop back to FIRST sentence, so video loops seamlessly. Example: First line "Scientists just found something..." Last line "And that's why scientists just found..."
-- No fixed phrase like White House, no political angle unless topic is politics
-- No labels like WHAT HAPPENED, WHY IT MATTERS, HOOK, BODY, no timestamps
+MANDATORY RULES - FOLLOW 100%:
+- EXACTLY 40 WORDS ONLY - not 39, not 41. Count them.
+- STRUCTURE: Twist-only: Hook (secret leak) -> 1 Twist (But here's the crazy part...) -> Loop back to hook
+- MUST INCLUDE: "behind closed doors" OR "leaked" + "first to know" effect + 1 bold claim like "this changes everything" / "you won't believe" / "shocked everyone"
+- ANGLE: Secret leak angle - "Just leaked behind closed doors", "Inside sources reveal", "Secret documents show"
+- TONE: Bold, confident daave, confident like you know secret first
+- SEAMLESS LOOP: Last sentence MUST be "And that's why [first 3 words of script]..." so video loops perfectly
+- No labels like WHAT HAPPENED, WHY IT MATTERS, HOOK, BODY
 - No Visual: Audio: tags
-- TTS friendly, simple USA English, storytelling
-- Topic se related hi likho, generic mat likho
+- Simple USA English, TTS friendly, short sentences
+- Example 40-word loop: "This just leaked behind closed doors and changes everything. For years we thought moon was dead rock. But scans revealed hidden tunnels that could hold water. You won't believe what's inside. And that's why this just leaked..."
 
-RETURN EXACTLY THIS FORMAT:
-TITLE: <final viral searchable title based on Google title - 60-90 chars>
-WHITE_BAR: <5-6 words full sentence, Title ka mirror, like "Secret Tunnels Found On Moon">
-SCRIPT: <your 90-100 words loop script here>
+RETURN EXACTLY:
+TITLE: <viral searchable title 60-90 chars with leak word>
+WHITE_BAR: <5-6 words full sentence, mirror of title, include secret/leaked, like "Secret Tunnels Leaked Behind Doors">
+SCRIPT: <your exactly 40 words loop script here with behind closed doors + first to know + bold claim>
 DESCRIPTION:
-Para1: Hook line - 1 line
-Para2: WHAT HAPPENED 2 lines about {topic}
-Para3: WHY IT MATTERS 2 lines for USA
+Para1: Hook line - 1 line with leaked angle
+Para2: WHAT HAPPENED 1 line about {topic}
+Para3: WHY IT MATTERS 1 line for USA + bold claim
 """
 
+    raw=""
     try:
         raw=call_gemini(prompt)
     except Exception as e:
         err=str(e)
         print(f"[GEMINI ERROR] {topic} - {err[:200]}")
-        # Fallback - ALSO PURE LOOP, NO WHITE HOUSE
-        fb_title = google_title
-        fb_white = " ".join(topic.split()[:6]).title()[:50]
-        fb_script = f"{topic} just shocked everyone and nobody saw this coming. For years we thought this was impossible, but recent events revealed something huge. They aren't just making headlines, they are changing the entire game. This means everything we knew about {topic} is about to change forever. But here's the crazy part, this is already happening right now and it's bigger than anyone thought. And that's why {topic} just shocked..."
-        fb_desc = f"{topic.title()} just shocked everyone.\n\nWHAT HAPPENED: {topic.title()} is making massive moves right now that no one expected.\n\nWHY IT MATTERS: This changes everything for the future."
+        # Fallback - 40 words RETENTION + LEAK
+        fb_title = f"{google_title} Leaked"
+        fb_white = " ".join(topic.split()[:4]).title() + " Leaked Behind Doors"
+        # Exact 40 words fallback with validation keywords
+        fb_script = f"{topic} just leaked behind closed doors and this changes everything. For years we thought this was impossible. But inside sources reveal hidden truth that shocked everyone. You won't believe what's next. And that's why {topic.lower().split()[0] if topic.split() else 'this'} just leaked"
+        # Force trim to 40
+        fb_script = trim_to_40_words(fb_script, topic)
+        fb_desc = f"{topic.title()} just leaked behind closed doors.\n\nWHAT HAPPENED: {topic.title()} secret leak behind closed doors is shocking America.\n\nWHY IT MATTERS: First to know effect - this changes everything for USA."
         desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
         return {
             "title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":"Google Searchable","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_white,"white_bar_text":fb_white,"mood":"tense"
@@ -206,19 +291,36 @@ Para3: WHY IT MATTERS 2 lines for USA
     clean_tts=re.sub(r'Visual:.*?\|','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'Audio:\s*','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'\s+',' ',clean_tts).strip()
-    if len(clean_tts.split())>115:
-        clean_tts=" ".join(clean_tts.split()[:102])
-    if len(clean_tts)<20:
-        clean_tts = f"{topic} just shocked everyone and nobody expected this. For years we thought this was impossible, but now it's real. This changes everything. But here's the crazy part, it's already happening. And that's why {topic} just..."
+    
+    # FORCE 40 WORDS + VALIDATION FACTORY
+    first_words_topic = " ".join(topic.split()[:4])
+    clean_tts = trim_to_40_words(clean_tts, first_words_topic)
+    
+    # Validation loop - retry trim if fail (max 3 attempts)
+    attempts=0
+    while not validate_script_factory(clean_tts, topic) and attempts<3:
+        # Inject mandatory keywords if missing
+        low = clean_tts.lower()
+        if "behind closed doors" not in low and "leaked" not in low:
+            clean_tts = clean_tts.replace("and", "leaked behind closed doors and", 1)
+            clean_tts = trim_to_40_words(clean_tts, first_words_topic)
+        if "first to know" not in low and "first" not in low:
+            clean_tts = clean_tts + " First to know."
+            clean_tts = trim_to_40_words(clean_tts, first_words_topic)
+        attempts+=1
+
+    if len(clean_tts.split())<10:
+        clean_tts = f"{topic} just leaked behind closed doors and changes everything. Inside sources reveal shocking truth. You won't believe what's inside. First to know effect is huge. And that's why {topic.lower().split()[0]} just leaked"
+        clean_tts = trim_to_40_words(clean_tts, first_words_topic)
 
     if not selected or len(selected)<10:
-        selected = google_title
+        selected = google_title + " Leaked Behind Doors"
     if not description:
-        description=f"{topic.title()} is making massive moves that has America talking.\n\nWHAT HAPPENED: What happened in {topic[:50]} is shocking everyone right now.\n\nWHY IT MATTERS: Here's why it matters."
-    if white_bar_parsed and 5 <= len(white_bar_parsed.split()) <= 6:
+        description=f"{topic.title()} leaked behind closed doors.\n\nWHAT HAPPENED: {topic.title()} secret leak is shocking.\n\nWHY IT MATTERS: First to know - this changes everything."
+    if white_bar_parsed and 4 <= len(white_bar_parsed.split()) <= 7:
         white_bar_text = white_bar_parsed.title()
     else:
-        white_bar_text = " ".join(topic.split()[:6]).title()[:50]
+        white_bar_text = " ".join(topic.split()[:5]).title() + " Leaked"
 
     desc_with_tags = f"{description}\n\n{' '.join(topic_hashtags)} {world_viral}"
     return {

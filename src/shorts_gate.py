@@ -1,16 +1,32 @@
-import re, time, requests
+"""
+Shorts Gate - RETENTION + VALIDATION FACTORY GATE
+Location: src/shorts_gate.py
+Edits:
+- Retention filter: 40 words lock (35-45) mandatory for 11-13 sec
+- Validation Factory gate: behind closed doors, leaked, first to know, bold claim mandatory
+- Twist-only check
+- Anti-bot + existing logic preserved
+- Threshold 70 + Bot friendly 60 preserved
+"""
+import re, time, requests, random
 from typing import Dict, List
 from datetime import datetime, timezone
-THRESHOLD=70  # 75 se 70 kiya - thoda easy
-BOT_FRIENDLY_THRESHOLD=60  # 70 se 60 kiya
+THRESHOLD=70
+BOT_FRIENDLY_THRESHOLD=60
 TREND_LIMIT=30
 
-# --- ADD-ON C+K START ---
+# --- NEW RETENTION + VALIDATION CONSTANTS ---
+RETENTION_WORDS_TARGET = 40
+RETENTION_WORDS_MIN = 35
+RETENTION_WORDS_MAX = 45
+VALIDATION_MANDATORY_KEYWORDS = ["behind closed doors", "leaked", "secret", "inside"]
+VALIDATION_FIRST_TO_KNOW = ["first to know", "first"]
+BOLD_CLAIMS_LIST = ["this changes everything","you won't believe","shocked everyone","this is huge","nobody saw this coming","game changer","secret","changes everything"]
+
 BANNED_NICHES = ["ipl","bcci","cricket","csk","mi vs","bollywood","bhojpuri","tamil movie","recipe","cooking","horoscope","astrology","lottery","crossword","obituary"]
 def is_banned_niche(query: str) -> bool:
     q = query.lower()
     return any(b in q for b in BANNED_NICHES)
-# --- ADD-ON C+K END ---
 
 try:
     from .daily_top_keywords import check_usa_relevance_with_rank, get_daily_top_100
@@ -27,7 +43,13 @@ def get_youtube_search_data_fast(query: str):
     search_volume=0
     suggestions=[]
     try:
-        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":query,"hl":"en","gl":"US"}, timeout=4, headers={"User-Agent":"Mozilla/5.0"})
+        # Anti-bot: random UA
+        ua = random.choice([
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Mozilla/5.0 (X11; Linux x86_64)"
+        ])
+        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":query,"hl":"en","gl":"US"}, timeout=4, headers={"User-Agent":ua})
         matches=re.findall(r'"([^"]+)"', r.text)
         suggestions=[m for m in matches[1:] if len(m)>4]
         search_volume=len(suggestions)*15
@@ -105,78 +127,106 @@ def score_bot_friendly(topic):
     reject=["obituary","recipe","horoscope","lottery","crossword","live interview 3 hours","podcast 3 hours","full press conference"]
     if any(r in q for r in reject): return 40
     score=70
-    accept=["signs","returns","announces","deal","contract","trade","injury","breaking","official","just in","signed","76ers","lakers","nba","nfl","exhibit 10","training camp"]
+    accept=["signs","returns","announces","deal","contract","trade","injury","breaking","official","just in","signed","76ers","lakers","nba","nfl","exhibit 10","training camp","leaked","secret","behind closed doors"]
     if any(a in q for a in accept): score+=15
     if topic.get("search_volume",0)>=40: score+=10
     if "rising" in topic.get("growth","") or "breakout" in topic.get("growth",""): score+=5
     return min(95,score)
 
-# --- NEW OPTION 1: LOOP VIRAL ENGINE [REPLACED] ---
+# ===== NEW VALIDATION FACTORY SCORES =====
+def score_retention_filter(script):
+    """RETENTION: 40 words lock for 11-13 sec"""
+    if not script:
+        return 0
+    wc = len(script.split())
+    if RETENTION_WORDS_MIN <= wc <= RETENTION_WORDS_MAX:
+        return 95
+    if 30 <= wc <= 50:
+        return 80
+    if 25 <= wc <= 60:
+        return 65
+    return 40
+
+def score_validation_factory(script):
+    """VALIDATION FACTORY: behind closed doors, leaked, first to know, bold claim"""
+    if not script:
+        return 0
+    low = script.lower()
+    score=50
+    
+    # Mandatory leak angle
+    if any(k in low for k in ["behind closed doors", "leaked", "secret leak", "inside sources"]):
+        score+=20
+    elif "leak" in low or "secret" in low:
+        score+=10
+    
+    # First to know effect
+    if "first to know" in low:
+        score+=15
+    elif "first" in low and "know" in low:
+        score+=10
+    
+    # Bold confident daave
+    bold_found = sum(1 for b in BOLD_CLAIMS_LIST if b in low)
+    if bold_found >=2:
+        score+=15
+    elif bold_found >=1:
+        score+=10
+    
+    # Twist-only check
+    if "but here's the crazy part" in low or "but here's" in low or "crazy part" in low:
+        score+=5
+    
+    return min(100, score)
+
 def score_hook_quality(script):
-    """[NEW C+K] Loop Viral Hook - trump/biden check hataya, sirf viral + loop"""
+    """Loop Viral Hook + leak angle bonus"""
     if not script: return 75
-    # first 25 words = hook
     first = " ".join(script.strip().split()[:25])
     first_lower = first.lower()
-    score = 70  # base 70
-
-    # +10 if hook has 5+ words (proper hook)
+    score = 70
     if len(first.split()) >= 5:
         score += 10
-
-    # +15 if viral payoff words - yehi viral banata hai
-    viral_words = ["breaking","shocking","just","found","huge","massive","secret","hidden","insane","crazy","this","officially","just in","alert"]
+    viral_words = ["breaking","shocking","just","found","huge","massive","secret","hidden","insane","crazy","this","officially","just in","alert","leaked","behind closed doors"]
     if any(w in first_lower for w in viral_words):
         score += 15
-
-    # +5 if curiosity ? or !
     if "?" in first or "!" in first:
         score += 5
-
+    # Bonus for secret leak in hook
+    if "leaked" in first_lower or "secret" in first_lower:
+        score += 5
     return max(0, min(100, score))
 
 def score_script_quality(script):
-    """[NEW C+K] Loop Viral Quality - '.' count wala 68 wala rule hataya"""
+    """Loop Viral Quality + 40 words bonus"""
     if not script: return 75
     words = script.split()
     wc = len(words)
-    
-    # dots count - pehle 3 se kam pe 68 return karta tha, ab nahi
     sc = script.count('.') + script.count('!') + script.count('?')
     if sc < 2:
-        sc = 2  # force minimum to avoid 68 fail
-
-    score = 75  # base 75
-
-    # +15 if perfect shorts length 85-110 words (30 sec)
-    if 85 <= wc <= 110:
-        score += 15
+        sc = 2
+    score = 75
+    # NEW: 40 words perfect for 11-13 sec retention
+    if RETENTION_WORDS_MIN <= wc <= RETENTION_WORDS_MAX:
+        score += 20
+    elif 85 <= wc <= 110:
+        score += 10
     elif 70 <= wc <= 120:
-        score += 8
+        score += 5
     else:
         score += 2
-
-    # +5 if retention "you" 2+ times - viewer ko rokta hai
     lower = script.lower()
-    if lower.count("you") >= 2:
+    if lower.count("you") >= 1:
         score += 5
-
-    # +5 if TTS clean - no [ ] brackets
     if "[" not in script and "]" not in script:
         score += 5
-
-    # +10 if PERFECT LOOP - first 3 words last 10 words me hain kya
     first_words = [w.lower() for w in words[:3]]
     last_words = [w.lower() for w in words[-10:]]
-    # check overlap
     if any(fw in " ".join(last_words) for fw in first_words if len(fw) > 2):
         score += 10
     else:
-        # agar exact match nahi to partial bhi 5 de de
-        score += 5
-
+        score += 3
     return max(0, min(100, score))
-# --- END NEW OPTION 1 ---
 
 def score_trend_strength(topic):
     q=topic.get('query','') or topic.get('title','')
@@ -202,21 +252,25 @@ def evaluate_topic(topic, script=None):
     if script:
         scores["hook_quality"]=score_hook_quality(script)
         scores["script_quality"]=score_script_quality(script)
-        # --- NEW: tacko_structure ko loop pe check ---
+        # NEW: Retention + Validation Factory gate
+        scores["retention_filter"]=score_retention_filter(script)
+        scores["validation_factory"]=score_validation_factory(script)
         words = script.split()
         first3 = " ".join(words[:3]).lower()
         last10 = " ".join(words[-10:]).lower()
         is_loop = any(w in last10 for w in first3.split() if len(w)>2)
-        scores["tacko_structure"]=90 if is_loop else 85  # pehle 75 deta tha Visual: check pe
+        scores["tacko_structure"]=90 if is_loop else 85
     else:
-        scores["hook_quality"]=0; scores["script_quality"]=0
+        scores["hook_quality"]=0; scores["script_quality"]=0; scores["retention_filter"]=0; scores["validation_factory"]=0
     fails=[]
     for k,v in scores.items():
         if v==0: continue
         if k=="bot_friendly": thresh=BOT_FRIENDLY_THRESHOLD
-        elif k=="hook_quality": thresh=50  # pehle 65 tha - ab 50
-        elif k=="script_quality": thresh=60  # pehle 75 tha - ab 60
-        elif k=="tacko_structure": thresh=60  # new
+        elif k=="hook_quality": thresh=50
+        elif k=="script_quality": thresh=60
+        elif k=="tacko_structure": thresh=60
+        elif k=="retention_filter": thresh=75  # NEW: 40 words mandatory
+        elif k=="validation_factory": thresh=70  # NEW: leak + first to know mandatory
         elif k in ["filter_a","filter_b"]: thresh=60
         else: thresh=THRESHOLD
         if v<thresh: fails.append(f"{k}={v} (<{thresh})")
@@ -226,7 +280,7 @@ def evaluate_topic(topic, script=None):
 
 def gate_loop_for_shorts(topics, generate_script_fn):
     topics_limited = topics[:3]
-    print(f"[GATE FINAL FAST] Gate on {len(topics_limited)} topics (limited to 3) - Filter A/B/C + Bot Friendly + Tacko [LOOP VIRAL ENGINE]")
+    print(f"[GATE FINAL FAST + RETENTION + VALIDATION FACTORY] Gate on {len(topics_limited)} topics - Filter A/B/C + Bot + Retention 40w + Validation leak/secret")
     for idx, topic in enumerate(topics_limited):
         topic['index']=idx
         q=topic.get('query','') or topic.get('title','')
@@ -250,15 +304,20 @@ def gate_loop_for_shorts(topics, generate_script_fn):
             err=str(e)
             if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
                 print(f"  [QUOTA 429] Fallback for {q[:40]}")
-                fallback_text = f"{q} is breaking. Here's what happened. You need to know this. Wait till end."
-                return topic, {"title": q[:60], "full_script": fallback_text, "viral_hook": "Breaking Update", "white_bar_text": "Breaking Update"}, scores_6
+                fallback_text = f"{q} just leaked behind closed doors and changes everything. You won't believe this. First to know effect is huge. Wait till end. And that's why {q[:20]} just leaked"
+                return topic, {"title": q[:60], "full_script": fallback_text, "viral_hook": "Breaking Update Leaked", "white_bar_text": "Secret Leaked Behind Doors"}, scores_6
             print(f"  SKIP script gen failed: {e}")
             continue
         approve_all, scores_all, reason_all=evaluate_topic(topic, script=script_text)
         if not approve_all:
             print(f"  SKIP post-script: {reason_all} | {scores_all}")
+            # Debug validation
+            if "retention_filter" in scores_all and scores_all["retention_filter"]<75:
+                print(f"    -> RETENTION FAIL: {len(script_text.split())} words, need 35-45")
+            if "validation_factory" in scores_all and scores_all["validation_factory"]<70:
+                print(f"    -> VALIDATION FAIL: need leaked/behind closed doors + first to know + bold claim")
             continue
         print(f"  APPROVE: {q} | {scores_all} | {reason_all}")
         return topic, script_result if isinstance(script_result, dict) else script_text, scores_all
-    print("[GATE] All topics FAILED")
+    print("[GATE] All topics FAILED - Retention/Validation")
     return None, None, None

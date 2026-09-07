@@ -88,7 +88,7 @@ def get_best_free_clips_fixed(q, num=15):
         return [ColorClip((1080,1920),color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)),duration=CLIP_DENSITY) for _ in range(num)]
     try:
         h={"Authorization":key}
-        sq=" ".join(re.findall(r'\w+',str(q))[:3]) or ["usa","breaking","news"])
+        sq=" ".join(re.findall(r'\w+',str(q))[:3]) or "usa breaking news"
         # Fetch 3x for randomisation
         url=f"https://api.pexels.com/videos/search?query={sq}&per_page={num*3}&orientation=portrait&size=medium"
         res=requests.get(url,headers=h,timeout=20).json()
@@ -266,7 +266,7 @@ def top_branding_best(duration):
     fp = random.choice(FONT_LIST)
     path = make_text_image(CHANNEL_SHORT, 28, "white", 3, (650, 80), font_path=fp)
     top = ImageClip(path).set_duration(duration).set_position(('center', (WHITE_BAR_HEIGHT+10)/1920), relative=True).set_opacity(0.92)
-    top = top.resize(lambda t: 1 + 0.03*abs(np.sin(t*2)))
+    top = top.resize(lambda t: 1 + 0.03*abs(__import__('numpy').sin(t*2)))
     flag_path = make_text_image("USA", 20, random.choice(FONT_COLORS), 2, (80, 50), font_path=fp)
     flag = ImageClip(flag_path).set_duration(duration).set_position((20, WHITE_BAR_HEIGHT+10))
     return [top, flag]

@@ -2,7 +2,7 @@
 ULTIMATE GOD LEVEL - RETENTION + VvSA + ANTI-BOT + SOUND RETENTION - NO 4K
 Location: src/video_generator.py
 Edits as per request (4K excluded):
-- Retention: 0.8 sec per clip, TTS 1.10X, 11-13 sec / 40 words, Seamless loop
+- Retention: 0.8 sec per clip, TTS 1.15X, 11-13 sec / 40 words, Seamless loop
 - VvSA: Shock first frame, Audio punch first 1 sec, SFX by topic, Cinematic contrast/saturation
 - Anti Bot: Frame variation, Randomisation, No same font, Random font colour
 - FFmpeg: noise + hue filter (light)
@@ -70,14 +70,29 @@ def get_piper_voice():
         open(cp,'wb').write(requests.get(CONFIG_URL, timeout=60).content)
     return PiperVoice.load(mp, cp)
 
+def clean_id(text: str) -> str:
+    """FIX: Remove KG IDs like /m/04mjl, m04mjl"""
+    import re
+    text = re.sub(r'/m/[a-z0-9]+', '', text, flags=re.I)
+    text = re.sub(r'\b[mM][0-9][a-z0-9]+\b', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 def trim_to_40_words(text: str) -> str:
-    """Retention: 11-13 sec = 40 words lock + seamless loop"""
+    """FIXED: Strict 40 words + loop tail"""
+    text = clean_id(text)
     words = text.split()
-    if len(words) > RETENTION_WORDS:
-        words = words[:RETENTION_WORDS]
-    # Seamless loop: last 3 words = first 3 words hint for loop
-    trimmed = " ".join(words)
-    return trimmed
+    # Reserve 8 for loop
+    if len(words) > 32:
+        words = words[:32]
+    first3 = " ".join(words[:3]) if len(words)>=3 else "this just leaked"
+    first3_list = first3.split()[:3]
+    loop_tail = ["And", "that's", "why"] + first3_list + ["just", "leaked", "now", "today"]
+    loop_tail = loop_tail[:8]
+    final = (words[:32] + loop_tail)[:40]
+    while len(final) < 40:
+        final.append("now")
+    return " ".join(final[:40])
 
 def get_best_free_clips_fixed(q, num=15):
     """Pexel randomisation + 0.8 sec density + frame variation - FIXED NoneType get_frame"""
@@ -86,10 +101,13 @@ def get_best_free_clips_fixed(q, num=15):
     temp_files=[]  # keep files alive till end
     if not key:
         print("No PEXELS_API_KEY - Using BEST FREE color clips")
-        return [ColorClip((1080,1920),color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)),duration=CLIP_DENSITY) for _ in range(num)]
+        return [ColorClip(size=(1080,1920), color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)), duration=CLIP_DENSITY) for _ in range(num)]
     try:
         h={"Authorization":key}
-        words_found = re.findall(r'\w+', str(q))[:3]
+        q_clean = clean_id(str(q))
+        words_found = re.findall(r'\w+', q_clean)[:3]
+        # Filter m04mjl type
+        words_found = [w for w in words_found if not re.match(r'^m[0-9]', w, re.I)]
         sq = " ".join(words_found) if words_found else "usa breaking news"
         # Fetch 3x for randomisation
         url=f"https://api.pexels.com/videos/search?query={sq}&per_page={num*3}&orientation=portrait&size=medium"
@@ -166,7 +184,7 @@ def get_best_free_clips_fixed(q, num=15):
         traceback.print_exc()
     if not clips:
         print("Pexels fallback to color clips - no valid clips downloaded")
-    return [ColorClip((1080,1920),color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)),duration=CLIP_DENSITY) for _ in range(num)]
+    return [ColorClip(size=(1080,1920), color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)), duration=CLIP_DENSITY) for _ in range(num)]
 
 def get_free_bg_music():
     try:
@@ -468,7 +486,8 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     first_sentence = script_text.split('.')[0][:55] if '.' in script_text else script_text[:55]
     print(f"2. Pexel clips {CLIP_DENSITY} sec density + randomisation...")
     clips_needed = max(8, int(math.ceil(total / CLIP_DENSITY)) + 2)
-    raw_clips = get_best_free_clips_fixed(title, num=clips_needed)
+    title_clean = clean_id(title)
+    raw_clips = get_best_free_clips_fixed(title_clean, num=clips_needed)
     
     # Build sequence 0.8 sec each + Visuals shock first frame
     final_video_clips=[]

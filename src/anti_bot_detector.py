@@ -12,9 +12,9 @@ HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 FONT_LIST=["Anton","BebasNeue","Oswald","Montserrat-ExtraBold","Impact","DejaVuSans-Bold","Anton-Regular","Oswald-Bold"]
 COLOR_LIST=["#FF3B30","#FFD60A","#30D158","#0A84FF","#FF2D55","#FFFFFF","#FFE600","#AF52DE","#FF6B00","#00E5FF"]
 FPS_CHOICES=[29.97,29.98,59.94,59.95]
-FRAME_VARIATIONS=["crop=iw*0.96:ih*0.96:(iw-ow)/2:(ih-oh)/2","crop=iw*0.92:ih*0.92:iw*0.04:ih*0.04","scale=iw*1.03:ih*1.03,crop=iw:ih","scale=iw*0.98:ih*0.98:flags=lanczos",""]
+FRAME_VARIATIONS=["crop=iw*0.98:ih*0.98:(iw-ow)/2:(ih-oh)/2","scale=iw*1:ih*1.01:ih*1.o1,crop=iw:ih","",""]
 # FIX: allp=7 removed - invalid ffmpeg param causing exit 8, use same as video_generator
-NOISE_HUE="noise=alls=5:allf=t,hue=h=2:s=1.08"
+NOISE_HUE="noise=alls=2:allf=t,hue=h=0.5:s=1.02"
 
 def clean_id(text: str) -> str:
     if not text:
@@ -37,7 +37,7 @@ def get_anti_bot_config():
             break
     else:
         font=random.choice(FONT_LIST); color=random.choice(COLOR_LIST)
-    cfg={"font":font,"color":color,"fps":random.choice(FPS_CHOICES),"frame_rule":random.choice(FRAME_VARIATIONS),"zoom":round(random.uniform(0.97,1.06),3),"stroke":random.choice([3,4,5,6]),"font_size_delta":random.randint(-6,10),"noise_hue":NOISE_HUE,"id":hashlib.md5(f"{font}{color}{random.random()}".encode()).hexdigest()[:7]}
+    cfg={"font":font,"color":color,"fps":random.choice(FPS_CHOICES),"frame_rule":random.choice(FRAME_VARIATIONS),"zoom":round(random.uniform(0.99,1.02),3),"stroke":random.choice([3,4,5,6]),"font_size_delta":random.randint(-6,10),"noise_hue":NOISE_HUE,"id":hashlib.md5(f"{font}{color}{random.random()}".encode()).hexdigest()[:7]}
     hist.append(cfg)
     HISTORY_FILE.write_text(json.dumps(hist[-20:], indent=2))
     # FIX: frame_rule log leak band - only short log, no full crop rule

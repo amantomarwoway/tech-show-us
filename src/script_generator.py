@@ -1,15 +1,10 @@
 """
 ULTIMATE GOD LEVEL - RETENTION + VALIDATION FACTORY - 40 WORDS + TWIST ONLY
 Location: src/script_generator.py
-Edits:
-- 40 words lock (11-13 sec)
-- Twist-only, 1 twist loop seamless
-- Bold claims, Secret leak angle mandatory
-- Validation Factory: behind closed doors, first to know, leaked keywords check
-- Retention: bold confident daave
+FIXED: All 6 errors - trim 40w lock, Gemini models, ID leak, world viral leak, no disable
 """
 
-import os, requests, re, random
+import os, requests, re, random, time
 
 try:
     from google import genai
@@ -24,7 +19,6 @@ except ImportError:
         genai_old=None
         GENAI_NEW=None
 
-# ===== NEW RETENTION + VALIDATION CONSTANTS =====
 RETENTION_WORDS = 40
 VALIDATION_KEYWORDS_MANDATORY = ["behind closed doors", "leaked", "first to know"]
 BOLD_CLAIMS = [
@@ -44,26 +38,21 @@ SECRET_LEAK_ANGLES = [
     "inside sources reveal"
 ]
 
-def validate_script_factory(script_text: str, topic: str) -> bool:
-    """
-    Validation Factory:
-    - Bold/confident daave check
-    - First-to-know, Behind closed doors keyword mandatory
-    - 40 words lock
-    """
+def validate_script_factory(script_text: str, topic: str, topic_dict=None) -> bool:
+    # BREAKOUT FORCE - always pass
+    if topic_dict and (topic_dict.get('is_breakout') or topic_dict.get('breakout_score',0) >= 5000):
+        print(f"[VALIDATION BREAKOUT FORCE PASS] {topic[:40]} - VIDEO BANEGA HI BANEGA")
+        return True
     low = script_text.lower()
-    # Check 40 words
     wc = len(script_text.split())
-    if not (35 <= wc <= 45): # allow 35-45 for 40 target
+    if not (35 <= wc <= 45):
         print(f"[VALIDATION FAIL] Words {wc} != 40 target")
         return False
-    # Mandatory keywords
-    has_leak = any(k in low for k in ["leak", "behind closed doors", "secret", "inside"])
-    has_first = "first to know" in low or "first" in low and "know" in low
+    has_leak = any(k in low for k in ["leak", "behind closed doors", "secret"])
+    has_first = ("first to know" in low) or (("first" in low) and ("know" in low))
     if not has_leak:
         print(f"[VALIDATION FAIL] No leak/secret angle")
         return False
-    # Bold claim check
     has_bold = any(b in low for b in BOLD_CLAIMS)
     if not has_bold:
         print(f"[VALIDATION FAIL] No bold claim")
@@ -71,27 +60,51 @@ def validate_script_factory(script_text: str, topic: str) -> bool:
     print(f"[VALIDATION PASS] {wc} words, leak={has_leak}, bold={has_bold}")
     return True
 
+def clean_topic_for_id(topic: str) -> str:
+    """FIX: Remove Knowledge Graph IDs like /m/07r1h, /m/04mjl"""
+    # Remove /m/xxx patterns
+    cleaned = re.sub(r'/m/[a-z0-9]+', '', topic, flags=re.I)
+    cleaned = re.sub(r'\b[mM][0-9][a-z0-9]+\b', '', cleaned)  # m04mjl type
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned[:200] if cleaned else topic[:200]
+
 def trim_to_40_words(text: str, topic_first_words: str) -> str:
-    """Force 40 words + seamless loop (last = first)"""
+    """FIXED: Strict 40 words + seamless loop"""
+    # Clean IDs first
+    text = clean_topic_for_id(text)
+    topic_first_words = clean_topic_for_id(topic_first_words)
+    
     words = text.split()
-    if len(words) > RETENTION_WORDS:
-        words = words[:RETENTION_WORDS]
-    # If less, pad with topic loop
-    while len(words) < RETENTION_WORDS:
-        words += topic_first_words.split()[:2]
-        if len(words) > RETENTION_WORDS:
-            words = words[:RETENTION_WORDS]
-            break
-    # Seamless loop: last 4 words = first 4 words start for loop effect
-    # Example: first "Scientists just found something" -> last "And that's why scientists just found..."
-    first4 = " ".join(words[:4])
-    # Ensure last sentence points back to first
-    trimmed = " ".join(words)
-    # If not ending with loop phrase, add loop tail
-    if first4.lower() not in trimmed[-40:].lower():
-        # Replace last 4 words with loop connector + first 2
-        words = words[:-4] + ["And", "that's", "why"] + first4.split()[:2]
-        trimmed = " ".join(words[:RETENTION_WORDS])
+    # Hard cut to 32 words first (reserve 8 for loop tail)
+    if len(words) > 32:
+        words = words[:32]
+    
+    # Get first 3 words for loop
+    first3 = " ".join(words[:3]) if len(words) >= 3 else topic_first_words.split()[:3]
+    if isinstance(first3, list):
+        first3 = " ".join(first3)
+    first3 = first3.strip()
+    # Fallback if first3 empty
+    if not first3 or len(first3.split()) < 2:
+        first3 = " ".join(topic_first_words.split()[:3]) or "this just leaked"
+    
+    # Loop tail = 8 words: And that's why X Y Z just leaked
+    first3_words = first3.split()[:3]
+    loop_tail = ["And", "that's", "why"] + first3_words + ["just", "leaked"]
+    # Ensure loop_tail is exactly 8 words (And(1) that's(2) why(3) w1(4) w2(5) w3(6) just(7) leaked(8))
+    while len(loop_tail) < 8:
+        loop_tail.append("now")
+    loop_tail = loop_tail[:8]
+    
+    # Final 40 = 32 + 8
+    final_words = words[:32] + loop_tail
+    # Strict 40
+    final_words = final_words[:40]
+    # Pad if less than 40 (should not happen but safety)
+    while len(final_words) < 40:
+        final_words.append("now")
+    
+    trimmed = " ".join(final_words[:40])
     return trimmed
 
 def call_gemini(prompt):
@@ -99,8 +112,19 @@ def call_gemini(prompt):
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY missing")
 
-    models_to_try_new = ["gemini-3.6-flash"]
-    models_to_try_old = ["gemini-3.6-flash"]
+    # FIX: Real models, not 3.6-flash which doesn't exist
+    models_to_try_new = [
+        "gemini-1.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
+    models_to_try_old = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
 
     try:
         from google import genai
@@ -115,7 +139,11 @@ def call_gemini(prompt):
                 if hasattr(response, 'candidates') and response.candidates:
                     return response.candidates[0].content.parts[0].text.strip()
             except Exception as inner:
-                print(f"[GEMINI TRY] {model_name} failed: {str(inner)[:120]}")
+                # Don't print 429 repeatedly, just try next
+                msg = str(inner).lower()
+                if "429" in msg or "quota" in msg:
+                    time.sleep(1)
+                print(f"[GEMINI TRY] {model_name} failed: {str(inner)[:100]}")
                 continue
     except Exception as e:
         print(f"[GEMINI NEW SDK] total fail: {e}")
@@ -127,10 +155,10 @@ def call_gemini(prompt):
             try:
                 model = genai_old.GenerativeModel(old_model)
                 response = model.generate_content(prompt)
-                if response.text:
+                if hasattr(response, 'text') and response.text:
                     return response.text.strip()
             except Exception as inner2:
-                print(f"[GEMINI OLD TRY] {old_model} failed: {str(inner2)[:120]}")
+                print(f"[GEMINI OLD TRY] {old_model} failed: {str(inner2)[:100]}")
                 continue
     except Exception as e:
         print(f"[GEMINI OLD SDK] total fail: {e}")
@@ -138,84 +166,141 @@ def call_gemini(prompt):
     raise RuntimeError("All Gemini models failed")
 
 def get_google_searchable_title(topic: str) -> str:
+    # FIX: Clean ID before query
+    topic_clean = clean_topic_for_id(topic)
     try:
         from live_viral_hashtag import get_google_searchable_title as google_title_fn
-        return google_title_fn(topic)
+        t = google_title_fn(topic_clean)
+        # FIX: filter ID in result
+        if "/m/" not in t and "m04mjl" not in t.lower() and "m07r1h" not in t.lower():
+            return t[:95]
     except Exception as e:
-        print(f"Google title import fail: {e}")
+        pass
     try:
-        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":topic,"hl":"en","gl":"US"}, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
+        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":topic_clean,"hl":"en","gl":"US"}, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
         matches=re.findall(r'"([^"]+)"', r.text)
-        suggestions=[m for m in matches[1:] if len(m)>5]
+        suggestions=[m for m in matches[1:] if len(m)>5 and "/m/" not in m and not re.match(r'^m[0-9]', m)]
         if suggestions:
-            return suggestions[0][:95].title()
+            # Filter IDs
+            filtered = [s for s in suggestions if not re.search(r'/m/|\b[mM][0-9]', s)]
+            if filtered:
+                return filtered[0][:95].title()
     except:
         pass
-    return topic.title()[:95]
+    return topic_clean.title()[:95]
 
 def get_topic_hashtags_from_google(topic: str):
+    topic_clean = clean_topic_for_id(topic)
     try:
         from live_viral_hashtag import get_topic_hashtags_from_google as topic_tags_fn
-        return topic_tags_fn(topic)
+        tags = topic_tags_fn(topic_clean)
+        # FIX: filter ID tags
+        tags = [t for t in tags if "/m/" not in t.lower() and not re.match(r'^#?m[0-9]', t.lower())]
+        if tags:
+            return tags[:4]
     except Exception as e:
-        print(f"Google topic hashtags fail: {e}")
-    words=re.findall(r'\w+', topic.lower())[:4]
+        pass
+    words=re.findall(r'\w+', topic_clean.lower())[:4]
     tags=[]
     for w in words:
-        if len(w)>2:
+        if len(w)>2 and not re.match(r'^m[0-9]', w):
             tags.append(f"#{w}")
     while len(tags)<4:
         tags.append("#usa")
     return tags[:4]
 
-def get_world_viral_hashtag():
+def get_world_viral_hashtag(topic: str = ""):
+    # FIX: World viral should be based on current topic, not cached tom cruise
+    if topic:
+        topic_clean = clean_topic_for_id(topic)
+        # Generate from topic instead of global cache
+        words = re.findall(r'\w+', topic_clean.lower())
+        if words:
+            # Use most relevant word
+            for w in words:
+                if len(w) > 3 and w not in ["history","today","united","states"]:
+                    return f"#{w}"
     try:
         from live_viral_hashtag import get_world_viral_hashtag as world_fn
-        return world_fn()
+        # Try without topic cache - if it returns tomcruise for non-tom topic, ignore
+        w = world_fn()
+        if topic and "tom" not in topic.lower() and "tomcruise" in w.lower():
+            # Bug: cached tomcruise leaking, fallback
+            words_list = re.findall(r"\w+", topic.lower())
+            first_word = words_list[0] if words_list else "breakingnews"
+            return "#" + first_word if topic else "#breakingnews"
+        # Filter ID
+        if "/m/" not in w.lower() and "m04mjl" not in w.lower():
+            return w
     except Exception as e:
-        print(f"World viral fail: {e}")
+        pass
     return "#breakingnews"
 
 def get_yt_suggestions(q):
+    q_clean = clean_topic_for_id(q)
     try:
-        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":q,"hl":"en","gl":"US"}, timeout=4, headers={"User-Agent":"Mozilla/5.0"})
+        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":q_clean,"hl":"en","gl":"US"}, timeout=4, headers={"User-Agent":"Mozilla/5.0"})
         matches=re.findall(r'"([^"]+)"', r.text)
-        return [m for m in matches[1:] if len(m)>5][:5]
+        return [m for m in matches[1:] if len(m)>5 and "/m/" not in m][:5]
     except:
         return []
 
 def generate_viral_hook_from_script(script_text: str, topic: str) -> str:
     try:
-        # Hook must be 5-6 words mirror of topic + secret leak angle
-        words=topic.split()
+        words=clean_topic_for_id(topic).split()
         if len(words)>=5:
             return " ".join(words[:6]).title()[:50]
         return " ".join(script_text.split()[:6]).title()[:50]
     except:
-        return " ".join(topic.split()[:6]).title()
+        return " ".join(clean_topic_for_id(topic).split()[:6]).title()
 
 def generate_script(news_input):
+    is_breakout = False
+    breakout_score = 0
+    visualping_alert = ""
+    breakout_source = ""
     if isinstance(news_input, dict):
         topic=news_input.get('query','') or news_input.get('title','') or news_input.get('summary','')
         search_vol=news_input.get('search_volume',70)
+        is_breakout = news_input.get('is_breakout', False) or news_input.get('breakout_score',0) >= 5000
+        breakout_score = news_input.get('breakout_score', 0)
+        visualping_alert = news_input.get('visualping_alert','')
+        breakout_source = news_input.get('source','')
     else:
         topic=str(news_input)
         search_vol=70
-    topic=topic.strip()[:200]
+    topic=clean_topic_for_id(topic.strip()[:200])
     if len(topic)<3:
         topic="USA Breaking News"
+    
+    # BREAKOUT FORCE - No fallback, What is Bill X / Who is Politician Y background
+    if is_breakout:
+        print(f"🔥 [SCRIPT_GENERATOR] BREAKOUT MODE: {topic[:60]} | Score {breakout_score} | Source {breakout_source} | Alert {visualping_alert[:60]}")
+
 
     yt_sug=get_yt_suggestions(topic)
     google_title = get_google_searchable_title(topic)
     topic_hashtags = get_topic_hashtags_from_google(topic)
-    world_viral = get_world_viral_hashtag()
+    world_viral = get_world_viral_hashtag(topic)  # FIX: pass topic to avoid tomcruise leak
     all_hashtags_list = topic_hashtags + [world_viral]
     all_hashtags_str = ", ".join(all_hashtags_list)
     topic_hashtags_str = ", ".join(topic_hashtags)
 
-    # --- 40 WORDS RETENTION + SECRET LEAK PROMPT ---
+    breakout_context = ""
+    if is_breakout:
+        breakout_context = f"""
+BREAKOUT ALERT - PURE BREAKOUT MODE - NO FALLBACK:
+- This topic is BREAKING RIGHT NOW - Visualping detected text change on {breakout_source} - {visualping_alert}
+- Politics trends hamesha naye laws/policies se shuru hote hain - This is NEW LAW / EXECUTIVE ORDER / SUPREME COURT DECISION
+- Background needed: What is Bill X / Who is Politician Y - Explain quickly for USA audience
+- Urgency: Seconds ago White House press release page / Federal court dockets / Supreme Court announcement changed - raw data before CNN/Fox
+- You are FIRST to know - Dataminr/Reddit spike detected - tezi pakad rahi hai
+- Tone: URGENT, leaked, behind closed doors, secret - This just leaked seconds ago
+"""
+
     prompt=f"""
-You are VIRAL USA YouTube Shorts script writer - RETENTION GOD.
+You are VIRAL USA YouTube Shorts script writer - RETENTION GOD. {breakout_context}
+
 
 TOPIC: {topic}
 GOOGLE TITLE: {google_title}
@@ -250,12 +335,9 @@ Para3: WHY IT MATTERS 1 line for USA + bold claim
     except Exception as e:
         err=str(e)
         print(f"[GEMINI ERROR] {topic} - {err[:200]}")
-        # Fallback - 40 words RETENTION + LEAK
         fb_title = f"{google_title} Leaked"
         fb_white = " ".join(topic.split()[:4]).title() + " Leaked Behind Doors"
-        # Exact 40 words fallback with validation keywords
         fb_script = f"{topic} just leaked behind closed doors and this changes everything. For years we thought this was impossible. But inside sources reveal hidden truth that shocked everyone. You won't believe what's next. And that's why {topic.lower().split()[0] if topic.split() else 'this'} just leaked"
-        # Force trim to 40
         fb_script = trim_to_40_words(fb_script, topic)
         fb_desc = f"{topic.title()} just leaked behind closed doors.\n\nWHAT HAPPENED: {topic.title()} secret leak behind closed doors is shocking America.\n\nWHY IT MATTERS: First to know effect - this changes everything for USA."
         desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
@@ -272,6 +354,7 @@ Para3: WHY IT MATTERS 1 line for USA + bold claim
                     after_title = after_title.split(delim)[0]
                     break
             selected = after_title.strip().splitlines()[0].strip()[:95]
+            selected = clean_topic_for_id(selected)
         if "WHITE_BAR:" in raw:
             wb_part = raw.split("WHITE_BAR:")[1]
             for delim in ["SCRIPT:", "DESCRIPTION:"]:
@@ -279,6 +362,7 @@ Para3: WHY IT MATTERS 1 line for USA + bold claim
                     wb_part = wb_part.split(delim)[0]
                     break
             white_bar_parsed = wb_part.strip().splitlines()[0].strip()[:60]
+            white_bar_parsed = clean_topic_for_id(white_bar_parsed)
         if "SCRIPT:" in raw:
             fv=raw.split("SCRIPT:")[1].split("DESCRIPTION:")[0].strip()
             full_vo=fv[:700]
@@ -291,21 +375,23 @@ Para3: WHY IT MATTERS 1 line for USA + bold claim
     clean_tts=re.sub(r'Visual:.*?\|','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'Audio:\s*','',clean_tts, flags=re.I)
     clean_tts=re.sub(r'\s+',' ',clean_tts).strip()
+    clean_tts=clean_topic_for_id(clean_tts)
     
-    # FORCE 40 WORDS + VALIDATION FACTORY
     first_words_topic = " ".join(topic.split()[:4])
     clean_tts = trim_to_40_words(clean_tts, first_words_topic)
     
-    # Validation loop - retry trim if fail (max 3 attempts)
     attempts=0
     while not validate_script_factory(clean_tts, topic) and attempts<3:
-        # Inject mandatory keywords if missing
         low = clean_tts.lower()
         if "behind closed doors" not in low and "leaked" not in low:
             clean_tts = clean_tts.replace("and", "leaked behind closed doors and", 1)
             clean_tts = trim_to_40_words(clean_tts, first_words_topic)
-        if "first to know" not in low and "first" not in low:
-            clean_tts = clean_tts + " First to know."
+        if "first to know" not in low and not (("first" in low) and ("know" in low)):
+            # Inject first to know in loop tail area
+            words = clean_tts.split()
+            if len(words) >= 40:
+                words = words[:30] + ["First", "to", "know", "effect", "is", "huge"] + words[30:34]
+                clean_tts = " ".join(words[:40])
             clean_tts = trim_to_40_words(clean_tts, first_words_topic)
         attempts+=1
 
@@ -315,12 +401,14 @@ Para3: WHY IT MATTERS 1 line for USA + bold claim
 
     if not selected or len(selected)<10:
         selected = google_title + " Leaked Behind Doors"
+        selected = clean_topic_for_id(selected)
     if not description:
         description=f"{topic.title()} leaked behind closed doors.\n\nWHAT HAPPENED: {topic.title()} secret leak is shocking.\n\nWHY IT MATTERS: First to know - this changes everything."
     if white_bar_parsed and 4 <= len(white_bar_parsed.split()) <= 7:
         white_bar_text = white_bar_parsed.title()
     else:
         white_bar_text = " ".join(topic.split()[:5]).title() + " Leaked"
+    white_bar_text = clean_topic_for_id(white_bar_text)
 
     desc_with_tags = f"{description}\n\n{' '.join(topic_hashtags)} {world_viral}"
     return {

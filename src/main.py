@@ -385,27 +385,23 @@ def main():
 
         print(f" -> GATE PASS pre-script: {temp_scores} {brk_tag}")
 
-        # Fact checker - bypass if breakout
-        print(f"5. Fact Checking (Shorts Gate ke baad)... {brk_tag}")
+        # Fact checker - STRICT REAL ONLY - NO FORCE PASS - Real hai tabhi video banegi
+        print(f"5. Fact Checking (STRICT REAL - NO FORCE PASS)... {brk_tag}")
         try:
             validation = fact_check(temp_script, temp_approved)
             if not validation.get('passed', False):
-                if is_brk:
-                    print(f"⚠️ REJECTED BY FACT CHECKER but BREAKOUT FORCE -> BYPASS: {validation.get('report')} -> VIDEO BANEGA HI BANEGA")
-                    validation = {"passed": True, "report": f"BREAKOUT FORCE BYPASS (Politics+News): {validation.get('report')}"}
-                else:
-                    print(f"❌ REJECTED BY FACT CHECKER: {temp_approved.get('title') or temp_approved.get('query')}")
-                    print(f"   Reason: {validation.get('report')}")
-                    continue
+                print(f"❌ REJECTED BY FACT CHECKER (STRICT REAL): {temp_approved.get('title') or temp_approved.get('query')}")
+                print(f"   Reason: {validation.get('report')}")
+                print(f"   => Topic cancel, naya topic try karega - NO FORCE PASS")
+                continue
             else:
-                print(f"✅ FACT CHECKER PASS: {validation.get('report')} {brk_tag}")
+                print(f"✅ FACT CHECKER REAL PASS: {validation.get('report')} {brk_tag}")
         except Exception as e:
-            print(f"fact_check crashed: {e}, {'FORCE PASS for BREAKOUT' if is_brk else 'continuing with PASS'}")
+            print(f"fact_check crashed: {e} -> FAIL - topic cancel new try (NO FORCE PASS)")
             traceback.print_exc()
-            if is_brk:
-                validation = {"passed": True, "report": f"BREAKOUT FORCE PASS after crash {e}"}
-            else:
-                validation = {"passed": True, "report": f"crash bypass {e}"}
+            validation = {"passed": False, "report": f"crash -> FAIL new try {e}"}
+            print(f"❌ REJECTED BY FACT CHECKER CRASH: {temp_approved.get('title') or temp_approved.get('query')} - new try")
+            continue
 
         approved_topic = temp_approved
         script_result = temp_script
@@ -495,6 +491,34 @@ def main():
         mark_uploaded(story_id, yt_id)
         print(f"9. UPLOADED: https://youtu.be/{yt_id} {'🔥 BREAKOUT' if approved_topic.get('is_breakout') else ''}")
         print(f" Used Title Options: {title_options}")
+
+        # FIXED: PINNED COMMENT RETRY - if uploader missed, retry here + comment_engine
+        try:
+            print("10. PINNED COMMENT CHECK...")
+            from youtube_uploader import post_pinned_comment
+            topic_for_pin = approved_topic.get('query','') or approved_topic.get('title','')
+            pinned_id = post_pinned_comment(yt_id, topic_for_pin)
+            if pinned_id:
+                print(f"✅ Pinned comment posted {pinned_id}")
+            else:
+                print("⚠️ Pinned comment not posted in uploader, trying comment_engine fallback")
+                try:
+                    from comment_engine import reply_witty_provocative
+                    # For pinned, we need to post a new top-level comment as channel
+                    from youtube_uploader import post_pinned_comment as ppc2
+                    ppc2(yt_id, topic_for_pin)
+                except Exception as ce:
+                    print(f"[PINNED COMMENT FALLBACK] fail {ce}")
+        except Exception as e:
+            print(f"[PINNED COMMENT] Main retry fail {e}")
+
+        # Also run comment_engine for old videos
+        try:
+            from comment_engine import run_comment_engine_for_latest
+            run_comment_engine_for_latest(limit_videos=2)
+        except Exception as e:
+            print(f"[COMMENTS] Engine fail {e}")
+
     else:
         print("Upload failed")
 

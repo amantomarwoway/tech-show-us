@@ -28,8 +28,8 @@ if not hasattr(PIL.Image, 'ANTIALIAS'):
 if not hasattr(PIL.Image, 'BICUBIC'):
     PIL.Image.BICUBIC = PIL.Image.Resampling.BICUBIC
 
-MODEL_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"
-CONFIG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+MODEL_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx"
+CONFIG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx.json"
 
 CHANNEL_NAME = "Uncovered USA 24"
 CHANNEL_SHORT = "Uncovered USA 24"
@@ -69,7 +69,7 @@ WHITE_BAR_HEIGHT = 150
 
 def get_piper_voice():
     os.makedirs("models", exist_ok=True)
-    mp="models/en_US-amy-medium.onnx"; cp="models/en_US-amy-medium.onnx.json"
+    mp="models/en_US-ryan-medium.onnx"; cp="models/en_US-ryan-medium.onnx.json"
     if not os.path.exists(mp):
         print("Downloading BEST FREE Piper model...")
         open(mp,'wb').write(requests.get(MODEL_URL, timeout=60).content)

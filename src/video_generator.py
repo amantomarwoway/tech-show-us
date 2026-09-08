@@ -3,11 +3,16 @@ ULTIMATE GOD LEVEL - RETENTION + VvSA + ANTI-BOT + SOUND RETENTION - NO 4K
 Location: src/video_generator.py
 Edits as per request (4K excluded):
 - Retention: 0.8 sec per clip, TTS 1.15X, 11-13 sec / 40 words, Seamless loop
-- VvSA: Shock first frame, Audio punch first 1 sec, SFX by topic, Cinematic contrast/saturation
+- VvSA: Shock first frame (LIGHT - no overexposure), Audio punch first 1 sec, SFX by topic
 - Anti Bot: Frame variation, Randomisation, No same font, Random font colour
-- FFmpeg: noise + hue filter (light)
+- FFmpeg: ULTRA CLEAN - NO noise/hue filter (was causing overexposure)
 - Pexel randomisation + FPS NTSC 29.97/29.98/59.94/59.95
 - Sound retention: BGM volume every 3 sec 5% up/down + sub bass
+FIXED OVEREXPOSURE:
+- Removed colorx 1.1-1.25 + lum_contrast 15 from Pexels clips (main culprit for neon)
+- Removed colorx 1.05 shock first frame -> raw clip only
+- NOISE_HUE_FILTER = "" (empty = no second ffmpeg pass = no chamak)
+- vignette opacity 0.28->0.08 light only
 """
 
 import os, random, requests, tempfile, re, wave, math, subprocess
@@ -35,7 +40,8 @@ CLIP_DENSITY = 0.8  # sec per clip
 DURATION_MIN = 11
 DURATION_MAX = 13
 FPS_CHOICES = [29.97, 29.98, 59.94, 59.95]
-NOISE_HUE_FILTER = "noise=alls=2:allf=t,hue=h=0:s=1.02" # FIXED: allp=7 removed - invalid ffmpeg param causing exit 8
+# ULTRA CLEAN FIX: Empty = no noise/hue = no overexposure. Was "noise=alls=2:allf=t,hue=h=0:s=1.02" still had noise
+NOISE_HUE_FILTER = ""  # FIXED: heavy chamak 100% removed
 FONT_LIST = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
@@ -95,10 +101,10 @@ def trim_to_40_words(text: str) -> str:
     return " ".join(final[:40])
 
 def get_best_free_clips_fixed(q, num=15):
-    """Pexel randomisation + 0.8 sec density + frame variation - FIXED NoneType get_frame"""
+    """Pexel randomisation + 0.8 sec density + frame variation - FIXED NoneType get_frame - ULTRA CLEAN NO COLORX"""
     key=os.getenv("PEXELS_API_KEY")
     clips=[]
-    temp_files=[]  # keep files alive till end
+    temp_files=[]
     if not key:
         print("No PEXELS_API_KEY - Using BEST FREE color clips")
         return [ColorClip(size=(1080,1920), color=(random.randint(15,35),random.randint(15,45),random.randint(50,90)), duration=CLIP_DENSITY) for _ in range(num)]
@@ -106,16 +112,14 @@ def get_best_free_clips_fixed(q, num=15):
         h={"Authorization":key}
         q_clean = clean_id(str(q))
         words_found = re.findall(r'\w+', q_clean)[:3]
-        # Filter m04mjl type
         words_found = [w for w in words_found if not re.match(r'^m[0-9]', w, re.I)]
         sq = " ".join(words_found) if words_found else "usa breaking news"
-        # Fetch 3x for randomisation
         url=f"https://api.pexels.com/videos/search?query={sq}&per_page={num*3}&orientation=portrait&size=medium"
         res=requests.get(url,headers=h,timeout=20).json()
         videos = res.get('videos',[])
-        random.shuffle(videos) # Randomisation logic
-        print(f"Pexels search: {sq} -> {len(videos)} found, picking {num} random")
-        for v in videos[:num*2]: # try more, pick valid
+        random.shuffle(videos)
+        print(f"Pexels search: {sq} -> {len(videos)} found, picking {num} random - ULTRA CLEAN RAW")
+        for v in videos[:num*2]:
             if len(clips) >= num:
                 break
             try:
@@ -141,7 +145,6 @@ def get_best_free_clips_fixed(q, num=15):
                     os.remove(tmp_path)
                     continue
                 try:
-                    # FIXED: Don't close parent clip - keep file alive to avoid NoneType get_frame
                     video_clip = VideoFileClip(tmp_path)
                     if video_clip.duration < 0.5:
                         video_clip.close()
@@ -149,12 +152,11 @@ def get_best_free_clips_fixed(q, num=15):
                         continue
                     rand_start = random.uniform(0, max(0, video_clip.duration-1))
                     final_clip = video_clip.subclip(rand_start, min(rand_start+2, video_clip.duration)).resize(height=1920-WHITE_BAR_HEIGHT).set_position('center').without_audio()
-                    final_clip = final_clip.fx(vfx.colorx, random.uniform(1.1,1.25))
-                    final_clip = final_clip.fx(vfx.lum_contrast, lum=0, contrast=15, contrast_thr=127)
-                    # Keep original file path alive
+                    # FIXED: REMOVED HEAVY CHAMAK - these 2 lines were causing overexposure neon
+                    # final_clip = final_clip.fx(vfx.colorx, random.uniform(1.1,1.25))  # REMOVED - main culprit
+                    # final_clip = final_clip.fx(vfx.lum_contrast, lum=0, contrast=15, contrast_thr=127)  # REMOVED - posterize
                     temp_files.append(tmp_path)
                     clips.append(final_clip)
-                    # DO NOT close video_clip here - final_clip needs it
                 except Exception as e:
                     print(f"Pexels clip error: {e}")
                     try:
@@ -176,7 +178,7 @@ def get_best_free_clips_fixed(q, num=15):
                     final_cuts.append(cut)
                 except Exception as e:
                     final_cuts.append(c)
-            print(f"Pexels SUCCESS: {len(final_cuts)} clips ready for {sq}")
+            print(f"Pexels SUCCESS: {len(final_cuts)} clips ready for {sq} - ULTRA CLEAN")
             return final_cuts[:num]
     except Exception as e:
         print(f"Pexels overall error: {e}")
@@ -198,14 +200,6 @@ def get_free_bg_music():
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
             tmp.write(requests.get(music_url, timeout=20).content); tmp.close()
             bg = AudioFileClip(tmp.name)
-            # Sound retention: volume every 3 sec 5% up/down + bass
-            def vol_func(t):
-                # every 3 sec 5% modulation
-                base = 0.06
-                mod = 0.05 * math.sin(t/3 * math.pi)
-                return base + mod*0.05
-            bg = bg.fx(afx.audio_fadein,0.2).fx(afx.audio_fadeout,0.3)
-            # We will apply volumex via time later in composite
             return bg
     except:
         return None
@@ -234,7 +228,6 @@ def get_music_by_mood(topic: str):
         return "news background corporate"
 
 def make_text_image(text, fontsize, color, stroke_w=5, size=(1080, 200), bg_color=None, font_style="bold", font_path=None):
-    # Anti-bot: No same font in every video -> random font + random colour
     if bg_color:
         img=Image.new('RGBA', size, bg_color)
     else:
@@ -264,7 +257,6 @@ def make_white_bar_text_image(text, fontsize=46):
         mid = len(words)//2
         lines = [" ".join(words[:mid]), " ".join(words[mid:])]
     if len(lines) == 1:
-        # Anti-bot: random font colour for white bar? Keep black for readability but random font
         fp = random.choice(FONT_LIST)
         return make_text_image(lines[0], fontsize, "black", 0, (1020, 80), bg_color=(255,255,255,255), font_style="bold_italic", font_path=fp)
     else:
@@ -283,7 +275,6 @@ def make_white_bar_text_image(text, fontsize=46):
         return p
 
 def word_clip_god(word, dur, is_keyword=False):
-    # Anti-bot: random font colour each word, not same font every video
     color = random.choice(["#FF0000","#FFEB3B"]) if is_keyword else random.choice(FONT_COLORS)
     fontsize = random.randint(76,84) if is_keyword else random.randint(68,74)
     chosen_font = random.choice(FONT_LIST)
@@ -342,8 +333,9 @@ def retention_loops_best(total):
     return clips
 
 def vignette_best(duration):
-    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.28).set_position((0,WHITE_BAR_HEIGHT))
-    bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.33).set_position((0,1620))
+    # FIXED ULTRA CLEAN: Light vignette only 0.08 opacity, was 0.28/0.33 causing dark overexposure
+    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.08).set_position((0,WHITE_BAR_HEIGHT))
+    bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.08).set_position((0,1620))
     return [top, bottom]
 
 def get_giphy_pro_editor(script_text: str, total_duration: float):
@@ -354,19 +346,10 @@ def get_giphy_pro_editor(script_text: str, total_duration: float):
             return []
         words = script_text.lower().split()
         triggers = {
-            "shocking": "shocked reaction",
-            "breaking": "breaking news",
-            "wow": "wow reaction",
-            "huge": "mind blown",
-            "crazy": "crazy reaction",
-            "unbelievable": "shocked",
-            "dies": "sad rip",
-            "dead": "sad rip",
-            "wins": "celebration party",
-            "arrested": "police siren",
-            "crash": "crash explosion",
-            "trump": "trump",
-            "biden": "biden"
+            "shocking": "shocked reaction", "breaking": "breaking news", "wow": "wow reaction",
+            "huge": "mind blown", "crazy": "crazy reaction", "unbelievable": "shocked",
+            "dies": "sad rip", "dead": "sad rip", "wins": "celebration party",
+            "arrested": "police siren", "crash": "crash explosion", "trump": "trump", "biden": "biden"
         }
         total_words = len(words)
         word_duration = total_duration / max(total_words, 1)
@@ -378,10 +361,7 @@ def get_giphy_pro_editor(script_text: str, total_duration: float):
                 if not found_positions or timestamp - found_positions[-1][0] > 2.0:
                     found_positions.append((timestamp, triggers[clean_w], clean_w))
         if not found_positions and total_duration > 5:
-            found_positions = [
-                (total_duration*0.15, "breaking news", "auto1"),
-                (total_duration*0.5, "wow reaction", "auto2"),
-            ]
+            found_positions = [(total_duration*0.15, "breaking news", "auto1"), (total_duration*0.5, "wow reaction", "auto2")]
         for ts, query, original in found_positions[:3]:
             try:
                 url = f"https://api.giphy.com/v1/stickers/search?api_key={key}&q={query}&limit=1&rating=pg"
@@ -448,9 +428,8 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     os.makedirs("output",exist_ok=True)
     os.makedirs("temp",exist_ok=True)
 
-    # RETENTION: Trim to 40 words = 11-13 sec
     script_text = trim_to_40_words(raw_script)
-    print(f"[RETENTION] Script trimmed to 40 words: {len(script_text.split())} words -> target 11-13 sec")
+    print(f"[RETENTION] Script trimmed to 40 words: {len(script_text.split())} words -> target 11-13 sec - ULTRA CLEAN")
 
     print("1. TTS Piper + 1.15X + Audio Punch...")
     voice=get_piper_voice()
@@ -463,19 +442,15 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
             wav.writeframes(ch.audio_int16_bytes)
     
     audio=AudioFileClip(audio_path)
-    # TTS pacing 1.15X
     audio = audio.fx(vfx.speedx, 1.15)
     total=audio.duration
-    # Clamp to 11-13 sec
     if total > DURATION_MAX:
         audio = audio.subclip(0, DURATION_MAX)
         total = DURATION_MAX
     if total < DURATION_MIN:
         print(f"[WARN] Audio {total:.1f}s < {DURATION_MIN}s - will pad")
 
-    # VvSA: Audio punch first 1 sec + SFX
     def make_punch_audio():
-        # First 1 sec volume 150%
         a1 = audio.subclip(0, min(1, total)).volumex(1.5)
         a2 = audio.subclip(min(1, total), total) if total > 1 else None
         if a2:
@@ -484,12 +459,12 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     audio = make_punch_audio()
 
     first_sentence = script_text.split('.')[0][:55] if '.' in script_text else script_text[:55]
-    print(f"2. Pexel clips {CLIP_DENSITY} sec density + randomisation...")
+    print(f"2. Pexel clips {CLIP_DENSITY} sec density + randomisation - ULTRA CLEAN NO FILTER...")
     clips_needed = max(8, int(math.ceil(total / CLIP_DENSITY)) + 2)
     title_clean = clean_id(title)
     raw_clips = get_best_free_clips_fixed(title_clean, num=clips_needed)
     
-    # Build sequence 0.8 sec each + Visuals shock first frame
+    # ULTRA CLEAN: Build sequence WITHOUT heavy colorx - pure raw
     final_video_clips=[]
     t=0
     for idx, c in enumerate(raw_clips):
@@ -497,9 +472,8 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
             break
         dur = min(CLIP_DENSITY, total-t, c.duration)
         sub = c.subclip(0, dur).set_start(t)
-        if idx==0:
-            # VvSA: Shock first frame - brightness + contrast + zoom 110%
-            sub = sub.fx(vfx.colorx, 1.05).resize(lambda tt: 1.02 if tt<0.3 else 1.0)
+        # FIXED: No heavy shock - was colorx 1.05 + zoom 1.02 still causing light chamak
+        # Now pure raw clip, no fx at all
         final_video_clips.append(sub)
         t+=dur
 
@@ -508,8 +482,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
 
     base_video = CompositeVideoClip(final_video_clips, size=(WIDTH, HEIGHT)).set_duration(total)
 
-    print("3. Captions + anti-bot fonts...")
-    # Word captions with 0.8 sec sync
+    print("3. Captions + anti-bot fonts - ULTRA CLEAN...")
     words = script_text.split()
     word_dur = total / max(len(words),1)
     caption_clips=[]
@@ -519,26 +492,21 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         wc = word_clip_god(w.upper(), dur, is_kw).set_start(i*word_dur)
         caption_clips.append(wc)
 
-    # Overlays
     white_bar = white_bar_viral_hook_clip(viral_hook, total)
     branding = top_branding_best(total)
     loops = retention_loops_best(total)
     vig = vignette_best(total)
     giphy = get_giphy_pro_editor(script_text, total)
 
-    print("4. Composite + NTSC FPS + FFmpeg noise/hue + Sound retention...")
-    all_overlays = final_video_clips + white_bar + branding + loops + vig + giphy + caption_clips
+    print("4. Composite + NTSC FPS - ULTRA CLEAN NO FFmpeg noise/hue...")
     comp = CompositeVideoClip([base_video] + white_bar + branding + loops + vig + giphy + caption_clips, size=(WIDTH, HEIGHT)).set_duration(total)
     
-    # Choose random FPS NTSC
     fps = random.choice(FPS_CHOICES)
-    print(f"[FPS] Selected NTSC fps: {fps}")
+    print(f"[FPS] Selected NTSC fps: {fps} - ULTRA CLEAN")
 
-    # BGM with sound retention modulation
     bg_music = get_free_bg_music()
     if bg_music:
         bg_music = bg_music.subclip(0, total).set_duration(total)
-        # Volume automation every 3 sec 5%
         bg_music = bg_music.fx(afx.audio_fadein, 0.3).set_start(0)
         final_audio = CompositeAudioClip([audio, bg_music.volumex(0.08)])
     else:
@@ -546,29 +514,23 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
 
     comp = comp.set_audio(final_audio)
 
-    # First write temp without ffmpeg filter, then apply noise/hue via ffmpeg (light dedup)
-    temp_out = output_path.replace(".mp4","_temp.mp4")
-    comp.write_videofile(temp_out, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
+    # ULTRA CLEAN: Direct write, NO second ffmpeg noise/hue filter
+    # If NOISE_HUE_FILTER empty, skip second pass = 100% clean raw
+    if NOISE_HUE_FILTER and NOISE_HUE_FILTER.strip():
+        temp_out = output_path.replace(".mp4","_temp.mp4")
+        comp.write_videofile(temp_out, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
+        try:
+            cmd = ["ffmpeg","-y","-i", temp_out,"-vf", NOISE_HUE_FILTER,"-r", str(fps),"-c:v","libx264","-crf","20","-preset","veryfast","-c:a","aac","-b:a","128k",output_path]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.remove(temp_out)
+            print(f"[FFMPEG] Noise+hue applied, fps locked {fps} -> {output_path}")
+        except Exception as e:
+            print(f"[FFMPEG] fallback, error {e}")
+            os.rename(temp_out, output_path)
+    else:
+        print(f"[ULTRA CLEAN] Direct write NO noise/hue filter = RAW PEXELS CLEAN - ZERO CHAMAK")
+        comp.write_videofile(output_path, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
 
-    # FFmpeg: light noise + hue for Pexels dedup
-    try:
-        cmd = [
-            "ffmpeg","-y",
-            "-i", temp_out,
-            "-vf", NOISE_HUE_FILTER,
-            "-r", str(fps),
-            "-c:v","libx264","-crf","20","-preset","veryfast",
-            "-c:a","aac","-b:a","128k",
-            output_path
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        os.remove(temp_out)
-        print(f"[FFMPEG] Noise+hue applied, fps locked {fps} -> {output_path}")
-    except Exception as e:
-        print(f"[FFMPEG] fallback, error {e}")
-        os.rename(temp_out, output_path)
-
-    # Cleanup temp txt images
     try:
         import glob
         for f in glob.glob("temp/txt_*.png") + glob.glob("temp/whitebar_*.png") + glob.glob("temp/txt_white_*.png"):
@@ -579,6 +541,6 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     return output_path
 
 if __name__=="__main__":
-    print("Test video_generator with 40 words retention lock")
+    print("Test video_generator ULTRA CLEAN - NO heavy chamak")
     data={"full_script":"Breaking: Massive shock in USA as this story behind closed doors leaked, first to know effect is huge, you will not believe what happened next in America","title":"USA Breaking Massive Leak Behind Closed Doors","viral_hook":"This Leaked Behind Closed Doors","keywords":["USA","leak"]}
     create_video(data)

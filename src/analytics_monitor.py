@@ -3,6 +3,8 @@ analytics_monitor.py - FIXED
 - Jo view/like/comment har 1hr me check kare YouTube API se
 - FIX 11: Checked 0 videos, low 0 -> DB empty + yt_id handling + fallback
 """
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 import os, time, json, sqlite3, random
 from pathlib import Path
 from datetime import datetime

@@ -14,7 +14,7 @@ import PIL.Image
 WIDTH, HEIGHT = 1080, 1920
 WHITE_BAR_HEIGHT = 210  # User: white bar 210
 BLACK_TOP_STRIP = 190  # User: top black bar 190
-BLACK_BOTTOM_STRIP = 200  # User: bottom black bar 280
+BLACK_BOTTOM_STRIP = 200  # User: bottom black bar 200
 BLACK_BORDER = 16
 CORNER_RADIUS = 38
 CLIP_DENSITY = 0.8

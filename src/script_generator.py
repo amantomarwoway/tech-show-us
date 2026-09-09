@@ -1,14 +1,9 @@
 """
-ULTIMATE GOD LEVEL - RETENTION + SEAMLESS LOOP WITHOUT FIXED WORDS
+ULTIMATE GOD LEVEL - FINAL EDIT - NO FALLBACK - NO FIXED WORDS
 Location: src/script_generator.py
-EDITED 2026-09-09 as per request:
-- Loop remains but NO fixed words like "And that's why" / "just leaked" / "First to know"
-- Gemini 3.6 Flash creates natural seamless loop itself based on topic
-- No auto-injection of fixed phrases
-- trim_to_40_words only cuts to 40, no forced tail
-- ALL other functions kept same: get_google_searchable_title, get_topic_hashtags_from_google, get_world_viral_hashtag, get_yt_suggestions, call_gemini with 3.6 Flash + ChatGPT fallback
+FINAL FLOW as per request:
+Topic (any) -> Title (4-5 words, shock+emotional both mandatory, topic related, no fixed words, Gemini decides) -> Script (40 words from Title, shock+emotion fulfilled, no fixed words) -> Pexels from Title
 """
-# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
 
 import os, requests, re, random, time
 
@@ -26,27 +21,6 @@ except ImportError:
         GENAI_NEW=None
 
 RETENTION_WORDS = 40
-BOLD_CLAIMS = [
-    "this changes everything",
-    "you won't believe",
-    "nobody saw this coming",
-    "this is huge",
-    "shocked everyone",
-    "game changer",
-]
-
-def validate_script_factory(script_text: str, topic: str, topic_dict=None) -> bool:
-    # FIXED: Only word count, no forced leak/first-to-know
-    low = script_text.lower()
-    wc = len(script_text.split())
-    if not (35 <= wc <= 45):
-        print(f"[VALIDATION FAIL] Words {wc} != 40 target")
-        return False
-    has_bold = any(b in low for b in BOLD_CLAIMS)
-    if not has_bold:
-        print(f"[VALIDATION WARN] No bold claim, but PASS")
-    print(f"[VALIDATION PASS] {wc} words - clean seamless loop (Gemini native)")
-    return True
 
 def clean_topic_for_id(topic: str) -> str:
     cleaned = re.sub(r'/m/[a-z0-9]+', '', topic, flags=re.I)
@@ -55,7 +29,6 @@ def clean_topic_for_id(topic: str) -> str:
     return cleaned[:200] if cleaned else topic[:200]
 
 def trim_to_40_words(text: str, topic_first_words: str) -> str:
-    """FIXED: 40 words clean - NO fixed words, keep Gemini's own seamless loop"""
     text = clean_topic_for_id(text)
     words = text.split()
     if len(words) > 40:
@@ -144,19 +117,7 @@ def call_gemini(prompt):
                     continue
         except Exception as e:
             print(f"[CHATGPT FALLBACK] total fail: {e}")
-    raise RuntimeError("All Gemini 3.6 Flash + ChatGPT fallback failed")
-
-def call_chatgpt_fallback(prompt):
-    openai_key=os.getenv("OPENAI_API_KEY","")
-    if not openai_key:
-        raise RuntimeError("OPENAI_API_KEY missing for fallback")
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=openai_key)
-        resp = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], temperature=0.9, max_tokens=800)
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        raise RuntimeError(f"ChatGPT fallback failed: {e}")
+    raise RuntimeError("All Gemini 3.6 Flash + ChatGPT fallback failed - NO FALLBACK TITLE as per request")
 
 def get_google_searchable_title(topic: str) -> str:
     topic_clean = clean_topic_for_id(topic)
@@ -275,21 +236,33 @@ GOOGLE TITLE: {google_title}
 YT Related: {yt_sug}
 Search Vol: {search_vol}
 
-MANDATORY RULES - FOLLOW 100%:
+MANDATORY RULES - FOLLOW 100% - NO FIXED WORDS AT ALL:
+
+FLOW: Topic -> Title -> Script -> Pexels
+1. TOPIC ayega - kaisa bhi aaye (boring bhi ho sakta hai)
+2. Chahe TOPIC kaisa bhi ho, usko SHOCK + EMOTIONAL tarike se dikhana hai. Normal boring nahi. Har topic ko shock + emotion me convert karna hai.
+3. Gemini jab TITLE generate karega us topic ke liye, to us TITLE me SHOCK aur EMOTION dono dikhne chaiye - 4-5 words me. Topic ka word bhi include karo. Koi word fix nahi karna, Gemini khud decide karega kaise shock+emotion dikhana hai.
+4. Phir usi TITLE se SCRIPT generate karo - 40 words exactly - jo TITLE ke shock + emotion ko fulfill kare, koi fixed word nahi.
+5. Phir Pexels us TITLE ko leke best clips dega.
+
+TITLE RULES (AFTER TOPIC - MOST IMPORTANT - NO FIXED WORDS):
+- EXACTLY 4-5 words ONLY - not 3, not 6, not long title
+- Chahe topic kaisa bhi aaye, TITLE me SHOCK + EMOTIONAL dono dikhne chaiye - mandatory
+- Topic related word include karo
+- NO FIXED WORDS at all - no forced "shocked, crying, hearts, shattered, families" - Gemini khud topic dekh ke natural shock+emotion banayega har baar naya
+
+SCRIPT RULES - NO FIXED WORDS:
 - EXACTLY 40 WORDS ONLY - not 39, not 41. Count them.
+- SCRIPT TITLE se generate ho - TITLE ka shock + emotion SCRIPT me fulfill ho, no fixed words
 - STRUCTURE: Hook -> Twist -> Natural closing that loops back to start idea (seamless loop)
-- SEAMLESS LOOP: Create natural seamless loop where last sentence connects back to first sentence idea, so video loops smoothly when replayed.
-  CRITICAL: DO NOT use fixed phrase "And that's why" - DO NOT use "just leaked" as loop tail - DO NOT use "First to know effect is huge" - Let loop be natural and unique for each topic. Gemini 3.6 Flash decides loop style.
-  GOOD loop: Start "NASA found something shocking..." End "...and it all started when NASA found..."
-  BAD loop (BANNED): "And that's why this just leaked" - banned
-- TONE: Bold, urgent, viral - natural language
-- No labels like WHAT HAPPENED, WHY IT MATTERS
-- Simple USA English, TTS friendly
+- SEAMLESS LOOP: last sentence connects back to first idea - NO FIXED TAIL PHRASE
+  BANNED FIXED TAILS (do not use): "And that's why" / "just leaked" / "First to know effect is huge" - koi fixed tail nahi, Gemini natural loop banayega
+- Simple USA English, TTS friendly, no fixed words
 
 RETURN EXACTLY:
-TITLE: <viral searchable title 60-90 chars>
-WHITE_BAR: <5-6 words full sentence>
-SCRIPT: <your exactly 40 words with natural seamless loop - NO fixed "And that's why">
+TITLE: <exactly 4-5 words, shock + emotion dono dikhe, topic related, no fixed words>
+WHITE_BAR: <same as TITLE - 4-5 words>
+SCRIPT: <exactly 40 words based on TITLE, shock + emotional fulfilled, seamless loop, no fixed words>
 DESCRIPTION:
 Para1: Hook line
 Para2: WHAT HAPPENED 1 line about {topic}
@@ -301,16 +274,8 @@ Para3: WHY IT MATTERS 1 line for USA
         raw=call_gemini(prompt)
     except Exception as e:
         err=str(e)
-        print(f"[GEMINI ERROR] {topic} - {err[:200]}")
-        fb_title = f"{google_title}"
-        fb_white = " ".join(topic.split()[:5]).title()
-        fb_script = f"{topic} has shocked America with a surprising turn today. New reports reveal details that could change everything for millions. Officials are closely watching what happens next. This story is developing fast and the truth behind {topic.lower().split()[0] if topic.split() else 'this'} is"
-        fb_script = trim_to_40_words(fb_script, topic)
-        fb_desc = f"{topic.title()} is making headlines today. WHAT HAPPENED: Latest updates on {topic.title()} are drawing attention. WHY IT MATTERS: This could impact many people."
-        desc_with_tags = f"{fb_desc}\n\n{' '.join(topic_hashtags)} {world_viral}"
-        return {
-            "title":fb_title,"title_options":[fb_title],"full_script":fb_script,"raw_script_structured":fb_script,"script_segments":{},"visual_instructions":{"music":"tense dramatic news","captions":"bold","pacing":"fast"},"description":desc_with_tags,"tags_primary":topic_hashtags_str,"tags_secondary":world_viral,"tags_shorts":all_hashtags_str,"tags_all":all_hashtags_str,"tags_topic":topic_hashtags_str,"viral_hashtag":world_viral,"sources":"Google Searchable","viral_check":{"words":len(fb_script.split()),"has_segments":0},"viral_hook":fb_white,"white_bar_text":fb_white,"mood":"tense"
-        }
+        print(f"[GEMINI ERROR - NO FALLBACK] {topic} - {err[:200]}")
+        raise RuntimeError(f"Gemini failed for topic {topic}: {err} - NO FALLBACK TITLE as per request - will retry next cron")
 
     selected=""; full_vo=""; description=""; white_bar_parsed=""
     try:
@@ -322,6 +287,9 @@ Para3: WHY IT MATTERS 1 line for USA
                     break
             selected = after_title.strip().splitlines()[0].strip()[:95]
             selected = clean_topic_for_id(selected)
+            sel_words = selected.split()
+            if len(sel_words) > 5:
+                selected = " ".join(sel_words[:5])
         if "WHITE_BAR:" in raw:
             wb_part = raw.split("WHITE_BAR:")[1]
             for delim in ["SCRIPT:", "DESCRIPTION:"]:
@@ -330,13 +298,17 @@ Para3: WHY IT MATTERS 1 line for USA
                     break
             white_bar_parsed = wb_part.strip().splitlines()[0].strip()[:60]
             white_bar_parsed = clean_topic_for_id(white_bar_parsed)
+            wb_words = white_bar_parsed.split()
+            if len(wb_words) > 5:
+                white_bar_parsed = " ".join(wb_words[:5])
         if "SCRIPT:" in raw:
             fv=raw.split("SCRIPT:")[1].split("DESCRIPTION:")[0].strip()
             full_vo=fv[:700]
         if "DESCRIPTION:" in raw:
             description=raw.split("DESCRIPTION:")[1].strip()[:1200]
     except Exception as e:
-        print(f"Parse error {e}")
+        print(f"Parse error - NO FALLBACK: {e}")
+        raise RuntimeError(f"Parse failed - NO FALLBACK: {e} raw: {raw[:200]}")
 
     clean_tts=re.sub(r'\[.*?\]','',full_vo)
     clean_tts=re.sub(r'Visual:.*?\|','',clean_tts, flags=re.I)
@@ -347,19 +319,21 @@ Para3: WHY IT MATTERS 1 line for USA
     clean_tts = trim_to_40_words(clean_tts, first_words_topic)
 
     if len(clean_tts.split())<10:
-        clean_tts = f"{topic} has taken a surprising turn with new developments emerging today. Reports show significant changes ahead that could affect many. Officials continue to monitor the situation closely as this story unfolds and the truth about {topic.lower().split()[0] if topic.split() else 'this'} is"
-        clean_tts = trim_to_40_words(clean_tts, first_words_topic)
+        raise RuntimeError(f"Script too short - NO FALLBACK: {clean_tts}")
 
-    if not selected or len(selected)<10:
-        selected = google_title
-        selected = clean_topic_for_id(selected)
+    if not selected or len(selected.split()) < 4:
+        raise RuntimeError(f"Title not valid 4-5 words - NO FALLBACK: '{selected}' - Gemini must give 4-5 words shock+emotion")
+
     if not description:
         description=f"{topic.title()} is making headlines today. WHAT HAPPENED: Latest updates on {topic.title()} are drawing attention. WHY IT MATTERS: This could have wide impact."
-    if white_bar_parsed and 4 <= len(white_bar_parsed.split()) <= 7:
+
+    if white_bar_parsed and 4 <= len(white_bar_parsed.split()) <= 5:
         white_bar_text = white_bar_parsed.title()
     else:
-        white_bar_text = " ".join(topic.split()[:5]).title()
+        white_bar_text = selected.title()
     white_bar_text = clean_topic_for_id(white_bar_text)
+    if len(white_bar_text.split()) > 5:
+        white_bar_text = " ".join(white_bar_text.split()[:5])
 
     desc_with_tags = f"{description}\n\n{' '.join(topic_hashtags)} {world_viral}"
     return {

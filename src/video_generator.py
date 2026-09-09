@@ -14,7 +14,7 @@ import PIL.Image
 WIDTH, HEIGHT = 1080, 1920
 WHITE_BAR_HEIGHT = 210  # User: white bar 210
 BLACK_TOP_STRIP = 190  # User: top black bar 190
-BLACK_BOTTOM_STRIP = 280  # User: bottom black bar 280
+BLACK_BOTTOM_STRIP = 160  # User: bottom black bar 160
 BLACK_BORDER = 16
 CORNER_RADIUS = 38
 CLIP_DENSITY = 0.8
@@ -116,7 +116,7 @@ def get_best_free_clips_from_script(script_data, num=20):
 
 def make_74k_white_bar_FINAL(text, bar_height=210):
     """
-    USER SPEC: Top black 190 + White 210 + Bottom black 280 + Font italic must
+    USER SPEC: Top black 190 + White 210 + Bottom black 160 + Font italic must
     """
     viral_text = clean_id(text).strip()
     viral_text = " ".join(viral_text.split()[:8])

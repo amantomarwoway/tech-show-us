@@ -1,3 +1,5 @@
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 """
 news_fetcher.py - GUARANTEED BREAKOUT EVERY RUN - PURE BREAKOUT
 Bhai ko har baar breakout news hi chahiye - 0 nahi chalega
@@ -5,6 +7,15 @@ Bhai ko har baar breakout news hi chahiye - 0 nahi chalega
 import time, random, re, json
 from pathlib import Path
 from datetime import datetime, timezone
+
+def is_us_topic(text: str) -> bool:
+    if not text: return False
+    low = text.lower()
+    blocked = ['germany', 'merz', 'canada']
+    for b in blocked:
+        if b in low and not any(k in low for k in ['trump', 'white house', 'usa']):
+            return False
+    return True
 
 def clean_id(text: str) -> str:
     if not text: return ""
@@ -45,7 +56,7 @@ def fetch_all_news():
         print("⚠️ NO BREAKOUT YET - GUARANTEED CNN/Google RSS - HAR BAAR")
         try:
             import feedparser
-            for rss_url in ["http://rss.cnn.com/rss/cnn_brk.rss", "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"]:
+            for rss_url in ["https://rss.cnn.com/rss/cnn_brk.rss", "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"]:
                 feed = feedparser.parse(rss_url)
                 for entry in feed.entries[:3]:
                     q=clean_id(entry.title)
@@ -60,6 +71,12 @@ def fetch_all_news():
                 if all_news: break
         except Exception as e:
             print(f"[NEWS_FETCHER] Guaranteed RSS fail {e}")
+
+    # US ONLY filter
+    us_filtered = [n for n in all_news if is_us_topic(n.get("title","")+" "+n.get("query",""))]
+    if us_filtered:
+        all_news = us_filtered
+        print(f"[NEWS_FETCHER] US FILTERED {len(all_news)}")
 
     if all_news:
         print(f"🔥🔥🔥 BREAKOUT FOUND {len(all_news)} - HAR BAAR MILEGA - VIDEO BANEGA HI BANEGA 🔥🔥🔥")

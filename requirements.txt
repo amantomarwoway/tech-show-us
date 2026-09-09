@@ -1,16 +1,32 @@
+# FIXED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK - 15 FILES
+# Updated as per latest src/main.py, script_generator.py, fact_checker.py etc.
+
 pytrends
-google-genai==0.3.0
-moviepy==1.0.3
-requests
-Pillow
 feedparser
-python-dateutil
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
+requests
+urllib3>=2.0.0
+
+# Gemini 3.6 Flash July 2025 - Latest
+google-genai>=1.0.0
+google-generativeai>=0.8.5
+
+# ChatGPT Fallback - gpt-4o-mini
+openai>=1.0.0
+
+# Video + Audio
+moviepy==1.0.3
+Pillow
 imageio-ffmpeg
 piper-tts
 faster-whisper
 pexels
-google-generativeai==0.8.5
+
+# YouTube Upload + OAuth
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+
+# Utils
+python-dateutil
+numpy

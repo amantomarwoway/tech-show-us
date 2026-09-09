@@ -1,3 +1,5 @@
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 """
 src/breakout_detector.py - GUARANTEED BREAKOUT EVERY RUN - PURE BREAKOUT
 Bhai ko har baar breakout news hi chahiye - 0 nahi chalega
@@ -9,6 +11,14 @@ from datetime import datetime, timezone
 
 CACHE_FILE = Path("data/breakout_cache.json")
 CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def is_us_topic(text: str) -> bool:
+    if not text: return False
+    low = text.lower()
+    blocked = ['germany', 'merz', 'canada']
+    if any(b in low for b in blocked) and not any(k in low for k in ['trump', 'white house', 'usa']):
+        return False
+    return True
 
 def clean_id(text: str) -> str:
     if not text:
@@ -110,7 +120,7 @@ def get_all_breakouts_any_topic():
             import feedparser
             # Try 3 RSS sources for guaranteed breakout
             rss_sources = [
-                "http://rss.cnn.com/rss/cnn_brk.rss",
+                "https://rss.cnn.com/rss/cnn_brk.rss",
                 "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
                 "https://feeds.foxnews.com/foxnews/latest"
             ]

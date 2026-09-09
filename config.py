@@ -1,53 +1,73 @@
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
 """
-CONFIG.PY - RETENTION + VALIDATION FACTORY + MARKET HUNGERNESS + VvSA + SOUND RETENTION
-Location: src/config.py or config.py
-Edits: All new retention constants added, old preserved
+CONFIG.PY - FIXED AS PER LATEST 15 FILES - RETENTION + VALIDATION FACTORY + MARKET HUNGERNESS + VvSA + SOUND RETENTION
+Location: src/config.py
+FIXED: https, Gemini 3.6 Flash July, ChatGPT fallback, US only, no overexposure, no safe exit
 """
 import os, random
+
 VERIFICATION_THRESHOLD=0.90
 WEIGHTS={"recency":0.35,"source_count":0.30,"reliability":0.20,"duplicate_freq":0.15}
 
-# --- ADD-ON Problem 6 + E+I START - google_news_us_live ko trusted banao ---
-SOURCE_RELIABILITY={"reuters":1.0,"apnews":1.0,"bbc":0.95,"npr":0.95,"nbcnews":0.9,"abcnews":0.9,"cbsnews":0.9,"cnn":0.85,"gov":1.0,"google_trends_usa":0.95,"google_news_us_live":0.90,"youtube_search":0.90}
-# --- END ---
+# --- FIXED: google_news_us_live trusted + US ONLY ---
+SOURCE_RELIABILITY={
+    "reuters":1.0,
+    "apnews":1.0,
+    "bbc":0.95,
+    "npr":0.95,
+    "nbcnews":0.9,
+    "abcnews":0.9,
+    "cbsnews":0.9,
+    "cnn":0.85,
+    "gov":1.0,
+    "google_trends_usa":0.95,
+    "google_news_us_live":0.90,
+    "youtube_search":0.90,
+    "visualping_cnn_breaking_guaranteed":0.97,
+    "guaranteed_google_news_rss":0.95
+}
 
-# ===== NEW RETENTION CONSTANTS - SABSE MAIN =====
+# ===== NEW RETENTION CONSTANTS - FIXED NO OVEREXPOSURE =====
 RETENTION_CONFIG = {
     "WORDS_TARGET": 40,
     "WORDS_MIN": 35,
     "WORDS_MAX": 45,
-    "DURATION_TARGET": 12,  # 11-13 sec
+    "DURATION_TARGET": 12,
     "DURATION_MIN": 11,
     "DURATION_MAX": 13,
-    "CLIP_DENSITY": 0.8,  # har 0.8 sec pe naya clip - fast pacing
+    "CLIP_DENSITY": 0.8,
     "TTS_SPEED": 1.15,
     "TTS_PITCH_SEMITONES": 1.2,
-    "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],  # NTSC for YT avoid
-    "NOISE_HUE_FILTER": "noise=alls=5:allf=t:allf=t:allp=7,hue=h=2:s=1.08",
+    "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],
+    # FIXED: Heavy chamak removed - was "noise=alls=5:allf=t:..." causing overexposure
+    "NOISE_HUE_FILTER": "",  # ULTRA CLEAN - no noise/hue = raw Pexels clean
     "FPS": 30,
-    "AUDIO_PUNCH_FIRST_SEC": 1.5,  # 150%
+    "AUDIO_PUNCH_FIRST_SEC": 1.5,
     "VOL_MOD_EVERY_SEC": 3,
     "VOL_MOD_PERCENT": 0.05,
     "BASS_BOOST": "bass=g=3:f=100"
 }
 
-# Validation Factory
+# Validation Factory - NO FORCE PASS
 VALIDATION_FACTORY_CONFIG = {
     "MANDATORY_KEYWORDS": ["behind closed doors", "leaked", "secret", "inside sources"],
     "FIRST_TO_KNOW": ["first to know"],
     "BOLD_CLAIMS": ["this changes everything","you won't believe","shocked everyone","this is huge","nobody saw this coming","game changer"],
     "TWIST_ONLY": True,
-    "SECRET_LEAK_ANGLE_MANDATORY": True
+    "SECRET_LEAK_ANGLE_MANDATORY": True,
+    "NO_FORCE_PASS": True  # FIXED: No breakout force always pass
 }
 
-# Market Hungerness
+# Market Hungerness - US ONLY
 MARKET_HUNGERNESS_CONFIG = {
     "enabled": True,
     "vol_threshold_hungry": 60,
     "vol_threshold_medium": 45,
     "vol_threshold_low": 30,
     "hungry_keywords": ["leaked","secret","breaking","shocking","just in","behind closed doors","exposed","revealed","just leaked"],
-    "freshness_threshold_hours": 6
+    "freshness_threshold_hours": 6,
+    "us_only": True,
+    "blocked_countries": ["germany", "canada", "german", "merz"]
 }
 
 # Pexel Randomisation + Anti-bot
@@ -74,7 +94,8 @@ VvSA_CONFIG = {
     "FRAME_VARIATION_ENABLED": True
 }
 
-RSS_FEEDS={"reuters":"http://feeds.reuters.com/reuters/topNews"}
+# FIXED: https + US ONLY - no http
+RSS_FEEDS={"reuters":"https://feeds.reuters.com/reuters/topNews"}
 GOOGLE_TRENDS_GEO="US"
 GOOGLE_TRENDS_URL="https://trends.google.com/trending/rss?geo=US"
 TREND_LIMIT=30
@@ -84,7 +105,7 @@ TREND_FILTER_C={"enabled":True,"bot_friendly_threshold":70}
 TACKO_STYLE={"enabled":True,"segments":{"hook_0_3":{"duration":3},"news_3_15":{"duration":12},"context_15_30":{"duration":15},"cta_30_45":{"duration":15}},"titles":{"count":4}}
 DAILY_KEYWORDS_PATH="data/daily_top_100.json"
 TOP_KEYWORDS_COUNT=100
-YOUTUBE_CATEGORY_ID="25" # US LOCK - News & Politics
+YOUTUBE_CATEGORY_ID="25"
 YOUTUBE_PRIVACY="public"
 YOUTUBE_API_KEY=os.getenv("YOUTUBE_API_KEY","")
 YOUTUBE_CLIENT="youtube"
@@ -92,7 +113,7 @@ YOUTUBE_DS="yt"
 YOUTUBE_GL="US"
 YOUTUBE_HL="en"
 VIDEO_W,VIDEO_H=1080,1920
-MAX_VIDEO_DURATION=15  # CHANGED: 60 se 15 kiya - retention 11-13 sec lock
+MAX_VIDEO_DURATION=15
 TARGET_MINUTES=int(os.getenv("TARGET_MINUTES","10"))
 TARGET_MAX_MINUTES=int(os.getenv("TARGET_MAX_MINUTES","14"))
 DB_PATH="data/news_history.db"
@@ -100,30 +121,55 @@ OUTPUT_DIR="output"
 OUTPUT_LONG_DIR="output_long"
 CLIPS_DIR="clips"
 AUDIO_DIR="audio"
+
+# GEMINI 3.6 FLASH JULY 2025 + CHATGPT FALLBACK - NEW
 GEMINI_API_KEY=os.getenv("GEMINI_API_KEY","")
+OPENAI_API_KEY=os.getenv("OPENAI_API_KEY","")
+GEMINI_MODELS_36_FLASH=[
+    "gemini-3.6-flash",
+    "gemini-3.6-flash-latest",
+    "gemini-3.6-flash-exp",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-latest",
+    "gemini-2.0-flash-exp",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest"
+]
+CHATGPT_FALLBACK_MODELS=[
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-3.5-turbo",
+    "gpt-4-turbo"
+]
+GEMINI_CONFIG={
+    "temperature":0.9,
+    "max_tokens":800,
+    "models":GEMINI_MODELS_36_FLASH,
+    "fallback":CHATGPT_FALLBACK_MODELS,
+    "no_force_pass":True
+}
+
 PEXELS_API_KEY=os.getenv("PEXELS_API_KEY","") or os.getenv("PEXELS_KEY","")
-THRESHOLD=70  # 75 se 70 kiya
+THRESHOLD=70
 TREND_LIMIT_SHORTS=30
-BOT_FRIENDLY_THRESHOLD=60  # 70 se 60
+BOT_FRIENDLY_THRESHOLD=60
 CHANNEL_NAME=os.getenv("CHANNEL_NAME","Uncovered USA")
 LOG_LEVEL="INFO"
 
-# --- ADD-ON: Problem 6 - US Metadata Lock import (1 line sync) ---
+# US LOCK - News & Politics
 try:
     from youtube_metadata_lock import YOUTUBE_METADATA_LOCK
     YOUTUBE_CATEGORY_ID = YOUTUBE_METADATA_LOCK["categoryId"]
     YOUTUBE_PRIVACY = YOUTUBE_METADATA_LOCK["privacyStatus"]
     print(f"[CONFIG Problem 6] US LOCK Loaded: {YOUTUBE_METADATA_LOCK}")
 except:
-    # Fallback agar file abhi tak create nahi hui
     YOUTUBE_METADATA_LOCK = {"categoryId":"25","privacyStatus":"public","defaultLanguage":"en","defaultAudioLanguage":"en-US"}
-# --- END ---
 
 PEXELS_KEY = PEXELS_API_KEY
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY","") or os.getenv("PIXABAY_KEY","")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY","")
 
-# UPDATED MUSIC_MOOD_MAP with leak/secret
+# UPDATED MUSIC_MOOD_MAP
 MUSIC_MOOD_MAP = {
     "breaking": "tense dramatic news",
     "shocking": "tense dramatic suspense shock",
@@ -168,7 +214,6 @@ SFX_MAP = {
 
 def get_music_mood_from_topic(topic: str) -> str:
     topic_l = str(topic).lower()
-    # Random shuffle for anti-bot no same pattern
     keys = list(MUSIC_MOOD_MAP.keys())
     random.shuffle(keys)
     for key in keys:
@@ -208,10 +253,9 @@ CAPTION_STYLE = {
 OUTRO_CONFIG = {
     "channel": "UNCOVERED USA 24",
     "cta": "LIKE SHARE SUBSCRIBE COMMENT NOW",
-    "duration": 1  # CHANGED: 2 se 1 kiya - retention
+    "duration": 1
 }
 
-# NEW: Retention check helper
 def check_retention_words(text: str) -> bool:
     wc = len(text.split())
     return RETENTION_CONFIG["WORDS_MIN"] <= wc <= RETENTION_CONFIG["WORDS_MAX"]
@@ -222,3 +266,13 @@ def check_validation_factory(text: str) -> bool:
     has_first = "first to know" in low or ("first" in low and "know" in low)
     has_bold = any(b in low for b in VALIDATION_FACTORY_CONFIG["BOLD_CLAIMS"])
     return has_leak and has_bold
+
+# NEW: US Filter
+def is_us_topic_config(text: str) -> bool:
+    if not text: return False
+    low = text.lower()
+    blocked = ["germany", "merz", "canada", "canadian", "german"]
+    for b in blocked:
+        if b in low and not any(k in low for k in ["trump", "white house", "usa", "america", "supreme court"]):
+            return False
+    return True

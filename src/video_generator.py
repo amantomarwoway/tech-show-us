@@ -444,7 +444,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
             wav.writeframes(ch.audio_int16_bytes)
     
     audio=AudioFileClip(audio_path)
-    audio = audio.fx(vfx.speedx, 1.15)
+    audio = audio.fx(vfx.speedx, 1.05)
     total=audio.duration
     if total > DURATION_MAX:
         audio = audio.subclip(0, DURATION_MAX)
@@ -486,7 +486,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
 
     print("3. Captions + anti-bot fonts - ULTRA CLEAN...")
     words = script_text.split()
-    word_dur = total / max(len(words),1)
+    word_dur = total / max(len(words),1)*1.2
     caption_clips=[]
     for i,w in enumerate(words):
         is_kw = any(k in w.upper() for k in KEYWORDS_RED)

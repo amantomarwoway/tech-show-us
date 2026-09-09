@@ -1,11 +1,22 @@
 """
 MAIN.PY - FINAL WITH BREAKOUT FORCE VIDEO + 6 NEW FILES + RETENTION + VALIDATION - KUCH DELETE NAHI
-Flow: breakout_any_topic (news/politics/tech) -> hungerness -> script 40w -> video 0.8s 12sec -> anti_bot + audio_retention -> 4K upload
+Flow: breakout_any_topic - GEMINI 3.6 FLASH JULY 2025 + CHATGPT FALLBACK
+# UPDATED: Gemini 3.6 Flash July latest + ChatGPT fallback gpt-4o-mini
+# Flow: breakout_any_topic (news/politics/tech) -> hungerness -> script 40w -> video 0.8s 12sec -> anti_bot + audio_retention -> 4K upload
 FIXED: Breakout = video banna hi banna hai, chahe filter fail ho + Visualping logic
 """
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 import sys, os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# ===== FIX ERROR 1 ONLY - src me hi rehne de - import path fix =====
+# src/main.py se run ho raha hai, isliye root aur src dono path me daalo
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
+sys.path.insert(0, CURRENT_DIR)
+sys.path.insert(0, ROOT_DIR)
+sys.path.insert(0, os.path.join(ROOT_DIR, 'src'))
+sys.path.insert(0, 'src')
+sys.path.insert(0, '.')
 import os, traceback, random, time, re, hashlib, json
 from pathlib import Path
 
@@ -24,15 +35,15 @@ except ImportError:
         apply_all_filters_short_bot = None
         print("[MAIN] FILTERS_AVAILABLE=False - fallback to news_fetcher + breakout_detector + 6 NEW FILES")
 
-# BREAKOUT DETECTOR IMPORT - ANY TOPIC (news + politics + tech) - FIXED PATH
+# BREAKOUT DETECTOR IMPORT - ERROR 1 FIX ONLY - src me hi
 BREAKOUT_AVAILABLE = False
 get_all_breakouts_any_topic = None
 try:
-    # When running as python src/main.py, same folder import works
+    # src folder se direct import - jab python src/main.py chalao
     from breakout_detector import get_all_breakouts_any_topic as _brk
     get_all_breakouts_any_topic = _brk
     BREAKOUT_AVAILABLE = True
-    print("[MAIN] BREAKOUT_AVAILABLE=True - breakout_detector loaded from same dir")
+    print("[MAIN] BREAKOUT_AVAILABLE=True - breakout_detector loaded from src/")
 except ImportError as e1:
     try:
         from src.breakout_detector import get_all_breakouts_any_topic as _brk
@@ -41,13 +52,13 @@ except ImportError as e1:
         print("[MAIN] BREAKOUT_AVAILABLE=True - src.breakout_detector loaded")
     except ImportError as e2:
         try:
-            import sys
             sys.path.insert(0, 'src')
+            sys.path.insert(0, '.')
             from breakout_detector import get_all_breakouts_any_topic as _brk
             get_all_breakouts_any_topic = _brk
             BREAKOUT_AVAILABLE = True
-            print("[MAIN] BREAKOUT_AVAILABLE=True - after sys.path insert")
-        except ImportError:
+            print("[MAIN] BREAKOUT_AVAILABLE=True - after sys.path insert src")
+        except ImportError as e3:
             BREAKOUT_AVAILABLE = False
             def get_all_breakouts_any_topic():
                 print("[MAIN] BREAKOUT fallback - trying visualping directly")
@@ -60,7 +71,7 @@ except ImportError as e1:
                         return get_visualping_breakouts()
                     except:
                         return []
-            print(f"[MAIN] BREAKOUT_AVAILABLE=False - using inline fallback, e1={e1}, e2={e2}")
+            print(f"[MAIN] BREAKOUT_AVAILABLE=False - using inline fallback, e1={e1}, e2={e2}, e3={e3}")
 
 def clean_id_breakout(text: str) -> str:
     if not text:
@@ -77,7 +88,7 @@ def get_breakouts_inline_fallback():
         import feedparser, requests
         # CNN Breaking = raw data before mainstream media chapne se pehle
         try:
-            feed = feedparser.parse("http://rss.cnn.com/rss/cnn_brk.rss")
+            feed = feedparser.parse("https://rss.cnn.com/rss/cnn_brk.rss")
             for entry in feed.entries[:3]:
                 title = clean_id_breakout(entry.title)
                 if len(title) < 5: continue
@@ -413,8 +424,31 @@ def main():
         break
 
     if not approved_topic:
-        print("❌ All topics FAILED gate + fact checker - SAFE EXIT - Koi bhi topic FINAL APPROVED nahi hua")
-        return
+        print("❌ All topics FAILED - NO SAFE EXIT - NO FORCE PASS - trying fresh US fetch real check")
+        try:
+            fresh = fetch_all_news()
+            us_fresh = [s for s in fresh if 'germany' not in (s.get('title','')+' '+s.get('query','')).lower() and 'canada' not in (s.get('title','')+' '+s.get('query','')).lower()]
+            if not us_fresh:
+                us_fresh = fresh
+            for cand in us_fresh[:3]:
+                try:
+                    temp_script_retry = generate_script(cand)
+                    validation_retry = fact_check(temp_script_retry, cand)
+                    if validation_retry.get('passed'):
+                        approved_topic = cand
+                        script_result = temp_script_retry
+                        validation = validation_retry
+                        scores = {"retry_real": 90}
+                        print(f"   ✅ Retry real PASS: {cand.get('title','')[:60]}")
+                        break
+                except Exception as e:
+                    print(f"   Retry fail {e}")
+                    continue
+        except Exception as e:
+            print(f"Fresh retry fail {e}")
+        if not approved_topic:
+            print("❌ No approved after real retry - ending without force pass - next cron will retry")
+            return
 
     print(f"\n🔥 FINAL APPROVED: {approved_topic.get('title') or approved_topic.get('query')} (Fact Checker ke baad) {'🔥 BREAKOUT ANY TOPIC' if approved_topic.get('is_breakout') else ''}")
     print(f" Scores: {scores}")

@@ -7,6 +7,8 @@ BREAKOUT: is_breakout, breakout_score, visualping_alert, breakout_source trackin
 - Breakout = video banna hi banna hai - track in DB
 - No fallback dummy topics
 """
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 import json, time, os, sqlite3, random, re
 
 DB_PATH = "data/database.db"

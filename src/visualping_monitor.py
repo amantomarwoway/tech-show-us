@@ -1,3 +1,5 @@
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 """
 src/visualping_monitor.py - GUARANTEED BREAKOUT EVERY RUN
 Har baar breakout milega - First run + har run me CNN latest = breakout
@@ -11,6 +13,16 @@ HASH_FILE = Path("data/visualping_hashes.json")
 CACHE_FILE = Path("data/visualping_cache.json")
 HASH_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+def is_us_topic(text: str) -> bool:
+    if not text: return False
+    low = text.lower()
+    blocked = ['germany', 'merz', 'canada', 'canadian', 'german']
+    for b in blocked:
+        if b in low and not any(k in low for k in ['trump', 'white house', 'usa', 'america', 'supreme court']):
+            print(f"[US FILTER] BLOCKED non-US: {text[:50]}")
+            return False
+    return True
+
 def clean_id(text: str) -> str:
     if not text: return ""
     text = re.sub(r'/m/[a-z0-9]+', '', text, flags=re.I)
@@ -19,7 +31,7 @@ def clean_id(text: str) -> str:
     return text
 
 VISUALPING_SOURCES = [
-    ("cnn_breaking", "http://rss.cnn.com/rss/cnn_brk.rss", "CNN Breaking RSS - Har baar breakout"),
+    ("cnn_breaking", "https://rss.cnn.com/rss/cnn_brk.rss", "CNN Breaking RSS - Har baar breakout"),
     ("whitehouse_press", "https://www.whitehouse.gov/presidential-actions/", "White House Press Release"),
     ("supreme_court_recent", "https://www.supremecourt.gov/opinions/recentdecisions", "Supreme Court"),
 ]
@@ -44,12 +56,13 @@ def get_visualping_breakouts():
     # CNN Breaking - HAR BAAR BREAKOUT DETA HAI - Isse 0 nahi hoga
     try:
         import feedparser
-        feed = feedparser.parse("http://rss.cnn.com/rss/cnn_brk.rss")
+        feed = feedparser.parse("https://rss.cnn.com/rss/cnn_brk.rss")
         if feed.entries:
             for entry in feed.entries[:2]:
                 title=clean_id(entry.title)
                 link=entry.link
                 if len(title)<5: continue
+                if not is_us_topic(title): continue
                 h=hashlib.md5(title.encode()).hexdigest()
                 new["cnn_breaking"]=h
                 # HAR BAAR breakout - chahe hash same ho ya change, har baar do

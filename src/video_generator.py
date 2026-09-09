@@ -4,7 +4,7 @@
 ULTIMATE GOD LEVEL - RETENTION + VvSA + ANTI-BOT + SOUND RETENTION - NO 4K
 Location: src/video_generator.py
 Edits as per request (4K excluded):
-- Retention: 0.8 sec per clip, TTS 1.15X, 11-13 sec / 40 words, Seamless loop
+- Retention: 0.8 sec per clip, TTS 1.11X, 11-13 sec / 40 words, Seamless loop
 - VvSA: Shock first frame (LIGHT - no overexposure), Audio punch first 1 sec, SFX by topic
 - Anti Bot: Frame variation, Randomisation, No same font, Random font colour
 - FFmpeg: ULTRA CLEAN - NO noise/hue filter (was causing overexposure)
@@ -433,7 +433,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     script_text = trim_to_40_words(raw_script)
     print(f"[RETENTION] Script trimmed to 40 words: {len(script_text.split())} words -> target 11-13 sec - ULTRA CLEAN")
 
-    print("1. TTS Piper + 1.15X + Audio Punch...")
+    print("1. TTS Piper + 1.11X + Audio Punch...")
     voice=get_piper_voice()
     audio_path="temp/voice.wav"
     with wave.open(audio_path,"wb") as wav:
@@ -444,7 +444,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
             wav.writeframes(ch.audio_int16_bytes)
     
     audio=AudioFileClip(audio_path)
-    audio = audio.fx(vfx.speedx, 1.05)
+    audio = audio.fx(vfx.speedx, 1.11)
     total=audio.duration
     if total > DURATION_MAX:
         audio = audio.subclip(0, DURATION_MAX)

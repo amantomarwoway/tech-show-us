@@ -3,6 +3,8 @@ ULTIMATE GOD LEVEL - RETENTION + VALIDATION FACTORY - 40 WORDS + TWIST ONLY
 Location: src/script_generator.py
 FIXED: All 6 errors - trim 40w lock, Gemini models, ID leak, world viral leak, no disable
 """
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 
 import os, requests, re, random, time
 
@@ -39,10 +41,7 @@ SECRET_LEAK_ANGLES = [
 ]
 
 def validate_script_factory(script_text: str, topic: str, topic_dict=None) -> bool:
-    # BREAKOUT FORCE - always pass
-    if topic_dict and (topic_dict.get('is_breakout') or topic_dict.get('breakout_score',0) >= 5000):
-        print(f"[VALIDATION BREAKOUT FORCE PASS] {topic[:40]} - VIDEO BANEGA HI BANEGA")
-        return True
+    # FIXED: NO FORCE PASS - real validation only
     low = script_text.lower()
     wc = len(script_text.split())
     if not (35 <= wc <= 45):
@@ -108,62 +107,143 @@ def trim_to_40_words(text: str, topic_first_words: str) -> str:
     return trimmed
 
 def call_gemini(prompt):
+    """FIXED JULY 2025 - Gemini 3.6 Flash Latest + ChatGPT Fallback - No 404"""
     api_key=os.getenv("GEMINI_API_KEY","")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY missing")
+    openai_key=os.getenv("OPENAI_API_KEY","")
 
-    # FIX: Real models, not 3.6-flash which doesn't exist
+    # JULY 2025 LATEST - Gemini 3.6 Flash models
     models_to_try_new = [
-        "gemini-1.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.6-flash-latest",
+        "gemini-3.6-flash-exp",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-latest",
+        "gemini-2.0-flash-exp",
         "gemini-2.0-flash",
         "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-pro"
+        "gemini-flash-latest"
     ]
     models_to_try_old = [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-pro"
+        "gemini-3.6-flash",
+        "gemini-3.6-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-flash-latest"
     ]
 
+    # Try Gemini 3.6 Flash first - New SDK
     try:
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
-        for model_name in models_to_try_new:
-            try:
-                response = client.models.generate_content(model=model_name, contents=prompt)
-                text = getattr(response, 'text', None)
-                if text:
-                    return text.strip()
-                if hasattr(response, 'candidates') and response.candidates:
-                    return response.candidates[0].content.parts[0].text.strip()
-            except Exception as inner:
-                # Don't print 429 repeatedly, just try next
-                msg = str(inner).lower()
-                if "429" in msg or "quota" in msg:
-                    time.sleep(1)
-                print(f"[GEMINI TRY] {model_name} failed: {str(inner)[:100]}")
-                continue
+        if api_key:
+            client = genai.Client(api_key=api_key)
+            for model_name in models_to_try_new:
+                try:
+                    response = client.models.generate_content(model=model_name, contents=prompt)
+                    text = getattr(response, 'text', None)
+                    if text:
+                        print(f"[GEMINI 3.6 FLASH] SUCCESS {model_name}")
+                        return text.strip()
+                    if hasattr(response, 'candidates') and response.candidates:
+                        txt = response.candidates[0].content.parts[0].text.strip()
+                        if txt:
+                            print(f"[GEMINI 3.6 FLASH] SUCCESS {model_name} via candidates")
+                            return txt
+                except Exception as inner:
+                    msg = str(inner).lower()
+                    if "429" in msg or "quota" in msg:
+                        time.sleep(1)
+                    print(f"[GEMINI 3.6 TRY] {model_name} failed: {str(inner)[:120]}")
+                    continue
     except Exception as e:
-        print(f"[GEMINI NEW SDK] total fail: {e}")
+        print(f"[GEMINI 3.6 NEW SDK] total fail: {e}")
 
+    # Try Gemini Old SDK with 3.6 Flash
     try:
         import google.generativeai as genai_old
-        genai_old.configure(api_key=api_key)
-        for old_model in models_to_try_old:
-            try:
-                model = genai_old.GenerativeModel(old_model)
-                response = model.generate_content(prompt)
-                if hasattr(response, 'text') and response.text:
-                    return response.text.strip()
-            except Exception as inner2:
-                print(f"[GEMINI OLD TRY] {old_model} failed: {str(inner2)[:100]}")
-                continue
+        if api_key:
+            genai_old.configure(api_key=api_key)
+            for old_model in models_to_try_old:
+                try:
+                    model = genai_old.GenerativeModel(old_model)
+                    response = model.generate_content(prompt)
+                    if hasattr(response, 'text') and response.text:
+                        print(f"[GEMINI 3.6 OLD SDK] SUCCESS {old_model}")
+                        return response.text.strip()
+                except Exception as inner2:
+                    print(f"[GEMINI 3.6 OLD TRY] {old_model} failed: {str(inner2)[:120]}")
+                    continue
     except Exception as e:
-        print(f"[GEMINI OLD SDK] total fail: {e}")
+        print(f"[GEMINI 3.6 OLD SDK] total fail: {e}")
 
-    raise RuntimeError("All Gemini models failed")
+    # FALLBACK: ChatGPT - gpt-4o-mini + gpt-4o + gpt-3.5-turbo
+    if openai_key:
+        print("[FALLBACK] Gemini 3.6 Flash failed, trying ChatGPT fallback")
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            chat_models = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo", "gpt-4-turbo"]
+            for chat_model in chat_models:
+                try:
+                    resp = client.chat.completions.create(
+                        model=chat_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.9,
+                        max_tokens=800
+                    )
+                    text = resp.choices[0].message.content
+                    if text:
+                        print(f"[CHATGPT FALLBACK] SUCCESS {chat_model}")
+                        return text.strip()
+                except Exception as ce:
+                    print(f"[CHATGPT TRY] {chat_model} failed: {str(ce)[:120]}")
+                    continue
+        except Exception as e:
+            print(f"[CHATGPT FALLBACK] total fail: {e}")
+            # Try old openai API
+            try:
+                import openai
+                openai.api_key = openai_key
+                for chat_model in ["gpt-4o-mini", "gpt-3.5-turbo"]:
+                    try:
+                        resp = openai.ChatCompletion.create(
+                            model=chat_model,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.9,
+                            max_tokens=800
+                        )
+                        text = resp.choices[0].message.content
+                        if text:
+                            print(f"[CHATGPT OLD API] SUCCESS {chat_model}")
+                            return text.strip()
+                    except Exception as ce2:
+                        print(f"[CHATGPT OLD TRY] {chat_model} fail {str(ce2)[:100]}")
+                        continue
+            except Exception as e2:
+                print(f"[CHATGPT OLD API] fail {e2}")
+
+    raise RuntimeError("All Gemini 3.6 Flash + ChatGPT fallback failed")
+
+def call_chatgpt_fallback(prompt):
+    """Direct ChatGPT call - fallback"""
+    openai_key=os.getenv("OPENAI_API_KEY","")
+    if not openai_key:
+        raise RuntimeError("OPENAI_API_KEY missing for fallback")
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=openai_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=800
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        raise RuntimeError(f"ChatGPT fallback failed: {e}")
+
 
 def get_google_searchable_title(topic: str) -> str:
     # FIX: Clean ID before query

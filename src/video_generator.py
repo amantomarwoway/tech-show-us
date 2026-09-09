@@ -283,7 +283,7 @@ def word_clip_god(word, dur, is_keyword=False):
     path = make_text_image(word, fontsize, color, 7, (1000, 280), font_path=chosen_font)
     clip = ImageClip(path).set_duration(dur).set_position(('center',0.72),relative=True)
     if is_keyword:
-        clip = clip.resize(lambda t: 1.5 - 0.5*t/dur if t < dur*0.4 else 1.0)
+        clip = clip.resize(lambda t: 1.5 - 0.2*t/dur if t < dur*0.8 else 1.0)
         clip = clip.set_position(lambda t: ('center', 0.72 + random.uniform(-0.015,0.015) if t < 0.18 else 0.72), relative=True)
     else:
         clip = clip.resize(lambda t: 1.35 - 0.35*t/dur if t < dur*0.3 else 1.0)
@@ -330,7 +330,7 @@ def retention_loops_best(total):
             fp = random.choice(FONT_LIST)
             p = make_text_image(txt, random.randint(36,40), col, 4, (550, 80), font_path=fp)
             c = ImageClip(p).set_duration(0.7).set_start(t).set_position(('center', 0.18), relative=True)
-            c = c.resize(lambda t: 1.25 if t < 0.2 else 1.0)
+            c = c.resize(lambda t: 1 if t < 0.2 else 1.0)
             clips.append(c)
     return clips
 

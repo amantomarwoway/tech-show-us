@@ -3,7 +3,6 @@ FINAL PERFECT - 74K EXACT DICTO - WHITE BAR CUT BUG FIXED 100%
 Bhai ki complaint: 's Shocking Secret Voter Test - Trump's cut
 Reason: (1080-w)//2 + anchor="mm" double offset = left se kata
 Fix: Direct 540 center anchor mm, no w calculation, black strip 45px + white 145px = 190px total
-USER FINAL: Top black 190 + White 210 + Bottom black 160 (yellow line, was 280 red line minus 120) + Font italic
 """
 
 import os, random, requests, tempfile, re, wave, math, subprocess
@@ -15,7 +14,7 @@ import PIL.Image
 WIDTH, HEIGHT = 1080, 1920
 WHITE_BAR_HEIGHT = 210  # User: white bar 210
 BLACK_TOP_STRIP = 190  # User: top black bar 190
-BLACK_BOTTOM_STRIP = 160  # FIXED: Bottom 160 yellow line tak (was 280 red line, minus 120 as you asked)
+BLACK_BOTTOM_STRIP = 200  # User: bottom black bar 280
 BLACK_BORDER = 16
 CORNER_RADIUS = 38
 CLIP_DENSITY = 0.8
@@ -117,12 +116,13 @@ def get_best_free_clips_from_script(script_data, num=20):
 
 def make_74k_white_bar_FINAL(text, bar_height=210):
     """
-    USER SPEC: Top black 190 + White 210 + Bottom black 160 yellow line + Font italic must
+    USER SPEC: Top black 190 + White 210 + Bottom black 200 + Font italic must
     """
     viral_text = clean_id(text).strip()
     viral_text = " ".join(viral_text.split()[:8])
     if len(viral_text) > 62:
         viral_text = viral_text[:62].rsplit(' ',1)[0]
+    
     words = viral_text.split()
     if len(words) >= 4:
         mid = (len(words)+1)//2
@@ -131,15 +131,22 @@ def make_74k_white_bar_FINAL(text, bar_height=210):
         lines = [line1, line2]
     else:
         lines = [viral_text]
-    top_black_h = 190
-    white_h = 210
-    total_h = top_black_h + white_h
+    
+    # USER SPEC SIZES
+    top_black_h = 190  # Top black bar 190 as user asked
+    white_h = 210      # White bar 210 as user asked
+    total_h = top_black_h + white_h  # 400 total top section
+    
     img = Image.new('RGB', (WIDTH, total_h), (0,0,0))
     d = ImageDraw.Draw(img)
+    # Top black 190
     d.rectangle([0, 0, WIDTH, top_black_h], fill=(0,0,0))
+    # White 210 below black
     d.rectangle([0, top_black_h, WIDTH, total_h], fill=(255,255,255))
+    
+    # Font italic must - bold oblique italic as user asked
     try:
-        f1 = ImageFont.truetype(FONT_BOLD_ITALIC, 58)
+        f1 = ImageFont.truetype(FONT_BOLD_ITALIC, 58)  # Italic must, size/boldness same as before
         f2 = ImageFont.truetype(FONT_BOLD_ITALIC, 56)
     except:
         try:
@@ -148,11 +155,14 @@ def make_74k_white_bar_FINAL(text, bar_height=210):
         except:
             f1 = ImageFont.load_default()
             f2 = ImageFont.load_default()
+    
+    # Perfect center 540 anchor mm - no cut, italic font
     if len(lines) == 1:
         d.text((WIDTH//2, top_black_h + white_h//2), lines[0], font=f1, fill=(0,0,0), anchor="mm")
     else:
         d.text((WIDTH//2, top_black_h + white_h//2 - 32), lines[0], font=f1, fill=(0,0,0), anchor="mm")
         d.text((WIDTH//2, top_black_h + white_h//2 + 32), lines[1], font=f2, fill=(0,0,0), anchor="mm")
+    
     p = f"temp/whitebar_final_{random.randint(1,999999999)}.png"
     os.makedirs("temp", exist_ok=True)
     img.save(p, quality=95)
@@ -183,18 +193,20 @@ def make_74k_bottom_text_FINAL(text, duration):
     p = f"temp/bottom_final_{random.randint(1,999999999)}.png"
     os.makedirs("temp", exist_ok=True)
     img.save(p)
-    clip = ImageClip(p).set_duration(duration).set_position((25, 0.70), relative=True)
+    clip = ImageClip(p).set_duration(duration).set_position((25, 0.72), relative=True)
     return clip
 
 def make_black_rounded_border_FINAL(duration):
     """
-    USER SPEC FIXED: Bottom black 160 yellow line tak (was 280 red line, minus 120 as you asked)
+    USER SPEC: Top black 190, Bottom black 280
     """
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
     d = ImageDraw.Draw(img)
     d.rounded_rectangle([0,0,WIDTH,HEIGHT], radius=38, outline=(0,0,0), width=16)
+    # Top black bar 190 as user asked
     d.rectangle([0,0,WIDTH,190], fill=(0,0,0))
-    d.rectangle([0,HEIGHT-160,WIDTH,HEIGHT], fill=(0,0,0))
+    # Bottom black bar 280 as user asked
+    d.rectangle([0,HEIGHT-280,WIDTH,HEIGHT], fill=(0,0,0))
     p = f"temp/border_final_{random.randint(1,999999999)}.png"
     os.makedirs("temp", exist_ok=True)
     img.save(p)
@@ -256,12 +268,16 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         title=raw_script[:50]
         viral_hook=title
         first_punch = raw_script[:60]
+
     os.makedirs("output",exist_ok=True)
     os.makedirs("temp",exist_ok=True)
+
     script_text = clean_script_no_trim(raw_script)
     if len(script_text.split()) > 50:
         script_text = " ".join(script_text.split()[:50])
-    print(f"[FINAL FIX] White bar cut bug FIXED 100% - 540 center anchor mm no w calculation - Top 190 White 210 Bottom 160 yellow line")
+
+    print(f"[FINAL FIX] White bar cut bug FIXED 100% - 540 center anchor mm no w calculation")
+
     voice=get_piper_voice()
     audio_path="temp/voice.wav"
     os.makedirs("temp", exist_ok=True)
@@ -288,6 +304,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
                 sample_rate = ch.sample_rate
         except:
             audio_chunks = []
+    
     try:
         if not audio_chunks:
             with wave.open(audio_path, "wb") as wav:
@@ -302,6 +319,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         try:
             subprocess.run(["ffmpeg","-y","-f","lavfi","-i","anullsrc=r=22050:cl=mono","-t","2","-c:a","pcm_s16le",audio_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except: pass
+    
     try:
         from audio_retention import get_tts_retention_filter
         temp_audio_filtered = "temp/voice_filtered.wav"
@@ -312,6 +330,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     except:
         audio=AudioFileClip(audio_path)
         audio = audio.fx(vfx.speedx, random.choice([1.0, 1.02, 1.03]))
+    
     total=audio.duration
     if total < DURATION_MIN:
         audio = audio.fx(vfx.speedx, total / DURATION_MIN)
@@ -319,8 +338,10 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     if total > DURATION_MAX:
         audio = audio.subclip(0, DURATION_MAX)
         total = DURATION_MAX
+
     clips_needed = max(8, int(total / CLIP_DENSITY) + 2)
     raw_clips = get_best_free_clips_from_script(script_data, num=clips_needed)
+    
     final_video_clips=[]
     t=0
     for c in raw_clips:
@@ -332,13 +353,17 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         except:
             final_video_clips.append(c.set_start(t).set_duration(dur))
         t+=dur
+
     if not final_video_clips:
         final_video_clips=[ColorClip((WIDTH, HEIGHT), color=(30,20,40), duration=total)]
+
     base_video = CompositeVideoClip(final_video_clips, size=(WIDTH, HEIGHT)).set_duration(total)
-    whitebar_path, actual_h = make_74k_white_bar_FINAL(viral_hook, bar_height=210)
+
+    whitebar_path, actual_h = make_74k_white_bar_FINAL(viral_hook, bar_height=190)
     white_bar_clip = ImageClip(whitebar_path).set_duration(total).set_position((0,0))
     bottom_text_clip = make_74k_bottom_text_FINAL(viral_hook, total)
     border_clip = make_black_rounded_border_FINAL(total)
+
     try:
         from audio_retention import get_american_captions_timing
         timing = get_american_captions_timing(total, len(script_text.split()), 5)
@@ -347,6 +372,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         base_dur = total / max(len(script_text.split()),1) * 0.95
         base_dur = max(0.28, min(0.38, base_dur))
         first_dur = base_dur * 1.4; keyword_dur = base_dur * 1.2; overlap = 0.92
+    
     words = script_text.split()
     caption_clips=[]
     first_words_count = min(5, len(words))
@@ -360,14 +386,18 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         wc = word_clip_FINAL(w.upper(), dur, is_kw, is_first).set_start(current_time)
         caption_clips.append(wc)
         current_time += dur * overlap
+
     comp = CompositeVideoClip([base_video, white_bar_clip, bottom_text_clip, border_clip] + caption_clips, size=(WIDTH, HEIGHT)).set_duration(total)
+    
     fps = random.choice(FPS_CHOICES)
     comp = comp.set_audio(audio)
     comp.write_videofile(output_path, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
+
     try:
         import glob
         for f in glob.glob("temp/whitebar_final_*.png") + glob.glob("temp/bottom_final_*.png") + glob.glob("temp/border_final_*.png") + glob.glob("temp/txt_*.png"):
             try: os.remove(f)
             except: pass
     except: pass
+
     return output_path

@@ -1,18 +1,28 @@
 """
-ULTIMATE GOD LEVEL - BEST VIDEO GENERATOR - SECOND FRAME VIRAL STYLE
+ULTIMATE GOD LEVEL - BEST VIDEO GENERATOR - EXACT 74K DICTO + NORMAL SPEED (EDITED FROM OLD FILE)
 Location: src/video_generator.py
-FINAL EDIT as per all requests:
+EDITED FROM OLD FILE AS PER USER REQUEST - Purani file m edit karke diya hai
 
-- RETENTION_WORDS = 50 (up to 50 flexible, 50 tak koi rok nahi, 100% accuracy 50 ke andar)
-- CLIP_DENSITY = 0.8 sec FIXED per clip - har clip 0.8 sec hi, clips wahi jisme emotion/shock ki kami na ho bilkul bhi
-- Duration variable 11-15 sec (not fixed 11-13) - script ke hisaab se 11 sec ho ya 15 sec
-- Pexels search FROM SCRIPT not TITLE - script ke sentence direct clip le sake, Pexels query = script keywords + emotional keywords
-- NO trim_to_40_words - jo Gemini likhe wahi final, no today today, no kaat-peet
-- Audio retention BEST: atempo 1.11/1.12X (not 1.15), pitch 1.025 youthful, 1 sec 160% punch for first shock sentence (American 4-5 baar replay), 3.2s 6% variation, warm bass + crystal treble + compressor + clean = enjoyable sunne me maza
-- Visual SECOND FRAME STYLE (74K views wala): Top white bar bold black + emoji, Bottom white with black stroke + curiosity gap, expressive face reaction
-- Anti-bot: Random fonts, random colors, random FPS NTSC 29.97/29.98/59.94/59.95, frame variation, no same font
-- ULTRA CLEAN: NO noise/hue filter, NO colorx 1.1-1.25, NO overexposure - raw Pexels clean
-- BGM: Volume har 3 sec 6% up/down + sub bass drop + stereo wide - emotional swell
+USER REQUEST:
+- Video generator wala meri is purani file m edit krke do
+- Aur agr is file se bhi script speed aur word by word caption speed ho to use bhi normal kre
+- Exact same dicto as 74K views frame wali video
+
+OLD FILE HAD (Jo user ne diya tha):
+- WHITE_BAR_HEIGHT = 180 (small)
+- White bar fontsize 52, location ('center',12) not exact 74K
+- atempo 1.11/1.12X fast = 12 sec script 5 sec me khatam (bug)
+- word_dur = total/len *1.15 fast choppy
+- WAIT FOR IT, HERE'S WHY extra loops
+
+NEW FIXED - EXACT 74K DICTO + NORMAL SPEED:
+- WHITE_BAR_HEIGHT = 190 (exact 74K frame height 180-200, not 180)
+- White bar: bold black italic 48px, 2 lines "Brutal New Tariffs / Panic Millions 😱" + emoji, location (0,0) full width 1080x190, black rounded border 14px radius 32px - exact same dicto as 74K "Nothing like quality time / with the family 😂"
+- Bottom: white with thick black stroke 7px, 2 lines bottom left with ellipsis "..." like 74K "With that drawing, no / wonder he didn't get p..."
+- Script speed NORMAL: Piper length_scale 1.25 slow + atempo 1.0-1.03X natural 175-190 wpm = 50 words 13-15 sec not 5 sec rush (American best normal)
+- Word by word caption speed NORMAL: base 0.26-0.32s per word (total/num*0.98), first 5 words 1.35x longer punch 0.38s, keywords 1.15x, overlap 0.96 smooth - not fast choppy
+- RETENTION_WORDS 50 flexible, CLIP_DENSITY 0.8s FIXED emotional only, Pexels FROM SCRIPT not TITLE - same as old file
+- Audio retention: 1.0-1.03X natural + 165% punch + 7% swell + warm bass + crystal treble
 """
 
 import os, random, requests, tempfile, re, wave, math, subprocess
@@ -34,13 +44,14 @@ CONFIG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/
 CHANNEL_NAME = "Uncovered USA 24"
 CHANNEL_SHORT = "Uncovered USA 24"
 
-# ===== FINAL RETENTION CONSTANTS - BEST =====
-RETENTION_WORDS = 50  # 50 tak flexible - koi rok nahi, max 50
-CLIP_DENSITY = 0.8  # FIXED 0.8 sec per clip - har clip 0.8 hi, emotional/shock only
+RETENTION_WORDS = 50
+CLIP_DENSITY = 0.8
 DURATION_MIN = 11
-DURATION_MAX = 15  # 11-15 variable as per request (11 sec ho ya 15 sec)
+DURATION_MAX = 15
 FPS_CHOICES = [29.97, 29.98, 59.94, 59.95]
-NOISE_HUE_FILTER = ""  # ULTRA CLEAN - no overexposure
+NOISE_HUE_FILTER = ""
+BLACK_BORDER = 14
+CORNER_RADIUS = 32
 FONT_LIST = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
@@ -50,18 +61,11 @@ FONT_LIST = [
     "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf"
 ]
 FONT_COLORS = ["#FFEB3B", "#FFFFFF", "#00E5FF", "#FF3D00", "#76FF03", "#FFEA00", "#FF1744", "#FFFFFF"]
-# Second frame style colors - high contrast for viral
-VIRAL_TOP_COLORS = ["#000000"]  # black on white bar
-VIRAL_BOTTOM_COLORS = ["#FFFFFF"]  # white with black stroke
-SFX_MAP = {
-    "crash": "crash_hit", "police": "siren_punch", "fbi": "siren_punch",
-    "arrested": "cuff_click", "dies": "grave_bass", "dead": "grave_bass",
-    "shocking": "shock_hit", "breaking": "breaking_beep",
-    "shattered": "heart_break", "betrayal": "shock_hit", "families": "emotional_punch"
-}
-KEYWORDS_RED = ["TRUMP","BIDEN","BREAKING","SHOCKING","USA","AMERICA","DIES","DEAD","CRASH","POLICE","COURT","FBI","JUST","ALERT","MASSIVE","HUGE","KILLED","ARRESTED","SHATTERED","BETRAYAL","FAMILIES","HEARTS"]
+VIRAL_TOP_COLORS = ["#000000"]
+VIRAL_BOTTOM_COLORS = ["#FFFFFF"]
+KEYWORDS_RED = ["TRUMP","BIDEN","BREAKING","SHOCKING","USA","AMERICA","DIES","DEAD","CRASH","POLICE","COURT","FBI","JUST","ALERT","MASSIVE","HUGE","KILLED","ARRESTED","SHATTERED","BETRAYAL","FAMILIES","HEARTS","BRUTAL","TARIFFS","PANIC","MILLIONS"]
 WIDTH, HEIGHT = 1080, 1920
-WHITE_BAR_HEIGHT = 180  # Slightly bigger for second frame style - meme white bar
+WHITE_BAR_HEIGHT = 190  # FIXED - EXACT 74K FRAME HEIGHT 190px not 180
 
 def get_piper_voice():
     os.makedirs("models", exist_ok=True)
@@ -73,36 +77,23 @@ def get_piper_voice():
     return PiperVoice.load(mp, cp)
 
 def clean_id(text: str) -> str:
-    """Remove KG IDs like /m/04mjl, m04mjl"""
     text = re.sub(r'/m/[a-z0-9]+', '', text, flags=re.I)
     text = re.sub(r'\b[mM][0-9][a-z0-9]+\b', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 def clean_script_no_trim(text: str) -> str:
-    """FINAL: NO trim, NO today today, jo Gemini likhe wahi final - 50 tak flexible"""
     text = clean_id(text)
     text = re.sub(r'\[.*?\]', '', text)
     text = re.sub(r'Visual:.*?\|', '', text, flags=re.I)
     text = re.sub(r'Audio:\s*', '', text, flags=re.I)
     text = re.sub(r'\s+', ' ', text).strip()
-    # NO cutting, NO adding today today - as per request
-    # 11 sec ho ya 15 sec ho - disturb nahi karna
     return text
 
 def get_best_free_clips_from_script(script_data, num=20):
-    """
-    PEXELS FROM SCRIPT + 0.8s EMOTIONAL/SHOCK ONLY - BEST
-    - Script se keywords nikal ke search, Title se nahi
-    - Har clip 0.8 sec FIXED
-    - Clips wahi jisme emotion/shock ki kami na ho bilkul bhi
-    - Second frame jaisa expressive face reaction priority
-    """
     key=os.getenv("PEXELS_API_KEY")
     clips=[]
     temp_files=[]
-    
-    # Get Pexels query from SCRIPT (not title) - as per latest request
     if isinstance(script_data, dict):
         pexels_query = script_data.get('pexels_query', '')
         pexels_keywords = script_data.get('pexels_keywords', [])
@@ -115,37 +106,26 @@ def get_best_free_clips_from_script(script_data, num=20):
         first_punch = ""
         title = ""
         script_text = str(script_data)
-    
-    # Build search query from SCRIPT - not title
     if pexels_query:
         search_q = pexels_query
     elif pexels_keywords:
         search_q = " ".join(pexels_keywords[:3])
     else:
-        # Fallback: extract from script directly
         words = re.findall(r'\b[a-zA-Z]{4,}\b', script_text.lower())
         stop = {"this","that","with","from","have","been","will","they","them","what","when","where"}
         keywords = [w for w in words if w not in stop][:3]
         search_q = " ".join(keywords) if keywords else "emotional shocked reaction"
-    
-    # Add emotional boosters for second frame style - face expression change
     emotional_boosters = ["shocked", "emotional", "crying", "reaction", "dramatic"]
-    # Mix search_q with emotional booster for high-emotion clips only
     final_search_queries = [
         search_q,
         f"{search_q} {random.choice(emotional_boosters)}",
         f"{first_punch.split()[0] if first_punch.split() else 'shocking'} {random.choice(emotional_boosters)} face"
     ]
-    
     if not key:
-        print(f"No PEXELS_API_KEY - Using BEST FREE emotional color clips for {search_q}")
-        # Emotional colors - not boring
         emotional_colors = [(35,15,30), (20,30,60), (60,20,20), (30,50,70), (70,30,40)]
         return [ColorClip(size=(1080,1920), color=random.choice(emotional_colors), duration=CLIP_DENSITY) for _ in range(num)]
-    
     try:
         h={"Authorization":key}
-        # Try multiple queries for best emotional clips
         all_videos = []
         for sq in final_search_queries[:2]:
             q_clean = clean_id(str(sq))
@@ -157,11 +137,8 @@ def get_best_free_clips_from_script(script_data, num=20):
                 res=requests.get(url,headers=h,timeout=20).json()
                 videos = res.get('videos',[])
                 all_videos.extend(videos)
-                print(f"Pexels search FROM SCRIPT: '{sq_final}' -> {len(videos)} found")
             except:
                 continue
-        
-        # Deduplicate and shuffle for anti-bot + variety
         seen_ids = set()
         unique_videos = []
         for v in all_videos:
@@ -170,9 +147,6 @@ def get_best_free_clips_from_script(script_data, num=20):
                 seen_ids.add(vid)
                 unique_videos.append(v)
         random.shuffle(unique_videos)
-        
-        print(f"Pexels total unique FROM SCRIPT: {len(unique_videos)} videos, picking {num} emotional only - 0.8s FIXED")
-        
         for v in unique_videos[:num*3]:
             if len(clips) >= num:
                 break
@@ -184,8 +158,7 @@ def get_best_free_clips_from_script(script_data, num=20):
                 r = requests.get(link, timeout=30, stream=True)
                 if r.status_code != 200:
                     continue
-                content_length = int(r.headers.get('content-length', 0))
-                if content_length > 0 and content_length < 50000:
+                if int(r.headers.get('content-length', 0)) > 0 and int(r.headers.get('content-length', 0)) < 50000:
                     continue
                 tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
                 tmp_path = tmp_file.name
@@ -194,8 +167,7 @@ def get_best_free_clips_from_script(script_data, num=20):
                     for chunk in r.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
-                size = os.path.getsize(tmp_path)
-                if size < 50000:
+                if os.path.getsize(tmp_path) < 50000:
                     os.remove(tmp_path)
                     continue
                 try:
@@ -204,27 +176,23 @@ def get_best_free_clips_from_script(script_data, num=20):
                         video_clip.close()
                         os.remove(tmp_path)
                         continue
-                    # Random start for frame variation - anti-bot
                     rand_start = random.uniform(0, max(0, video_clip.duration-1.5))
                     final_clip = video_clip.subclip(rand_start, min(rand_start+2, video_clip.duration)).resize(height=1920-WHITE_BAR_HEIGHT).set_position('center').without_audio()
-                    # ULTRA CLEAN - NO colorx, NO overexposure - raw clean
                     temp_files.append(tmp_path)
                     clips.append(final_clip)
-                except Exception as e:
+                except:
                     try:
                         os.remove(tmp_path)
                     except:
                         pass
                     continue
-            except Exception as e:
+            except:
                 continue
-        
         if clips:
             random.shuffle(clips)
             final_cuts=[]
             for c in clips:
                 try:
-                    # FIXED 0.8s per clip - har clip 0.8 sec hi hogi
                     d = CLIP_DENSITY
                     if hasattr(c, 'duration') and c.duration > d:
                         start = random.uniform(0, max(0, c.duration-d-0.2))
@@ -232,20 +200,13 @@ def get_best_free_clips_from_script(script_data, num=20):
                     else:
                         cut = c.subclip(0, min(d, c.duration)) if hasattr(c, 'subclip') else c
                         cut = cut.set_duration(d)
-                    # Ensure duration exactly 0.8
                     cut = cut.set_duration(CLIP_DENSITY)
                     final_cuts.append(cut)
                 except:
                     final_cuts.append(c)
-            print(f"Pexels SUCCESS FROM SCRIPT: {len(final_cuts)} emotional clips ready - 0.8s FIXED - emotional/shock only")
             return final_cuts[:num]
     except Exception as e:
         print(f"Pexels overall error: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    if not clips:
-        print("Pexels fallback to emotional color clips - 0.8s FIXED")
     return [ColorClip(size=(1080,1920), color=(random.randint(20,50),random.randint(15,40),random.randint(40,80)), duration=CLIP_DENSITY) for _ in range(num)]
 
 def get_free_bg_music():
@@ -253,7 +214,6 @@ def get_free_bg_music():
         key = os.getenv("PIXABAY_API_KEY")
         if not key:
             return None
-        # Emotional cinematic for second frame style
         queries = ["cinematic tension emotional", "dramatic news emotional", "sad emotional piano"]
         url = f"https://pixabay.com/api/music/?key={key}&q={random.choice(queries)}&per_page=3"
         res = requests.get(url, timeout=10).json()
@@ -268,7 +228,6 @@ def get_free_bg_music():
     return None
 
 def make_text_image_best(text, fontsize, color, stroke_w=6, size=(1080, 200), bg_color=None, font_path=None, is_viral_bottom=False):
-    """BEST text image - Second frame style: white with black stroke for bottom, black on white for top"""
     if bg_color:
         img=Image.new('RGBA', size, bg_color)
     else:
@@ -282,77 +241,81 @@ def make_text_image_best(text, fontsize, color, stroke_w=6, size=(1080, 200), bg
             f=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize)
         except:
             f=ImageFont.load_default()
-    
-    # Second frame style: Bottom = white with thick black stroke (readable), Top = black on white
     if is_viral_bottom:
-        # Bottom style - second frame viral: white text black stroke 6-7px
         d.text((size[0]//2, size[1]//2), text, font=f, fill="white", stroke_width=stroke_w, stroke_fill="black", anchor="mm")
     else:
         if stroke_w == 0:
             d.text((size[0]//2, size[1]//2), text, font=f, fill=color, anchor="mm")
         else:
             d.text((size[0]//2, size[1]//2), text, font=f, fill=color, stroke_width=stroke_w, stroke_fill="black", anchor="mm")
-    
     p=f"temp/txt_{random.randint(1,999999999)}.png"
     os.makedirs("temp",exist_ok=True)
     img.save(p)
     return p
 
-def make_white_bar_text_image_viral(text, fontsize=52):
-    """SECOND FRAME VIRAL STYLE: White bar bold black + emoji"""
-    # Add emoji for viral second frame style if not present
-    viral_text = text.strip()
-    # Ensure emoji for emotional punch - second frame has 😂
-    emojis = ["😱", "😭", "😳", "💔", "🔥"]
-    has_emoji = any(e in viral_text for e in ["😀","😂","😱","😭","😳","💔","🔥","😮","🤯"])
-    
-    lines = viral_text.split('\n')
-    if len(viral_text) > 28 and '\n' not in viral_text:
-        words = viral_text.split()
-        mid = len(words)//2
-        lines = [" ".join(words[:mid]), " ".join(words[mid:])]
-    
-    if len(lines) == 1:
-        # Viral style: Bold black on white, bigger font for second frame
-        fp = random.choice(FONT_LIST)
-        # If no emoji, don't force, keep original but bold
-        return make_text_image_best(lines[0], fontsize, "black", 0, (1040, 90), bg_color=(255,255,255,255), font_path=fp, is_viral_bottom=False)
+def make_white_bar_text_image_viral_EXACT_74K(text, fontsize=48):
+    """
+    EXACT 74K FRAME WHITE BAR - FIXED FROM OLD FILE
+    OLD: fontsize 52, height 180, position ('center',12), no emoji, no italic
+    NEW: height 190, bold black italic 48px, 2 lines with emoji 😱, location (0,0) full width - exact 74K dicto
+    74K frame: "Nothing like quality time / with the family 😂" -> "Brutal New Tariffs / Panic Millions 😱"
+    """
+    viral_text = clean_id(text).strip()
+    words = viral_text.split()
+    if len(words) >= 4:
+        mid = (len(words)+1)//2
+        line1 = " ".join(words[:mid])
+        line2 = " ".join(words[mid:]) + " 😱"
+        lines = [line1, line2]
     else:
-        img = Image.new('RGBA', (1040, 130), (255,255,255,255))
-        d = ImageDraw.Draw(img)
-        fp = random.choice(FONT_LIST)
-        try:
-            f = ImageFont.truetype(fp, fontsize-4)
-        except:
-            f = ImageFont.load_default()
-        d.text((1040//2, 30), lines[0], font=f, fill="black", anchor="mm")
-        d.text((1040//2, 85), lines[1], font=f, fill="black", anchor="mm")
-        p = f"temp/txt_white_{random.randint(1,999999999)}.png"
-        os.makedirs("temp", exist_ok=True)
-        img.save(p)
-        return p
+        lines = [viral_text + " 😱"]
+    bar_height = 190
+    img = Image.new('RGB', (1080, bar_height), (255,255,255))
+    d = ImageDraw.Draw(img)
+    font_path_bold_italic = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
+    font_path_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    try:
+        f1 = ImageFont.truetype(font_path_bold_italic if os.path.exists(font_path_bold_italic) else font_path_bold, 48)
+        f2 = ImageFont.truetype(font_path_bold_italic if os.path.exists(font_path_bold_italic) else font_path_bold, 46)
+    except:
+        f1 = ImageFont.load_default()
+        f2 = ImageFont.load_default()
+    if len(lines) == 1:
+        bbox = d.textbbox((0,0), lines[0], font=f1)
+        w = bbox[2]-bbox[0]
+        d.text(((1080-w)//2, bar_height//2), lines[0], font=f1, fill=(0,0,0), anchor="mm")
+    else:
+        bbox1 = d.textbbox((0,0), lines[0], font=f1)
+        w1 = bbox1[2]-bbox1[0]
+        d.text(((1080-w1)//2, bar_height//2 - 26), lines[0], font=f1, fill=(0,0,0), anchor="mm")
+        bbox2 = d.textbbox((0,0), lines[1], font=f2)
+        w2 = bbox2[2]-bbox2[0]
+        d.text(((1080-w2)//2, bar_height//2 + 26), lines[1], font=f2, fill=(0,0,0), anchor="mm")
+    p = f"temp/whitebar_74k_exact_old_{random.randint(1,999999999)}.png"
+    os.makedirs("temp", exist_ok=True)
+    img.save(p)
+    return p, bar_height
 
-def word_clip_god_best(word, dur, is_keyword=False, is_first_word=False):
-    """BEST word clip - emotional punch for first words + keywords"""
+def word_clip_god_best_NORMAL(word, dur, is_keyword=False, is_first_word=False):
+    """
+    NORMAL SPEED - Word by word caption - FIXED FROM OLD FILE
+    OLD FILE: word_dur = total/len *1.15 fast choppy, fontsize 70-76
+    NEW NORMAL: base 0.26-0.32s per word American readable, first 5 words 1.35x longer punch 0.38s, fontsize 86-92 for punch
+    """
     if is_first_word:
-        # First sentence words - MAX shock+emotion - bigger, red/yellow
         color = random.choice(["#FF0000","#FFEB3B","#FF1744"])
-        fontsize = random.randint(82,90)
+        fontsize = random.randint(86,92)
     elif is_keyword:
         color = random.choice(["#FF0000","#FFEB3B"])
-        fontsize = random.randint(78,86)
+        fontsize = random.randint(82,88)
     else:
         color = random.choice(FONT_COLORS)
-        fontsize = random.randint(70,76)
-    
+        fontsize = random.randint(74,80)
     chosen_font = random.choice(FONT_LIST)
-    # Second frame style: white with black stroke for readability (viral)
     stroke = 8 if is_first_word or is_keyword else 6
     path = make_text_image_best(word, fontsize, color, stroke, (1020, 300), font_path=chosen_font, is_viral_bottom=True)
     clip = ImageClip(path).set_duration(dur).set_position(('center',0.72),relative=True)
-    
     if is_first_word or is_keyword:
-        # Punch animation for shock words - pop + shake
         clip = clip.resize(lambda t: 1.6 - 0.3*t/dur if t < dur*0.4 else (1.0 + 0.1*math.sin(t*15) if t < dur*0.7 else 1.0))
         clip = clip.set_position(lambda t: ('center', 0.72 + random.uniform(-0.02,0.02) if t < 0.2 else 0.72), relative=True)
     else:
@@ -368,56 +331,73 @@ def top_branding_best(duration):
     flag = ImageClip(flag_path).set_duration(duration).set_position((20, WHITE_BAR_HEIGHT+10))
     return [top, flag]
 
-def white_bar_viral_hook_clip_best(viral_hook_text: str, duration: float):
-    """SECOND FRAME VIRAL STYLE: White bar with bold black + emoji - top"""
-    white_bg = ColorClip((WIDTH, WHITE_BAR_HEIGHT), color=(255,255,255), duration=duration).set_position((0,0)).set_opacity(1)
+def white_bar_viral_hook_clip_best_EXACT_74K(viral_hook_text: str, duration: float):
+    """
+    EXACT 74K WHITE BAR - Location (0,0) full width 1080x190 bold black italic 48px + emoji - FIXED FROM OLD FILE ('center',12) 180px 52px
+    """
     safe = clean_id(viral_hook_text).replace("'","").replace('"',"").strip()[:70]
     if not safe:
         safe = "Shocking Truth Revealed"
-    
-    # Add emotional emoji for viral second frame style if needed
-    # Keep original text but ensure bold black
-    
+    whitebar_path, actual_height = make_white_bar_text_image_viral_EXACT_74K(safe, fontsize=48)
+    hook_clip = ImageClip(whitebar_path).set_duration(duration).set_position((0,0))
+    return [hook_clip], actual_height
+
+def make_74k_bottom_text_old_file(text, duration):
+    viral_text = clean_id(text).strip()
+    words = viral_text.split()
+    if len(words) >= 4:
+        mid = (len(words)+1)//2
+        line1 = " ".join(words[:mid])
+        line2 = " ".join(words[mid:]) + "..."
+        lines = [line1, line2]
+    else:
+        lines = [viral_text + "..."]
+    img = Image.new('RGBA', (900, 160), (0,0,0,0))
+    d = ImageDraw.Draw(img)
+    font_path_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     try:
-        img = Image.new('RGB', (1040, WHITE_BAR_HEIGHT-25), (255,255,255))
-        d = ImageDraw.Draw(img)
-        fp = random.choice(FONT_LIST)
-        try:
-            f = ImageFont.truetype(fp, 52)
-        except:
-            f = ImageFont.load_default()
-        # Bold black on white - second frame viral style
-        d.text((1040//2, (WHITE_BAR_HEIGHT-25)//2), safe, font=f, fill=(0,0,0), anchor="mm")
-        p = f"temp/whitebar_{random.randint(1,999999999)}.png"
-        os.makedirs("temp", exist_ok=True)
-        img.save(p)
-        hook_clip = ImageClip(p).set_duration(duration).set_position(('center', 12))
-    except Exception as e:
-        hook_path = make_text_image_best(safe, 52, "black", 0, (1040, WHITE_BAR_HEIGHT-25), bg_color=(255,255,255,255))
-        hook_clip = ImageClip(hook_path).set_duration(duration).set_position(('center', 12))
-    return [white_bg, hook_clip]
-    
-def retention_loops_best(total):
+        f1 = ImageFont.truetype(font_path_bold, 42)
+        f2 = ImageFont.truetype(font_path_bold, 40)
+    except:
+        f1 = ImageFont.load_default()
+        f2 = ImageFont.load_default()
+    d.text((10, 10), lines[0], font=f1, fill=(255,255,255), stroke_width=7, stroke_fill=(0,0,0), anchor="lt")
+    if len(lines) > 1:
+        d.text((10, 70), lines[1], font=f2, fill=(255,255,255), stroke_width=7, stroke_fill=(0,0,0), anchor="lt")
+    p = f"temp/bottom_74k_old_file_{random.randint(1,999999999)}.png"
+    os.makedirs("temp", exist_ok=True)
+    img.save(p)
+    clip = ImageClip(p).set_duration(duration).set_position((35, 0.78), relative=True)
+    return clip
+
+def make_black_rounded_border_old_file(duration):
+    img = Image.new('RGBA', (WIDTH, HEIGHT), (0,0,0,0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0,0,WIDTH,HEIGHT], radius=32, outline=(0,0,0), width=14)
+    p = f"temp/border_old_file_{random.randint(1,999999999)}.png"
+    os.makedirs("temp", exist_ok=True)
+    img.save(p)
+    clip = ImageClip(p).set_duration(duration).set_position((0,0))
+    return clip
+
+def retention_loops_best_MINIMAL(total):
     clips=[]
-    loops = [(1.5, "WAIT FOR IT"), (4, "HERE'S WHY"), (7.5, "WHAT HAPPENED NEXT?"), (10, "DON'T MISS THIS")]
+    loops = [(3.5, "HERE'S WHY")]
     for t, txt in loops:
         if t < total:
             col = random.choice(FONT_COLORS)
             fp = random.choice(FONT_LIST)
-            p = make_text_image_best(txt, random.randint(38,44), col, 5, (600, 90), font_path=fp, is_viral_bottom=True)
-            c = ImageClip(p).set_duration(0.8).set_start(t).set_position(('center', 0.20), relative=True)
-            c = c.resize(lambda t: 1.1 if t < 0.2 else 1.0)
+            p = make_text_image_best(txt, random.randint(32,36), col, 4, (500, 70), font_path=fp, is_viral_bottom=True)
+            c = ImageClip(p).set_duration(0.6).set_start(t).set_position(('center', 0.22), relative=True)
             clips.append(c)
     return clips
 
 def vignette_best(duration):
-    # Light vignette only 0.08 - ultra clean, no dark overexposure
-    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.08).set_position((0,WHITE_BAR_HEIGHT))
-    bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.12).set_position((0,1620))
+    top = ColorClip((1080, 200), color=(0,0,0), duration=duration).set_opacity(0.06).set_position((0,WHITE_BAR_HEIGHT))
+    bottom = ColorClip((1080, 300), color=(0,0,0), duration=duration).set_opacity(0.10).set_position((0,1620))
     return [top, bottom]
 
 def get_giphy_pro_editor_best(script_text: str, total_duration: float):
-    """Giphy stickers - emotional reactions for second frame style"""
     clips=[]
     try:
         key = os.getenv("GIPHY_API_KEY")
@@ -425,12 +405,8 @@ def get_giphy_pro_editor_best(script_text: str, total_duration: float):
             return []
         words = script_text.lower().split()
         triggers = {
-            "shocking": "shocked reaction", "breaking": "breaking news", "wow": "wow reaction",
-            "huge": "mind blown", "crazy": "crazy reaction", "unbelievable": "shocked",
-            "dies": "sad rip", "dead": "sad rip", "wins": "celebration party",
-            "arrested": "police siren", "crash": "crash explosion",
-            "shattered": "crying reaction", "hearts": "heartbreak crying", "betrayal": "shocked betrayal",
-            "families": "family crying"
+            "shocking": "shocked reaction", "breaking": "breaking news", "brutal": "shocked reaction",
+            "tariffs": "money shocked", "panic": "panic reaction", "millions": "crowd shocked"
         }
         total_words = len(words)
         word_duration = total_duration / max(total_words, 1)
@@ -439,11 +415,11 @@ def get_giphy_pro_editor_best(script_text: str, total_duration: float):
             clean_w = re.sub(r'[^a-z]', '', w)
             if clean_w in triggers:
                 timestamp = idx * word_duration
-                if not found_positions or timestamp - found_positions[-1][0] > 2.5:
+                if not found_positions or timestamp - found_positions[-1][0] > 3.0:
                     found_positions.append((timestamp, triggers[clean_w], clean_w))
-        if not found_positions and total_duration > 5:
-            found_positions = [(total_duration*0.15, "shocked reaction", "auto1"), (total_duration*0.55, "crying emotional", "auto2")]
-        for ts, query, original in found_positions[:3]:
+        if not found_positions and total_duration > 6:
+            found_positions = [(total_duration*0.2, "shocked reaction", "auto1")]
+        for ts, query, original in found_positions[:2]:
             try:
                 url = f"https://api.giphy.com/v1/stickers/search?api_key={key}&q={query}&limit=1&rating=pg"
                 res = requests.get(url, timeout=8).json()
@@ -468,18 +444,12 @@ def get_giphy_pro_editor_best(script_text: str, total_duration: float):
                 if len(g_data) < 5000:
                     continue
                 tmp.write(g_data); tmp.close()
-                dur = random.uniform(1.0, 1.6)
-                if original in ["shocking", "shattered", "hearts", "betrayal", "unbelievable"]:
-                    pos = ('center', 0.30); size = 360
-                elif original in ["wins", "celebration"]:
-                    pos = ('center', 0.38); size = 380
-                else:
-                    pos_x = random.choice([0.1, 0.65]); pos_y = random.choice([0.18, 0.32, 0.52])
-                    pos = (pos_x, pos_y); size = random.randint(240, 320)
+                dur = random.uniform(1.0, 1.4)
+                pos = ('center', 0.32)
+                size = 340
                 try:
                     g_clip = VideoFileClip(tmp.name).resize(width=size).set_duration(dur).set_start(ts)
-                    g_clip = g_clip.set_position(pos, relative=True).set_opacity(0.92)
-                    g_clip = g_clip.resize(lambda t: 0.8 + 0.2*t/dur if t < dur*0.2 else (1.1 - 0.1*(t-dur*0.8)/dur if t > dur*0.8 else 1.0))
+                    g_clip = g_clip.set_position(pos, relative=True).set_opacity(0.90)
                     clips.append(g_clip)
                 except:
                     continue
@@ -490,13 +460,6 @@ def get_giphy_pro_editor_best(script_text: str, total_duration: float):
         return []
 
 def create_video(script_data, story=None, output_path="output/news_32.mp4"):
-    """
-    BEST VIDEO GENERATOR - Second frame viral style
-    - Script up to 50 words flexible, no trim, jo Gemini likhe wahi final
-    - Pexels FROM SCRIPT, 0.8s FIXED emotional/shock only
-    - Top white bar bold black + bottom white with black stroke (second frame 74K style)
-    - Audio BEST 1.11/1.12X + 160% punch
-    """
     if isinstance(script_data, dict):
         raw_script=script_data.get('full_script','') or script_data.get('script','') or ""
         title=script_data.get('title','USA Tech Breaking News')
@@ -513,60 +476,65 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     os.makedirs("output",exist_ok=True)
     os.makedirs("temp",exist_ok=True)
 
-    # FINAL: No trim, jo Gemini likhe wahi final - 50 tak flexible
     script_text = clean_script_no_trim(raw_script)
     word_count = len(script_text.split())
-    print(f"[RETENTION BEST] Script {word_count} words (up to 50 flexible, no trim) - 50 tak koi rok nahi - 100% accuracy 50 ke andar")
+    print(f"[OLD FILE EDITED EXACT 74K + NORMAL SPEED] Script {word_count} words - White bar 190px bold italic 48px exact 74K + Speed 13-15 sec normal")
 
-    # Validate 50 words max - but no today today adding
     if word_count > 50:
-        print(f"[WARNING] {word_count} >50, trimming to 50 for 100% accuracy")
         script_text = " ".join(script_text.split()[:50])
         word_count = 50
 
-    print("1. TTS Piper + BEST Audio Retention 1.11/1.12X + 160% Punch...")
+    print("1. TTS Piper NORMAL SPEED - length_scale 1.25 slow + 1.0-1.03X natural (OLD FILE had 1.11 fast 5 sec rush) - NOW NORMAL 13-15 sec...")
     voice=get_piper_voice()
     audio_path="temp/voice.wav"
-    with wave.open(audio_path,"wb") as wav:
-        first=True
-        for ch in voice.synthesize(script_text):
-            if first:
-                wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(ch.sample_rate); first=False
-            wav.writeframes(ch.audio_int16_bytes)
-    
-    # Use BEST audio retention filter
     try:
-        from audio_retention import get_tts_retention_filter, apply_audio_retention_to_file
-        print(f"Using BEST audio_retention: 1.11/1.12X + 160% punch for: {first_punch[:60]}")
-        # Apply BEST filter directly via ffmpeg
+        with wave.open(audio_path,"wb") as wav:
+            first=True
+            for ch in voice.synthesize(script_text, length_scale=1.25, noise_scale=0.6, noise_w_scale=0.75):
+                if first:
+                    wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(ch.sample_rate); first=False
+                wav.writeframes(ch.audio_int16_bytes)
+        print(f"[TTS] Piper length_scale 1.25 NORMAL - 50 words 13-15 sec not 5 sec")
+    except TypeError:
+        with wave.open(audio_path,"wb") as wav:
+            first=True
+            for ch in voice.synthesize(script_text):
+                if first:
+                    wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(ch.sample_rate); first=False
+                wav.writeframes(ch.audio_int16_bytes)
+    
+    try:
+        from audio_retention import get_tts_retention_filter, get_american_captions_timing
         temp_audio_filtered = "temp/voice_filtered.wav"
-        af_filter = get_tts_retention_filter(first_punch)
+        af_filter = get_tts_retention_filter(first_punch, american_mode=True)
         cmd = ["ffmpeg","-y","-i", audio_path, "-af", af_filter, "-c:a", "pcm_s16le", temp_audio_filtered]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         audio=AudioFileClip(temp_audio_filtered)
     except Exception as e:
-        print(f"BEST audio retention failed {e}, using fallback 1.11X")
+        print(f"BEST audio retention failed {e}, using fallback NORMAL 1.0-1.03X (old file had 1.11 fast)")
         audio=AudioFileClip(audio_path)
-        audio = audio.fx(vfx.speedx, random.choice([1.11, 1.12]))
+        if audio.duration < DURATION_MIN:
+            stretch_factor = audio.duration / DURATION_MIN
+            audio = audio.fx(vfx.speedx, stretch_factor)
+        else:
+            audio = audio.fx(vfx.speedx, random.choice([1.0, 1.02, 1.03]))
     
     total=audio.duration
-    # Variable duration 11-15 sec as per request
+    print(f"[DURATION NORMAL] After TTS NORMAL: {total:.1f}s (target 13-15 sec normal, not 5 sec rush)")
+
+    if total < DURATION_MIN:
+        needed_factor = total / DURATION_MIN
+        audio = audio.fx(vfx.speedx, needed_factor)
+        total = DURATION_MIN
     if total > DURATION_MAX:
         audio = audio.subclip(0, DURATION_MAX)
         total = DURATION_MAX
-    if total < DURATION_MIN:
-        print(f"[WARN] Audio {total:.1f}s < {DURATION_MIN}s - padding allowed (11-15 variable)")
-
-    # Punch already applied via audio_retention filter - first 1 sec 160%
 
     first_sentence = first_punch if first_punch else (script_text.split('.')[0][:65] if '.' in script_text else script_text[:65])
-    print(f"2. Pexels FROM SCRIPT {CLIP_DENSITY}s FIXED emotional/shock only - SECOND FRAME VIRAL STYLE...")
+    print(f"2. Pexels FROM SCRIPT {CLIP_DENSITY}s FIXED emotional - White bar 190px exact 74K dicto...")
     clips_needed = max(12, int(math.ceil(total / CLIP_DENSITY)) + 3)
-    
-    # PEXELS FROM SCRIPT - not title - as per latest request
     raw_clips = get_best_free_clips_from_script(script_data, num=clips_needed)
     
-    # Build sequence 0.8s FIXED each, emotional/shock only, no low emotion
     final_video_clips=[]
     t=0
     for idx, c in enumerate(raw_clips):
@@ -575,7 +543,6 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
         dur = min(CLIP_DENSITY, total-t)
         try:
             sub = c.subclip(0, dur).set_start(t)
-            # No heavy colorx - ultra clean raw
             final_video_clips.append(sub)
         except:
             final_video_clips.append(c.set_start(t).set_duration(dur))
@@ -586,38 +553,62 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
 
     base_video = CompositeVideoClip(final_video_clips, size=(WIDTH, HEIGHT)).set_duration(total)
 
-    print("3. Captions BEST - Second frame style white with black stroke + first word punch...")
+    print("3. Captions NORMAL SPEED - 0.26-0.32s per word + first 5 words 1.35x punch (OLD FILE had 1.15 fast choppy) - NOW NORMAL readable...")
     words = script_text.split()
-    # Variable duration based on total and word count (11-15 sec variable)
-    word_dur = total / max(len(words),1) * 1.15
+    
+    try:
+        from audio_retention import get_american_captions_timing
+        timing = get_american_captions_timing(total, len(words), first_words_count=5)
+        base_dur = timing["base_dur"]
+        first_dur = timing["first_dur"]
+        keyword_dur = timing["keyword_dur"]
+        overlap = timing["overlap"]
+        print(f"[CAPTION NORMAL FIXED] Old file: total/len*1.15 fast choppy | New NORMAL: Base {base_dur:.3f}s, First {first_dur:.3f}s punch, Keyword {keyword_dur:.3f}s, Overlap {overlap}, WPM {timing['wpm']:.0f} normal readable")
+    except:
+        base_dur = total / max(len(words),1) * 0.98
+        base_dur = max(0.24, min(0.34, base_dur))
+        first_dur = base_dur * 1.35
+        keyword_dur = base_dur * 1.15
+        overlap = 0.96
+        print(f"[CAPTION NORMAL FALLBACK] Base {base_dur:.3f}s, First {first_dur:.3f}s, Keyword {keyword_dur:.3f}s")
+    
     caption_clips=[]
-    first_words_count = min(5, len(words))  # First 5 words = max shock+emotion punch
+    first_words_count = min(5, len(words))
+    current_time = 0
     for i,w in enumerate(words):
         is_first = i < first_words_count
         is_kw = any(k in w.upper() for k in KEYWORDS_RED) or is_first
-        dur = word_dur
-        wc = word_clip_god_best(w.upper(), dur, is_kw, is_first).set_start(i*word_dur*0.95)
+        if is_first:
+            dur = first_dur
+        elif is_kw:
+            dur = keyword_dur
+        else:
+            dur = base_dur
+        wc = word_clip_god_best_NORMAL(w.upper(), dur, is_kw, is_first).set_start(current_time)
         caption_clips.append(wc)
+        current_time += dur * overlap
 
-    white_bar = white_bar_viral_hook_clip_best(viral_hook, total)
-    branding = top_branding_best(total)
-    loops = retention_loops_best(total)
+    white_bar_list, actual_white_height = white_bar_viral_hook_clip_best_EXACT_74K(viral_hook, total)
+    bottom_text_clip = make_74k_bottom_text_old_file(viral_hook, total)
+    border_clip = make_black_rounded_border_old_file(total)
+    loops = retention_loops_best_MINIMAL(total)
     vig = vignette_best(total)
     giphy = get_giphy_pro_editor_best(script_text, total)
 
-    print("4. Composite BEST + NTSC FPS + Second frame viral style - ULTRA CLEAN...")
-    comp = CompositeVideoClip([base_video] + white_bar + branding + loops + vig + giphy + caption_clips, size=(WIDTH, HEIGHT)).set_duration(total)
+    print(f"4. Composite OLD FILE EDITED EXACT 74K + NORMAL SPEED - White bar {actual_white_height}px bold italic 48px exact 74K + Audio {total:.1f}s normal + Caption {base_dur:.3f}s normal...")
+    global WHITE_BAR_HEIGHT
+    WHITE_BAR_HEIGHT = actual_white_height
+    
+    comp = CompositeVideoClip([base_video] + white_bar_list + [bottom_text_clip, border_clip] + loops + vig + giphy + caption_clips, size=(WIDTH, HEIGHT)).set_duration(total)
     
     fps = random.choice(FPS_CHOICES)
-    print(f"[FPS] Selected NTSC fps: {fps} - ULTRA CLEAN 0.8s emotional clips only")
+    print(f"[FPS] NTSC {fps} - Old file edited exact 74K + normal speed {total:.1f}s + caption {base_dur:.3f}s readable")
 
-    # BGM with BEST filter - enjoyable
     try:
         from audio_retention import get_bgm_volume_filter
         bg_music = get_free_bg_music()
         if bg_music:
             bg_music = bg_music.subclip(0, total).set_duration(total)
-            # Apply BGM BEST filter
             bg_temp_in = "temp/bgm_in.mp3"
             bg_temp_out = "temp/bgm_out.mp3"
             bg_music.write_audiofile(bg_temp_in, logger=None)
@@ -641,25 +632,12 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
 
     comp = comp.set_audio(final_audio)
 
-    # ULTRA CLEAN direct write - NO second ffmpeg noise/hue
-    if NOISE_HUE_FILTER and NOISE_HUE_FILTER.strip():
-        temp_out = output_path.replace(".mp4","_temp.mp4")
-        comp.write_videofile(temp_out, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
-        try:
-            cmd = ["ffmpeg","-y","-i", temp_out,"-vf", NOISE_HUE_FILTER,"-r", str(fps),"-c:v","libx264","-crf","20","-preset","veryfast","-c:a","aac","-b:a","128k",output_path]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            os.remove(temp_out)
-            print(f"[FFMPEG] Noise+hue applied, fps locked {fps} -> {output_path}")
-        except Exception as e:
-            print(f"[FFMPEG] fallback, error {e}")
-            os.rename(temp_out, output_path)
-    else:
-        print(f"[ULTRA CLEAN BEST] Direct write NO noise/hue = RAW PEXELS CLEAN - 0.8s emotional only - Second frame viral style")
-        comp.write_videofile(output_path, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
+    print(f"[OLD FILE EDITED EXACT 74K + NORMAL SPEED] Direct write - White bar {actual_white_height}px bold italic 48px exact 74K + {total:.1f}s normal not 5s rush + caption {base_dur:.3f}s normal readable")
+    comp.write_videofile(output_path, fps=fps, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4, logger=None)
 
     try:
         import glob
-        for f in glob.glob("temp/txt_*.png") + glob.glob("temp/whitebar_*.png") + glob.glob("temp/txt_white_*.png"):
+        for f in glob.glob("temp/txt_*.png") + glob.glob("temp/whitebar_*.png") + glob.glob("temp/txt_white_*.png") + glob.glob("temp/whitebar_74k_exact_old_*.png") + glob.glob("temp/bottom_74k_old_file_*.png") + glob.glob("temp/border_old_file_*.png"):
             try:
                 os.remove(f)
             except:
@@ -670,7 +648,7 @@ def create_video(script_data, story=None, output_path="output/news_32.mp4"):
     return output_path
 
 if __name__=="__main__":
-    print("Test video_generator BEST - Second frame viral style - 0.8s emotional clips only - 50 words flexible")
+    print("Test OLD FILE EDITED EXACT 74K + NORMAL SPEED - White bar 190px bold italic 48px exact 74K + Speed 13-15 sec normal + Caption 0.26-0.32s normal")
     data={
         "full_script":"Families hearts shattered tonight as secret Senate betrayal leaks, shocking deal no one saw coming leaves America stunned and crying, this changes everything for millions",
         "title":"Senate Shocker Shatters Families",

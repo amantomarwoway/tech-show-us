@@ -1,5 +1,3 @@
-# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
-
 """
 src/breakout_detector.py - GUARANTEED BREAKOUT EVERY RUN - PURE BREAKOUT
 Bhai ko har baar breakout news hi chahiye - 0 nahi chalega
@@ -41,7 +39,7 @@ def get_breakouts_from_pytrends():
         for seed in selected:
             try:
                 pytrends.build_payload([seed], timeframe='now 1-d', geo='US')
-                time.sleep(random.uniform(3,5))
+                time.sleep(random.uniform(1,2))
                 related = pytrends.related_queries()
                 if seed not in related: continue
                 rising = related[seed].get('rising')
@@ -61,12 +59,12 @@ def get_breakouts_from_pytrends():
                         "visualping_alert": f"BREAKOUT +5000% seed={seed} - {q_clean}"
                     })
                     print(f"🔥 BREAKOUT FOUND {q_clean}")
-                time.sleep(random.uniform(4,6))
+                time.sleep(random.uniform(1,2))
             except Exception as e:
                 err=str(e).lower()
                 if "429" in err:
                     print(f"⚠️ 429 for {seed} - backoff 30 sec")
-                    time.sleep(30)
+                    time.sleep(10)
                 continue
     except Exception as e:
         print(f"[BREAKOUT] pytrends fail {e}")

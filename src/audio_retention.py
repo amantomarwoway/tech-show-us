@@ -4,6 +4,8 @@ audio_retention.py - FIXED
 - FIX: atempo=1.15,asetrate=... pura long filter log leak band, only short log
 - No disable
 """
+# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+
 import random, subprocess
 
 def get_bgm_volume_filter():

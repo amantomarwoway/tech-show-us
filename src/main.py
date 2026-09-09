@@ -1,12 +1,8 @@
 """
 MAIN.PY - FINAL WITH BREAKOUT FORCE VIDEO + 6 NEW FILES + RETENTION + VALIDATION - KUCH DELETE NAHI
-Flow: breakout_any_topic - GEMINI 3.6 FLASH JULY 2025 + CHATGPT FALLBACK
-# UPDATED: Gemini 3.6 Flash July latest + ChatGPT fallback gpt-4o-mini
-# Flow: breakout_any_topic (news/politics/tech) -> hungerness -> script 40w -> video 0.8s 12sec -> anti_bot + audio_retention -> 4K upload
+Flow: breakout_any_topic (news/politics/tech) -> hungerness -> script 40w -> video 0.8s 12sec -> anti_bot + audio_retention -> 4K upload
 FIXED: Breakout = video banna hi banna hai, chahe filter fail ho + Visualping logic
 """
-# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
-
 import sys, os
 # ===== FIX ERROR 1 ONLY - src me hi rehne de - import path fix =====
 # src/main.py se run ho raha hai, isliye root aur src dono path me daalo
@@ -515,11 +511,14 @@ def main():
     print(f" Title: {title}")
     try:
         yt_id = upload_video(video_path, thumb_path, script_data, approved_topic)
-    except:
+    except Exception as e1:
+        print(f"[UPLOAD] First attempt failed {e1}, retry with title/desc dict")
         try:
-            yt_id = upload_video(video_path, thumb_path, title, description)
-        except:
-            yt_id = "test"
+            retry_data = {"title": title, "description": description, "tags_all": tags_all}
+            yt_id = upload_video(video_path, thumb_path, retry_data, approved_topic)
+        except Exception as e2:
+            print(f"[UPLOAD] Second attempt failed {e2} - will exit with error, not test_id")
+            raise e2
 
     if yt_id:
         mark_uploaded(story_id, yt_id)

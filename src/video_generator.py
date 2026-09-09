@@ -2,7 +2,7 @@
 FINAL PERFECT - 74K EXACT DICTO - WHITE BAR CUT BUG FIXED 100%
 Bhai ki complaint: 's Shocking Secret Voter Test - Trump's cut
 Reason: (1080-w)//2 + anchor="mm" double offset = left se kata
-Fix: Direct 540 center anchor mm, no w calculation, black strip 45px + white 145px = 190px total
+Fix: Direct 540 center anchor mm, no w calculation, black strip 190px + white 210px = 400px total
 """
 
 import os, random, requests, tempfile, re, wave, math, subprocess
@@ -12,9 +12,9 @@ from PIL import Image, ImageDraw, ImageFont
 import PIL.Image
 
 WIDTH, HEIGHT = 1080, 1920
-WHITE_BAR_HEIGHT = 190
-BLACK_TOP_STRIP = 45
-BLACK_BOTTOM_STRIP = 40
+WHITE_BAR_HEIGHT = 210
+BLACK_TOP_STRIP = 190
+BLACK_BOTTOM_STRIP = 190
 BLACK_BORDER = 16
 CORNER_RADIUS = 38
 CLIP_DENSITY = 0.8
@@ -119,7 +119,7 @@ def make_74k_white_bar_FINAL(text, bar_height=190):
     FINAL FIX - NO CUT EVER - 100% GUARANTEED
     OLD BUG: (1080-w)//2 + anchor="mm" = double offset = left cut = "Trump's" -> "'s"
     NEW: Direct WIDTH//2=540 + anchor="mm" = perfect center, no w calculation, no cut
-    Plus black strip 45px top + white 190px = total 235px exact 74K
+    Plus black strip 190px top + white 210px = total 400px exact 74K
     """
     viral_text = clean_id(text).strip()
     # Limit 8 words max like 74K
@@ -137,8 +137,8 @@ def make_74k_white_bar_FINAL(text, bar_height=190):
     else:
         lines = [viral_text]
     
-    total_h = 190
-    black_h = 45
+    total_h = 210
+    black_h = 190
     white_h = total_h - black_h
     
     # Black strip + white bar

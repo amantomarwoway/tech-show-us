@@ -1,5 +1,4 @@
-# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK
-name: Tech Show US Bot - GEMINI 3.6 FLASH JULY + CHATGPT FALLBACK - FIXED RUNNER
+name: Tech Show US Bot - FIXED RUNNER - NO ERRORS - NO SAFE EXIT - NO FORCE PASS
 
 on:
   schedule:
@@ -30,15 +29,18 @@ jobs:
           python-version: '3.11'
 
       - name: Install System Deps
-        run: sudo apt-get update && sudo apt-get install -y imagemagick ffmpeg
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list.save
+          sudo apt-get update || sudo apt-get update --fix-missing
+          sudo apt-get install -y imagemagick ffmpeg
 
       - name: Install Python Deps
         run: |
           pip install --upgrade pip
           pip install Pillow==9.5.0
           pip install -r requirements.txt
-          pip install pytrends feedparser requests urllib3 openai google-generativeai --upgrade
-          pip install openai --upgrade
+          pip install pytrends feedparser requests urllib3 --upgrade
 
       - name: Create data dir
         run: mkdir -p data output temp && touch src/__init__.py && echo "# src package fixed" > src/__init__.py
@@ -53,7 +55,6 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
         run: |
           echo "🔥 FIXED RUNNER - NO 7 ERRORS - NO SAFE EXIT - NO FORCE PASS"
@@ -61,7 +62,7 @@ jobs:
           echo "Fix2: Python 3.11"
           echo "Fix3: US ONLY - no Germany/Canada"
           echo "Fix4: Google Title fixed - no Firefox"
-          echo "Fix5: Gemini 3.6 Flash July 2025 + ChatGPT fallback"
+          echo "Fix5: Gemini 2.0-flash-exp models"
           echo "Fix6: Fact checker method_whitelist patched - 2/3 logic - no force pass"
           echo "Fix7: Safe exit closed"
           python src/main.py

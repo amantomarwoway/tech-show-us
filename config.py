@@ -1,17 +1,21 @@
 # UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
+# UPDATED FOR: Wire + Google News 45min + 7-Day Velocity + DuckDuckGo 1.0s + yt-dlp 1.8s + YouTube Search SEO
 """
 CONFIG.PY - FIXED AS PER LATEST 15 FILES - RETENTION + VALIDATION FACTORY + MARKET HUNGERNESS + VvSA + SOUND RETENTION
 Location: src/config.py
 FIXED: https, Gemini 3.6 Flash July, ChatGPT fallback, US only, no overexposure, no safe exit
+UPDATED: Reuters Wire + Google News Wire 45min filter, mainstream legacy block, search velocity, SEO over Shorts Feed
 """
 import os, random
 
 VERIFICATION_THRESHOLD=0.90
 WEIGHTS={"recency":0.35,"source_count":0.30,"reliability":0.20,"duplicate_freq":0.15}
 
-# --- FIXED: google_news_us_live trusted + US ONLY ---
+# --- FIXED: Wire + Google News trusted + US ONLY + Mainstream Block ---
 SOURCE_RELIABILITY={
     "reuters":1.0,
+    "reuters_wire":1.0,
+    "google_news_wire":0.95,
     "apnews":1.0,
     "bbc":0.95,
     "npr":0.95,
@@ -20,32 +24,79 @@ SOURCE_RELIABILITY={
     "cbsnews":0.9,
     "cnn":0.85,
     "gov":1.0,
-    "google_trends_usa":0.95,
-    "google_news_us_live":0.90,
+    "duckduckgo_image":0.90,
+    "yt_dlp_video":0.90,
     "youtube_search":0.90,
-    "visualping_cnn_breaking_guaranteed":0.97,
-    "guaranteed_google_news_rss":0.95
 }
 
-# ===== NEW RETENTION CONSTANTS - FIXED NO OVEREXPOSURE =====
+# ===== NEW RETENTION CONSTANTS - FIXED NO OVEREXPOSURE + NEW ASSET TIMING =====
 RETENTION_CONFIG = {
-    "WORDS_TARGET": 40,
-    "WORDS_MIN": 35,
-    "WORDS_MAX": 45,
-    "DURATION_TARGET": 12,
+    "WORDS_TARGET": 45,
+    "WORDS_MIN": 40,
+    "WORDS_MAX": 50,
+    "DURATION_TARGET": 13,
     "DURATION_MIN": 11,
-    "DURATION_MAX": 13,
-    "CLIP_DENSITY": 0.8,
+    "DURATION_MAX": 15,
+    "CLIP_DENSITY": 1.8,  # video clip 1.8s
+    "IMAGE_DURATION": 1.0,  # image 1.0s
+    "VIDEO_DURATION": 1.8,  # clip 1.8s
     "TTS_SPEED": 1.15,
     "TTS_PITCH_SEMITONES": 1.2,
-    "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],
-    # FIXED: Heavy chamak removed - was "noise=alls=5:allf=t:..." causing overexposure
-    "NOISE_HUE_FILTER": "",  # ULTRA CLEAN - no noise/hue = raw Pexels clean
+    "FPS_CHOICES": [29.97, 30, 59.94, 60],
+    "NOISE_HUE_FILTER": "",
     "FPS": 30,
     "AUDIO_PUNCH_FIRST_SEC": 1.5,
     "VOL_MOD_EVERY_SEC": 3,
     "VOL_MOD_PERCENT": 0.05,
     "BASS_BOOST": "bass=g=3:f=100"
+}
+
+# ===== WIRE SERVICE & ADVANCED INDEX ENGINE - 45 MIN FILTER =====
+WIRE_SERVICE_CONFIG = {
+    "enabled": True,
+    "fetch_window_minutes": 45,
+    "reuters_feeds": [
+        "http://feeds.reuters.com/reuters/topNews",
+        "http://feeds.reuters.com/reuters/USNews",
+        "http://feeds.reuters.com/reuters/politicsNews"
+    ],
+    "google_news_feeds": [
+        "https://news.google.com/rss/search?q=breaking+news+US+when:1h&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=US+politics+OR+white+house+when:1h&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
+    ],
+    "mainstream_block": [
+        "cnn.com", "nytimes.com", "washingtonpost.com", "foxnews.com",
+        "msnbc.com", "abcnews.go.com", "cbsnews.com", "nbcnews.com",
+        "apnews.com", "bbc.com", "theguardian.com"
+    ],
+    "us_search_keywords": [
+        "trump", "biden", "white house", "supreme court", "executive order",
+        "congress", "senate", "pentagon", "fbi", "doj", "tariff", "ban",
+        "election", "border", "immigration", "breaking", "leaked", "shocking"
+    ],
+    "ground_level_first": True,
+    "max_search_potential": True
+}
+
+# ===== 7-DAY SEARCH VELOCITY FILTER =====
+SEARCH_VELOCITY_CONFIG = {
+    "enabled": True,
+    "filter_name": "7-Day Search Velocity Filter",
+    "rule": "Only select stories that an average American will actively type into Google or YouTube to search for explanations, updates, or follow-ups over next 7 days. Reject generic news.",
+    "confidence_threshold": 85,
+    "is_weekly_search_trend_required": True,
+    "reject_generic": True
+}
+
+# ===== YOUTUBE SEARCH SEO RULES =====
+YOUTUBE_SEARCH_SEO_CONFIG = {
+    "enabled": True,
+    "focus": "YouTube Search Traffic over Shorts Feed",
+    "title_rules": "Highly targeted, high-intent search titles, include year/breaking, under 60 chars",
+    "tags_rules": "8-10 high-intent SEO tags, American search behavior",
+    "optimize_for": "Search Traffic, not Feed",
+    "high_ctr_required": True
 }
 
 # Validation Factory - NO FORCE PASS
@@ -55,7 +106,7 @@ VALIDATION_FACTORY_CONFIG = {
     "BOLD_CLAIMS": ["this changes everything","you won't believe","shocked everyone","this is huge","nobody saw this coming","game changer"],
     "TWIST_ONLY": True,
     "SECRET_LEAK_ANGLE_MANDATORY": True,
-    "NO_FORCE_PASS": True  # FIXED: No breakout force always pass
+    "NO_FORCE_PASS": True
 }
 
 # Market Hungerness - US ONLY
@@ -65,13 +116,34 @@ MARKET_HUNGERNESS_CONFIG = {
     "vol_threshold_medium": 45,
     "vol_threshold_low": 30,
     "hungry_keywords": ["leaked","secret","breaking","shocking","just in","behind closed doors","exposed","revealed","just leaked"],
-    "freshness_threshold_hours": 6,
+    "freshness_threshold_hours": 1,
     "us_only": True,
     "blocked_countries": ["germany", "canada", "german", "merz"]
 }
 
-# Pexel Randomisation + Anti-bot
+# Asset Gathering - DuckDuckGo + yt-dlp (Pexels replaced)
+ASSET_GATHERING_CONFIG = {
+    "engine": "duckduckgo + yt-dlp",
+    "image_duration": 1.0,
+    "clip_duration": 1.8,
+    "search_type": "exact visual search as per script_visual_segments",
+    "visual_search_prompt_required": True,
+    "asset_types": ["video", "image"],
+    "youtube_search_seo_focus": True,
+    "shorts_feed_focus": False,
+    "per_page_choices": [3,5],
+    "orientation": "portrait",
+    "user_agents": [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+    ],
+    "delay_min": 0.1,
+    "delay_max": 0.3
+}
+
+# Legacy Pexels config kept for fallback compatibility but disabled
 PEXELS_RANDOM_CONFIG = {
+    "enabled": False,
     "per_page_choices": [5,8,12],
     "random_suffixes": ["", " 4k", " cinematic", " news", " usa"],
     "orientation_choices": ["portrait","landscape",""],
@@ -94,8 +166,12 @@ VvSA_CONFIG = {
     "FRAME_VARIATION_ENABLED": True
 }
 
-# FIXED: https + US ONLY - no http
-RSS_FEEDS={"reuters":"https://feeds.reuters.com/reuters/topNews"}
+# FIXED: Wire Service + Google Index + 45 min
+RSS_FEEDS={
+    "reuters_wire": "http://feeds.reuters.com/reuters/topNews",
+    "reuters_us": "http://feeds.reuters.com/reuters/USNews",
+    "google_news_wire": "https://news.google.com/rss/search?q=breaking+news+US+when:1h&hl=en-US&gl=US&ceid=US:en"
+}
 GOOGLE_TRENDS_GEO="US"
 GOOGLE_TRENDS_URL="https://trends.google.com/trending/rss?geo=US"
 TREND_LIMIT=30
@@ -267,7 +343,6 @@ def check_validation_factory(text: str) -> bool:
     has_bold = any(b in low for b in VALIDATION_FACTORY_CONFIG["BOLD_CLAIMS"])
     return has_leak and has_bold
 
-# NEW: US Filter
 def is_us_topic_config(text: str) -> bool:
     if not text: return False
     low = text.lower()

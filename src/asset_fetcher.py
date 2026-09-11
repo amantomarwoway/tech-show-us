@@ -287,3 +287,19 @@ if __name__ == "__main__":
         {"segment_text": "Shocking decision leaked", "asset_type": "image", "visual_search_prompt": "shocked man reaction office"},
     ]
     fetch_all_assets("White House executive order", script_visual_segments=test_segments)
+
+
+def fetch_all_assets_god(topic: str = "", keywords: list = None, script_visual_segments: list = None, *args, **kwargs):
+    """GOD LEVEL wrapper - alias for fetch_all_assets"""
+    # Handle different call signatures from god level
+    if isinstance(topic, dict):
+        # If topic is actually story dict
+        t = topic.get('title','') or topic.get('query','')
+        kws = topic.get('tags') or keywords
+        segs = topic.get('script_visual_segments') or script_visual_segments
+        return fetch_all_assets(t, keywords=kws, script_visual_segments=segs)
+    return fetch_all_assets(topic, keywords=keywords, script_visual_segments=script_visual_segments)
+
+# Also provide main function expected by old code
+def fetch_all_assets_god_main(*args, **kwargs):
+    return fetch_all_assets_god(*args, **kwargs)

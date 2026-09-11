@@ -86,3 +86,5 @@ def upload_video(video_path, thumb_path, script_data, story):
             if attempt==9:
                 raise e
             time.sleep((2**attempt)+random.uniform(0,1))
+            def uploader_god_main(video_path, thumbnail_path, script_data, story_data, boss_data=None):
+    return upload_video_god(video_path, thumbnail_path, script_data, story_data, boss_data)

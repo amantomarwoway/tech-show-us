@@ -31,8 +31,7 @@ jobs:
       - name: Install System Deps
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list.save
-          sudo apt-get update || sudo apt-get update --fix-missing
+          sudo apt-get update || true
           sudo apt-get install -y imagemagick ffmpeg
 
       - name: Install Python Deps
@@ -40,7 +39,7 @@ jobs:
           pip install --upgrade pip
           pip install Pillow==9.5.0
           pip install -r requirements.txt
-          pip install pytrends feedparser requests urllib3 --upgrade
+          pip install feedparser requests urllib3 --upgrade
 
       - name: Create data dir
         run: mkdir -p data output temp && touch src/__init__.py && echo "# src package fixed" > src/__init__.py
@@ -54,7 +53,6 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
         run: |
           echo "🔥 FIXED RUNNER - NO 7 ERRORS - NO SAFE EXIT - NO FORCE PASS"

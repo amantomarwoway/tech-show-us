@@ -1,38 +1,29 @@
 """
-Asset Fetcher - RETENTION + ANTI-BOT + PEXEL RANDOMISATION + VvSA
+Asset Fetcher - Wire + 45min + 7-Day Velocity + DuckDuckGo 1.0s + yt-dlp 1.8s + YouTube Search SEO
 Location: src/asset_fetcher.py
-Edits:
-- Pexel randomisation: per_page*3 + shuffle + random in_point
-- Frame variation rule: random crop/resize/orientation
-- Anti-bot: random UA + random query variations + delay
-- FFmpeg light noise/hue for dedup
-- Sound retention: mood + SFX mapping enhanced + BGM vol every 3 sec handled in video_generator
-- No same asset repeat
+UPDATED: Pexels replaced with DuckDuckGo Search + yt-dlp ytsearch, exact visual as per script_visual_segments
+- Image: 1.0 sec screen
+- Clip: 1.8 sec screen
+- Search: exact prompt like "Pentagon building exterior daytime" for script line "Pentagon deployed..."
+- SEO: YouTube Search Traffic over Shorts Feed
+- Wire: Reuters + Google News Wire 45min filter, mainstream block
 """
 
-import os, random, requests, time, tempfile, subprocess
+import os, random, requests, time, tempfile, subprocess, glob, json, re
 from pathlib import Path
-
-# ===== CONFIG =====
-PEXELS_KEY = os.getenv("PEXELS_API_KEY", "")
-PIXABAY_KEY = os.getenv("PIXABAY_API_KEY", "") or os.getenv("PIXABAY_KEY", "")
-GIPHY_KEY = os.getenv("GIPHY_API_KEY", "")
 
 OUTPUT_ASSETS = Path("output/assets")
 OUTPUT_ASSETS.mkdir(parents=True, exist_ok=True)
+TEMP_DIR = Path("temp")
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# ===== RETENTION + ANTI-BOT CONSTANTS =====
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
 ]
-FPS_CHOICES = [29.97, 29.98, 59.94, 59.95]
-NOISE_HUE_FILTER = "noise=alls=5:allf=t:allp=7,hue=h=2:s=1.08"
-PEXELS_RANDOM_QUERIES = ["", " 4k", " cinematic", " news", " usa"]
+FPS_CHOICES = [29.97, 30, 59.94, 60]
 
-# ===== MUSIC MOOD MAP - Topic ke hisab se + VvSA =====
 MUSIC_MOOD_MAP = {
     "breaking": "tense dramatic news",
     "shocking": "tense dramatic shock",
@@ -51,7 +42,6 @@ MUSIC_MOOD_MAP = {
     "default": "news background corporate tense"
 }
 
-# ===== SFX MAP - Enhanced with VvSA =====
 SFX_MAP = {
     "breaking": "whoosh.mp3",
     "shocking": "boom.mp3",
@@ -72,7 +62,6 @@ SFX_MAP = {
 }
 
 def get_random_headers():
-    """Anti-bot: random UA every request"""
     return {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "application/json",
@@ -81,7 +70,6 @@ def get_random_headers():
 
 def get_mood_from_topic(topic: str) -> str:
     topic_l = topic.lower()
-    # Anti-bot: random shuffle of keys to avoid same pattern
     keys = list(MUSIC_MOOD_MAP.keys())
     random.shuffle(keys)
     for key in keys:
@@ -90,247 +78,210 @@ def get_mood_from_topic(topic: str) -> str:
     return MUSIC_MOOD_MAP["default"]
 
 def get_music(mood: str) -> str:
-    """Pixabay se music fetch + randomisation + sound retention ready"""
+    PIXABAY_KEY = os.getenv("PIXABAY_API_KEY", "") or os.getenv("PIXABAY_KEY", "")
     if not PIXABAY_KEY:
-        print("[ASSET] PIXABAY_KEY missing")
         return None
     try:
-        # Pexel randomisation logic: random query suffix + random per_page
         rand_suffix = random.choice(["", " cinematic", " tension", " news"])
         search_q = f"{mood}{rand_suffix}"
-        per_page = random.choice([3,5,7]) # anti-bot no same count
-        
-        # Try pixabay music API (official)
+        per_page = random.choice([3,5,7])
         r = requests.get("https://pixabay.com/api/music/",
-                         params={
-                             "key": PIXABAY_KEY,
-                             "q": search_q,
-                             "per_page": per_page
-                         },
-                         headers=get_random_headers(),
-                         timeout=12)
+                         params={"key": PIXABAY_KEY, "q": search_q, "per_page": per_page},
+                         headers=get_random_headers(), timeout=12)
         data = r.json()
         if data.get("hits"):
-            # Random pick not always first (anti-bot)
             hit = random.choice(data["hits"][:min(3, len(data["hits"]))])
             download_url = hit.get("download") or hit.get("audio")
             if download_url:
-                # Download with random delay anti-bot
                 time.sleep(random.uniform(0.2,0.6))
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
                 tmp.write(requests.get(download_url, headers=get_random_headers(), timeout=20).content)
                 tmp.close()
-                # Apply light FFmpeg dedup + BGM volume ready for sound retention
                 final_path = OUTPUT_ASSETS / f"music_{mood.replace(' ','_')}_{random.randint(1000,9999)}.mp3"
-                # FFmpeg: light noise not needed for audio, but we apply bass + volume automation template
                 try:
-                    cmd = [
-                        "ffmpeg","-y",
-                        "-i", tmp.name,
-                        "-af", f"bass=g=2:f=110,volume=0.06",
-                        str(final_path)
-                    ]
+                    cmd = ["ffmpeg","-y","-i", tmp.name, "-af", f"bass=g=2:f=110,volume=0.06", str(final_path)]
                     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     os.remove(tmp.name)
-                    print(f"[ASSET] Music saved with retention filter: {final_path} mood={mood} fps={random.choice(FPS_CHOICES)}")
                     return str(final_path)
                 except:
                     os.rename(tmp.name, final_path)
                     return str(final_path)
-            print(f"[ASSET] Music found for mood: {mood} random pick")
-            return f"pixabay_music_{mood}.mp3"
     except Exception as e:
         print(f"[ASSET] Music error: {e}")
     return None
 
-def get_pexels_image(keyword: str) -> str:
-    """Pexels image + randomisation + frame variation + FFmpeg dedup"""
-    if not PEXELS_KEY:
-        return None
+def get_duckduckgo_image(visual_prompt: str) -> str:
     try:
-        # Anti-bot: random query variation
-        rand_q = keyword + random.choice(PEXELS_RANDOM_QUERIES)
-        per_page = random.choice([5,8,12])
-        r = requests.get("https://api.pexels.com/v1/search",
-                         headers={"Authorization": PEXELS_KEY, **get_random_headers()},
-                         params={"query": rand_q, "per_page": per_page, "orientation": random.choice(["portrait","landscape",""])},
-                         timeout=12)
-        data = r.json()
-        if data.get("photos"):
-            # Randomisation: shuffle and pick random not first
-            photos = data["photos"]
-            random.shuffle(photos)
-            chosen = random.choice(photos[:min(4, len(photos))])
-            url = chosen["src"].get("large") or chosen["src"]["original"]
-            # Frame variation: random resize param
-            img_data = requests.get(url, headers=get_random_headers(), timeout=12).content
-            path = OUTPUT_ASSETS / f"{keyword.replace(' ', '_')}_{random.randint(1000,9999)}.jpg"
-            path.write_bytes(img_data)
-            # FFmpeg light noise+hue for dedup (anti bot + anti copyright)
-            try:
-                tmp_out = str(path).replace(".jpg", "_f.jpg")
-                cmd = [
-                    "ffmpeg","-y",
-                    "-i", str(path),
-                    "-vf", NOISE_HUE_FILTER,
-                    tmp_out
-                ]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                os.replace(tmp_out, path)
-            except:
-                pass
-            print(f"[ASSET] Image saved random: {path} query={rand_q}")
-            time.sleep(random.uniform(0.1,0.4)) # anti-bot delay
-            return str(path)
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.images(visual_prompt, max_results=3))
+            if not results:
+                return None
+            random.shuffle(results)
+            for res in results[:2]:
+                img_url = res.get('image') or res.get('thumbnail')
+                if not img_url: continue
+                try:
+                    r = requests.get(img_url, timeout=15, headers=get_random_headers())
+                    if r.status_code != 200: continue
+                    path = OUTPUT_ASSETS / f"duck_{re.sub(r'\W+','_',visual_prompt)[:30]}_{random.randint(1000,9999)}.jpg"
+                    path.write_bytes(r.content)
+                    if path.stat().st_size < 5000:
+                        path.unlink(missing_ok=True)
+                        continue
+                    print(f"[ASSET] DuckDuckGo image 1.0s: {path} prompt={visual_prompt}")
+                    time.sleep(random.uniform(0.1,0.3))
+                    return str(path)
+                except:
+                    continue
     except Exception as e:
-        print(f"[ASSET] Image error {keyword}: {e}")
+        print(f"[ASSET] DuckDuckGo image error {visual_prompt}: {e}")
     return None
 
-def get_pexels_video_random(keyword: str, num=5):
-    """NEW: For video_generator compatibility - Pexel randomisation video version"""
-    if not PEXELS_KEY:
-        return []
-    clips=[]
+def get_yt_dlp_clip(visual_prompt: str) -> str:
     try:
-        rand_q = keyword + random.choice(PEXELS_RANDOM_QUERIES)
-        r = requests.get("https://api.pexels.com/videos/search",
-                         headers={"Authorization": PEXELS_KEY},
-                         params={"query": rand_q, "per_page": num*3, "orientation": "portrait", "size": "medium"},
-                         timeout=12)
-        data = r.json()
-        videos = data.get("videos", [])
-        random.shuffle(videos)
-        for v in videos[:num]:
+        import yt_dlp
+        out_tmpl = str(TEMP_DIR / f"ytdlp_{random.randint(1000,9999)}_%(id)s.%(ext)s")
+        ydl_opts = {
+            'format': 'best[height<=720][ext=mp4]/best[height<=720]/best',
+            'outtmpl': out_tmpl,
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+        }
+        query = f"ytsearch3:{visual_prompt}"
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(query, download=True)
+        files = glob.glob(str(TEMP_DIR / f"ytdlp_*.*"))
+        if files:
+            # pick newest
+            files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            vpath = files[0]
+            # verify duration >=0.5
             try:
-                files = sorted(v['video_files'], key=lambda x: x['width'])
-                link = files[-1]['link'] if files else None
-                if not link:
-                    continue
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                tmp.write(requests.get(link, headers=get_random_headers(), timeout=20).content)
-                tmp.close()
-                # Apply FFmpeg noise+hue for dedup + fps randomization
-                fps = random.choice(FPS_CHOICES)
-                out = OUTPUT_ASSETS / f"pexels_{keyword.replace(' ','_')}_{random.randint(1000,9999)}.mp4"
-                try:
-                    cmd = [
-                        "ffmpeg","-y",
-                        "-i", tmp.name,
-                        "-vf", NOISE_HUE_FILTER,
-                        "-r", str(fps),
-                        str(out)
-                    ]
-                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    os.remove(tmp.name)
-                    clips.append(str(out))
-                except:
-                    os.rename(tmp.name, out)
-                    clips.append(str(out))
+                from moviepy.editor import VideoFileClip
+                vc = VideoFileClip(vpath)
+                if vc.duration >= 0.5:
+                    final_path = OUTPUT_ASSETS / f"ytdlp_{re.sub(r'\W+','_',visual_prompt)[:30]}_{random.randint(1000,9999)}.mp4"
+                    # cut to 1.8s
+                    vc.close()
+                    # ffmpeg cut 1.8s
+                    cmd = ["ffmpeg","-y","-i", vpath, "-t", "1.8", "-c:v","libx264","-c:a","aac", str(final_path)]
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    os.remove(vpath)
+                    print(f"[ASSET] yt-dlp clip 1.8s: {final_path} prompt={visual_prompt}")
+                    return str(final_path)
+                else:
+                    vc.close()
+                    os.remove(vpath)
             except:
-                continue
-        print(f"[ASSET] Pexels videos random {len(clips)} for {keyword}")
-        return clips
+                # if moviepy fails, just return raw
+                if os.path.exists(vpath):
+                    final_path = OUTPUT_ASSETS / f"ytdlp_{random.randint(1000,9999)}.mp4"
+                    os.rename(vpath, final_path)
+                    return str(final_path)
     except Exception as e:
-        print(f"[ASSET] Pexels video error {e}")
-        return []
-
-def get_giphy_gif(keyword: str) -> str:
-    """Giphy + randomisation + frame variation"""
-    if not GIPHY_KEY:
-        print("[ASSET] GIPHY_KEY missing")
-        return None
-    try:
-        # Random variation in query
-        rand_q = keyword + random.choice([" reaction", " shock", " breaking", ""])
-        r = requests.get("https://api.giphy.com/v1/gifs/search",
-                         params={"api_key": GIPHY_KEY, "q": rand_q, "limit": random.choice([3,5,8]), "rating": "g"},
-                         headers=get_random_headers(),
-                         timeout=12)
-        data = r.json()
-        if data.get("data"):
-            # Random pick anti-bot
-            gifs = data["data"]
-            random.shuffle(gifs)
-            chosen = random.choice(gifs[:min(3, len(gifs))])
-            gif_url = chosen["images"]["original"]["url"]
-            gif_data = requests.get(gif_url, headers=get_random_headers(), timeout=15).content
-            path = OUTPUT_ASSETS / f"{keyword.replace(' ', '_')}_{random.randint(1000,9999)}.gif"
-            path.write_bytes(gif_data)
-            print(f"[ASSET] GIF saved random: {path} query={rand_q}")
-            time.sleep(random.uniform(0.1,0.3))
-            return str(path)
-    except Exception as e:
-        print(f"[ASSET] GIF error {keyword}: {e}")
+        print(f"[ASSET] yt-dlp error {visual_prompt}: {e}")
     return None
 
 def get_sfx_for_word(script_word: str) -> str:
-    """SFX by topic + sound retention ready"""
     word = script_word.lower()
-    # Random shuffle keys for anti-bot no same pattern
     keys = list(SFX_MAP.keys())
     random.shuffle(keys)
     for key in keys:
         if key in word:
             sfx_file = SFX_MAP[key]
-            # Try multiple possible paths
             for base in ["assets/sounds", "assets", "sounds", "output/assets"]:
                 sfx_path = Path(f"{base}/{sfx_file}")
                 if sfx_path.exists():
-                    print(f"[ASSET] SFX matched: {word} -> {sfx_path} + punch ready")
                     return str(sfx_path)
-            print(f"[ASSET] SFX not found locally: {sfx_file}, need download - will use punch fallback")
-            # Return placeholder with punch logic to be handled in video_generator
             return f"punch_{key}.mp3"
     return None
 
-def fetch_all_assets(topic: str, keywords: list):
-    """Main - sab assets + randomisation + no repeat"""
-    results = {"music": None, "images": [], "gifs": [], "sfx": [], "videos": []}
+def fetch_all_assets(topic: str, keywords: list = None, script_visual_segments: list = None):
+    results = {"music": None, "images": [], "gifs": [], "sfx": [], "videos": [], "segments": []}
     mood = get_mood_from_topic(topic)
     results["music"] = get_music(mood)
     
-    # Anti-bot: shuffle keywords so no same order
-    shuffled_kws = keywords[:]
-    random.shuffle(shuffled_kws)
-    
     used_urls=set()
-    for kw in shuffled_kws[:4]: # 4 for variation
-        # Image
-        img = get_pexels_image(kw)
-        if img and img not in used_urls:
-            results["images"].append(img)
-            used_urls.add(img)
-        # Video random (new for retention)
-        vids = get_pexels_video_random(kw, num=2)
-        results["videos"].extend(vids)
-        # GIF
-        gif = get_giphy_gif(kw)
-        if gif and gif not in used_urls:
-            results["gifs"].append(gif)
-            used_urls.add(gif)
-        # SFX per keyword
-        sfx = get_sfx_for_word(kw)
-        if sfx:
-            results["sfx"].append(sfx)
     
-    print(f"[ASSET] Done retention random: music={results['music']}, images={len(results['images'])}, gifs={len(results['gifs'])}, videos={len(results['videos'])}, sfx={results['sfx']}")
+    # NEW: If script_visual_segments provided (YouTube Search SEO + exact visual), use it directly
+    if script_visual_segments:
+        for idx, seg in enumerate(script_visual_segments[:8]):
+            prompt = seg.get('visual_search_prompt','').strip()
+            asset_type = seg.get('asset_type','video').lower()
+            if not prompt: continue
+            if asset_type == 'image':
+                img = get_duckduckgo_image(prompt)
+                if img and img not in used_urls:
+                    results["images"].append(img)
+                    results["segments"].append({"type":"image","path":img,"duration":1.0,"prompt":prompt,"segment_text":seg.get('segment_text','')})
+                    used_urls.add(img)
+            else:
+                clip = get_yt_dlp_clip(prompt)
+                if clip and clip not in used_urls:
+                    results["videos"].append(clip)
+                    results["segments"].append({"type":"video","path":clip,"duration":1.8,"prompt":prompt,"segment_text":seg.get('segment_text','')})
+                    used_urls.add(clip)
+            # SFX per segment
+            sfx = get_sfx_for_word(seg.get('segment_text',''))
+            if sfx:
+                results["sfx"].append(sfx)
+        print(f"[ASSET] Done visual_segments: images={len(results['images'])} 1.0s, videos={len(results['videos'])} 1.8s, sfx={results['sfx']}")
+        return results
+    
+    # Fallback: old keywords mode (DuckDuckGo + yt-dlp)
+    if keywords:
+        shuffled_kws = keywords[:]
+        random.shuffle(shuffled_kws)
+        for kw in shuffled_kws[:4]:
+            img = get_duckduckgo_image(kw)
+            if img and img not in used_urls:
+                results["images"].append(img)
+                used_urls.add(img)
+            clip = get_yt_dlp_clip(kw)
+            if clip and clip not in used_urls:
+                results["videos"].append(clip)
+                used_urls.add(clip)
+            sfx = get_sfx_for_word(kw)
+            if sfx:
+                results["sfx"].append(sfx)
+    
+    print(f"[ASSET] Done fallback: music={results['music']}, images={len(results['images'])} 1.0s, videos={len(results['videos'])} 1.8s, sfx={results['sfx']}")
     return results
 
 def add_asset_at_last(main_video: str, asset_path: str, final_output: str):
-    """Asset last me 1 sec + FFmpeg dedup + fps lock"""
     fps = random.choice(FPS_CHOICES)
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", main_video,
-        "-loop", "1", "-t", "1", "-i", asset_path,
-        "-filter_complex", f"[0:v][1:v]concat=n=2:v=1:a=0, {NOISE_HUE_FILTER} [v]",
-        "-map", "[v]", "-map", "0:a",
-        "-r", str(fps),
-        final_output
-    ]
+    # image 1.0s / video 1.8s handling
+    dur = 1.0 if asset_path.lower().endswith(('.jpg','.jpeg','.png')) else 1.8
+    if asset_path.lower().endswith(('.jpg','.jpeg','.png')):
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", main_video,
+            "-loop", "1", "-t", str(dur), "-i", asset_path,
+            "-filter_complex", f"[0:v][1:v]concat=n=2:v=1:a=0 [v]",
+            "-map", "[v]", "-map", "0:a",
+            "-r", str(fps),
+            final_output
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", main_video,
+            "-i", asset_path,
+            "-filter_complex", f"[0:v][1:v]concat=n=2:v=1:a=0 [v]",
+            "-map", "[v]", "-map", "0:a",
+            "-r", str(fps),
+            final_output
+        ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"[ASSET] Last me joda with dedup fps={fps}: {final_output}")
+    print(f"[ASSET] Last me joda {dur}s fps={fps}: {final_output}")
     return final_output
 
 if __name__ == "__main__":
-    fetch_all_assets("Tacko Fall signs 76ers leaked behind closed doors", ["76ers logo", "Tacko Fall", "celebration secret"])
+    # Test with visual segments
+    test_segments = [
+        {"segment_text": "Pentagon deployed cyber units", "asset_type": "video", "visual_search_prompt": "Pentagon building exterior daytime"},
+        {"segment_text": "Shocking decision leaked", "asset_type": "image", "visual_search_prompt": "shocked man reaction office"},
+    ]
+    fetch_all_assets("White House executive order", script_visual_segments=test_segments)

@@ -1,1 +1,33 @@
-
+import os
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "") or os.getenv("PIXABAY_KEY", "")
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "")
+YT_CLIENT_ID = os.getenv("YT_CLIENT_ID", "")
+YT_CLIENT_SECRET = os.getenv("YT_CLIENT_SECRET", "")
+YT_REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN", "")
+ENGLISH_COUNTRIES = ["US","UK","IN","CA","AU","PH","NG","PK","ZA","AE","SG","NZ","IE","MY","KE"]
+HALF_ENGLISH_COUNTRIES = ["IN","PH","NG","PK","AE","SG","MY","KE","ZA"]
+REUTERS_FEEDS = ["http://feeds.reuters.com/reuters/topNews","http://feeds.reuters.com/reuters/USNews","http://feeds.reuters.com/reuters/worldNews"]
+GOOGLE_NEWS_WIRE = ["https://news.google.com/rss/search?q=breaking+news+US+when:1h&hl=en-US&gl=US&ceid=US:en","https://news.google.com/rss/search?q=US+politics+when:1h&hl=en-US&gl=US&ceid=US:en","https://news.google.com/rss/search?q=world+breaking+when:1h&hl=en-US&gl=US&ceid=US:en"]
+MAINSTREAM_BLOCK = ["cnn.com","nytimes.com","washingtonpost.com","foxnews.com","msnbc.com","apnews.com","bbc.com"]
+FETCH_WINDOW_MINUTES = 45
+SHORTS_DURATION_MIN = 15
+SHORTS_DURATION_MAX = 40
+LONG_DURATION_MIN = 180
+LONG_DURATION_MAX = 240
+IMAGE_DURATION = 1.0
+CLIP_DURATION = 1.8
+WIDTH, HEIGHT = 1080, 1920
+WHITE_BAR_HEIGHT = 210
+BLACK_TOP = 150
+BLACK_BOTTOM = 200
+FPS_CHOICES = [29.97, 30, 59.94, 60]
+GOD_INSTRUCTION = "HAR LEG HAR CHEEZ KAHIN SE BHI BEST TARIKE SE USE KARE - Editor aur sabhi legs"
+WORLD_VIRAL_TAGS = ["world news","breaking news","viral news","global update","USA news","explained","today"]
+US_SEARCH_TRIGGERS = ["trump","biden","white house","supreme court","executive order","congress","senate","pentagon","fbi","doj","tariff","ban","election","border","leaked","shocking","breaking"]

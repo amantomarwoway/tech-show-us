@@ -363,3 +363,10 @@ US_SEARCH_TRIGGERS = WIRE_SERVICE_CONFIG.get("us_search_keywords", [])
 WORLD_VIRAL_TAGS = ["breakingnews","worldnews","viralnews","usanews","globalupdate","newsupdate","trending","explained","breaking news US","world news today","news explained"]
 ENGLISH_COUNTRIES = ["USA","UK","Canada","Australia","India","Philippines","South Africa","New Zealand","Ireland","Singapore"]
 GOD_INSTRUCTION = "HAR LEG HAR CHEEZ KAHIN SE BHI BEST TARIKE SE USE KARE - Editor aur sabhi legs"
+
+# ===== EDITOR_GOD COMPATIBILITY - Expected top-level constants =====
+IMAGE_DURATION = RETENTION_CONFIG.get("IMAGE_DURATION", 1.0)
+CLIP_DURATION = RETENTION_CONFIG.get("CLIP_DURATION", 1.8)
+WIDTH = VIDEO_W
+HEIGHT = VIDEO_H
+FPS_CHOICES = RETENTION_CONFIG.get("FPS_CHOICES", [29.97, 30, 59.94, 60])

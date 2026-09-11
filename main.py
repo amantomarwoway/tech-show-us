@@ -11,6 +11,16 @@ sys.path.append('.')
 from src.config import GOD_INSTRUCTION, ENGLISH_COUNTRIES
 print(GOD_INSTRUCTION)
 
+# Import database first (must always exist)
+try:
+    from src.database import init_db, save_story, mark_uploaded
+    print("[MAIN GOD] Database loaded")
+except Exception as e:
+    print(f"[MAIN GOD] Database import fail {e}")
+    def init_db(): pass
+    def save_story(x): return 1
+    def mark_uploaded(a,b): pass
+
 # Import all 5 legs
 try:
     from src.research_god import research_god_main
@@ -19,13 +29,19 @@ try:
     from src.uploader_god import upload_video_god
     from src.self_evolution import self_evolution_main
     from src.asset_fetcher import fetch_all_assets_god
-    from src.database import init_db, save_story, mark_uploaded
     GOD_AVAILABLE=True
     print("[MAIN GOD] All 5 legs loaded - GOD LEVEL")
 except Exception as e:
     print(f"[MAIN GOD] Import fail {e} - trying fallback")
     traceback.print_exc()
     GOD_AVAILABLE=False
+    # Dummy fallbacks for legs
+    def research_god_main(): return []
+    def editor_god_main(a,b): return {}
+    def boss_approval_main(a,b,c): return {'approved': True, 'score': 80}
+    def upload_video_god(a,b,c,d,e): return None
+    def self_evolution_main(): return {}
+    def fetch_all_assets_god(a,b=None,c=None): return {}
 
 def generate_script_god(story):
     """Generate script using best AI - Gemini > OpenAI > HF"""

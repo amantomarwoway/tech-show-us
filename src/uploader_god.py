@@ -6,7 +6,8 @@ def pro_headers():
     return {"User-Agent": random.choice(USER_AGENTS),"Cache-Control":"no-cache","X-Forwarded-For": f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(1,254)}"}
 
 def clean_id(text: str) -> str:
-    if not text: return ""
+    if not text:
+        return ""
     text = re.sub(r'/m/[a-z0-9]+', '', text, flags=re.I)
     text = re.sub(r'\b[mM][0-9][a-z0-9]+\b', '', text)
     text = re.sub(r'#m[0-9a-z]+', '', text, flags=re.I)
@@ -86,5 +87,11 @@ def upload_video(video_path, thumb_path, script_data, story):
             if attempt==9:
                 raise e
             time.sleep((2**attempt)+random.uniform(0,1))
-            def uploader_god_main(video_path, thumbnail_path, script_data, story_data, boss_data=None):
-    return upload_video_god(video_path, thumbnail_path, script_data, story_data, boss_data)
+
+def uploader_god_main(video_path, thumbnail_path, script_data, story_data, boss_data=None):
+    # FIXED: bahar nikala, proper indent, sahi naam call
+    return upload_video(video_path, thumbnail_path, script_data, story_data)
+
+# Alias for old main.py compatibility
+def upload_video_god(video_path, thumbnail_path, script_data, story_data, boss_data=None):
+    return upload_video(video_path, thumbnail_path, script_data, story_data)

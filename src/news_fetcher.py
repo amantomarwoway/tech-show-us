@@ -1,12 +1,10 @@
-# UPDATED JULY 2025 - GEMINI 3.6 FLASH LATEST + CHATGPT FALLBACK gpt-4o-mini - NO SAFE EXIT - NO FORCE PASS
-
 """
-news_fetcher.py - GUARANTEED BREAKOUT EVERY RUN - PURE BREAKOUT
-Bhai ko har baar breakout news hi chahiye - 0 nahi chalega
+news_fetcher.py - Wire + Google News fetcher (45 min filter) - EDITED MINIMAL
+Bhai ko har baar breakout news hi chahiye - Wire Service se
 """
-import time, random, re, json
-from pathlib import Path
-from datetime import datetime, timezone
+import time, re, feedparser
+from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def is_us_topic(text: str) -> bool:
     if not text: return False
@@ -24,74 +22,114 @@ def clean_id(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def fetch_all_news():
-    print("🔥 [NEWS_FETCHER] GUARANTEED BREAKOUT MODE - HAR BAAR MILEGA HI MILEGA")
-    print("   Politics trends hamesha naye laws/policies se - White House/Supreme Court/CNN")
-    all_news=[]
-    # Try breakout_detector
+REUTERS_FEEDS = [
+    "http://feeds.reuters.com/reuters/topNews",
+    "http://feeds.reuters.com/reuters/USNews",
+    "http://feeds.reuters.com/reuters/politicsNews"
+]
+
+GOOGLE_NEWS_FEEDS = [
+    "https://news.google.com/rss/search?q=breaking+news+US+when:1h&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=US+politics+OR+white+house+when:1h&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
+]
+
+MAINSTREAM_BLOCK = [
+    "cnn.com", "nytimes.com", "washingtonpost.com", "foxnews.com",
+    "msnbc.com", "abcnews.go.com", "cbsnews.com", "nbcnews.com",
+    "apnews.com", "bbc.com", "theguardian.com"
+]
+
+US_SEARCH_KEYWORDS = [
+    "trump", "biden", "white house", "supreme court", "executive order",
+    "congress", "senate", "pentagon", "fbi", "doj", "tariff", "ban",
+    "election", "border", "immigration", "breaking", "leaked", "shocking"
+]
+
+def is_mainstream_blocked(url: str) -> bool:
+    if not url: return False
+    low = url.lower()
+    return any(d in low for d in MAINSTREAM_BLOCK)
+
+def is_within_45min(entry) -> bool:
     try:
-        from breakout_detector import get_all_breakouts_any_topic
-        all_news = get_all_breakouts_any_topic()
-    except ImportError:
-        try:
-            from src.breakout_detector import get_all_breakouts_any_topic
-            all_news = get_all_breakouts_any_topic()
-        except Exception as e:
-            print(f"[NEWS_FETCHER] breakout_detector import fail {e} - trying visualping direct")
+        published = None
+        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+            published = datetime.fromtimestamp(time.mktime(entry.published_parsed), tz=timezone.utc)
+        elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+            published = datetime.fromtimestamp(time.mktime(entry.updated_parsed), tz=timezone.utc)
+        else:
+            return True
+        now = datetime.now(timezone.utc)
+        return (now - published) <= timedelta(minutes=45)
+    except:
+        return True
 
-    # If still 0, try visualping direct
-    if not all_news:
-        try:
-            from visualping_monitor import get_visualping_breakouts
-            all_news = get_visualping_breakouts()
-        except:
+def score_search_potential(title: str) -> int:
+    if not title: return 0
+    low = title.lower()
+    score = 0
+    for kw in US_SEARCH_KEYWORDS:
+        if kw in low:
+            score += 10
+    for qw in ["how", "what", "why", "update", "explained"]:
+        if qw in low:
+            score += 15
+    return score
+
+def fetch_feed(url: str):
+    try:
+        feed = feedparser.parse(url)
+        results = []
+        for entry in feed.entries[:10]:
+            if not is_within_45min(entry):
+                continue
+            title = clean_id(getattr(entry, 'title', ''))
+            if len(title) < 10: continue
+            link = getattr(entry, 'link', '')
+            if is_mainstream_blocked(link): continue
+            if not is_us_topic(title): continue
+            score = score_search_potential(title)
+            if score < 10: continue
+            results.append({
+                "title": title, "query": title, "url": link,
+                "source": "reuters_wire" if "reuters" in url else "google_news_wire",
+                "published": time.gmtime(), "summary": title,
+                "is_breakout": True, "breakout_score": 5000 + score,
+                "search_volume": min(95, 60 + score),
+                "search_potential_score": score,
+                "bot_friendly": True
+            })
+        return results
+    except:
+        return []
+
+def fetch_all_news():
+    all_news = []
+    all_feeds = REUTERS_FEEDS + GOOGLE_NEWS_FEEDS
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(fetch_feed, url): url for url in all_feeds}
+        for future in as_completed(futures):
             try:
-                from src.visualping_monitor import get_visualping_breakouts
-                all_news = get_visualping_breakouts()
-            except:
-                pass
-
-    # GUARANTEED - If still 0, CNN/Google RSS = breakout (har baar)
-    if not all_news:
-        print("⚠️ NO BREAKOUT YET - GUARANTEED CNN/Google RSS - HAR BAAR")
-        try:
-            import feedparser
-            for rss_url in ["https://rss.cnn.com/rss/cnn_brk.rss", "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"]:
-                feed = feedparser.parse(rss_url)
-                for entry in feed.entries[:3]:
-                    q=clean_id(entry.title)
-                    if len(q)<5: continue
-                    all_news.append({
-                        "title": q, "query": q, "url": entry.link,
-                        "source": "guaranteed_breakout_news_fetcher", "published": time.gmtime(),
-                        "summary": q, "is_breakout": True, "breakout_score": 6000,
-                        "search_volume": 95, "bot_friendly": True, "filter_c_score": 95, "bot_friendly_score": 95,
-                        "visualping_alert": f"GUARANTEED BREAKOUT - {q[:50]}"
-                    })
-                if all_news: break
-        except Exception as e:
-            print(f"[NEWS_FETCHER] Guaranteed RSS fail {e}")
-
-    # US ONLY filter
-    us_filtered = [n for n in all_news if is_us_topic(n.get("title","")+" "+n.get("query",""))]
+                data = future.result()
+                if data: all_news.extend(data)
+            except: continue
+    seen = set()
+    deduped = []
+    for item in all_news:
+        key = item['title'].lower().strip()
+        if key not in seen and len(key) > 5:
+            seen.add(key)
+            deduped.append(item)
+    deduped.sort(key=lambda x: x.get('search_potential_score', 0), reverse=True)
+    us_filtered = [n for n in deduped if is_us_topic(n.get("title","")+" "+n.get("query",""))]
     if us_filtered:
-        all_news = us_filtered
-        print(f"[NEWS_FETCHER] US FILTERED {len(all_news)}")
-
-    if all_news:
-        print(f"🔥🔥🔥 BREAKOUT FOUND {len(all_news)} - HAR BAAR MILEGA - VIDEO BANEGA HI BANEGA 🔥🔥🔥")
-        for i,b in enumerate(all_news[:3]):
-            print(f"   BREAKOUT {i+1}: {b.get('query')[:70]} | Score {b.get('breakout_score')} | {b.get('source')}")
-    else:
-        print("[BREAKOUT] Still 0 after all guaranteed attempts - should never happen")
-
-    return all_news
+        deduped = us_filtered
+    return deduped
 
 def fetch_news(limit_per_feed=15, max_total=60):
     news = fetch_all_news()
     filtered = [n for n in news if n.get('is_breakout')]
-    # HAR BAAR at least 1 to guarantee video
     if not filtered and news:
         filtered = news[:1]
-    print(f"[NEWS_FETCHER FINAL] Returning {len(filtered[:max_total])} GUARANTEED BREAKOUT - HAR BAAR")
     return filtered[:max_total]

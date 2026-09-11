@@ -1,4 +1,4 @@
-name: GOD LEVEL 5 BRAIN FINAL
+name: GOD LEVEL 5 BRAIN NO FALLBACK PIPER
 on:
   schedule:
     - cron: '0 */3 * * *'
@@ -10,21 +10,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
-          path: data/
-          key: god-5brain-${{ github.run_id }}
-          restore-keys: god-5brain-
+          path: |
+            data/
+            models/
+          key: god-piper-nofallback-${{ github.run_id }}
+          restore-keys: god-piper-nofallback-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update || true
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get install -y ffmpeg imagemagick espeak espeak-ng libespeak-ng-dev
       - run: |
           pip install --upgrade pip
           pip install Pillow==9.5.0
           pip install -r requirements.txt
-      - run: mkdir -p data output temp output/assets && touch src/__init__.py
+          python -c "from piper import PiperVoice; print('Piper OK NO FALLBACK')"
+      - run: mkdir -p data output temp models output/assets && touch src/__init__.py
       - env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -42,8 +45,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: god-output-${{ github.run_number }}
+          name: god-nofallback-${{ github.run_number }}
           path: |
             output/
             data/
+            models/
           if-no-files-found: ignore

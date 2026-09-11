@@ -1,1 +1,23 @@
-
+# GOD LEVEL REQUIREMENTS - All legs best use anything
+feedparser
+requests
+urllib3>=2.0.0
+google-genai>=1.0.0
+google-generativeai>=0.8.5
+openai>=1.0.0
+moviepy==1.0.3
+Pillow
+imageio-ffmpeg
+piper-tts
+faster-whisper
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+python-dateutil
+numpy
+beautifulsoup4
+duckduckgo_search
+yt-dlp
+huggingface_hub
+transformers

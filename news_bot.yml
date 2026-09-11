@@ -1,1 +1,74 @@
+name: GOD LEVEL BOT - 5 LEGS - World Viral
 
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Data
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: god-data-${{ github.run_id }}
+          restore-keys: |
+            god-data-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Deps
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update || true
+          sudo apt-get install -y imagemagick ffmpeg
+
+      - name: Install Python Deps - GOD LEVEL
+        run: |
+          pip install --upgrade pip
+          pip install Pillow==9.5.0
+          pip install -r requirements.txt
+
+      - name: Create dirs
+        run: mkdir -p data output temp && touch src/__init__.py
+
+      - name: Run GOD BOT - 5 LEGS
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
+        run: |
+          echo "GOD LEVEL BOT - 5 LEGS - Har leg best use karega kahin se bhi"
+          echo "Leg1 Research God - Wire 45min + World SEO"
+          echo "Leg2 Editor God - Best visuals DuckDuckGo + yt-dlp + Pexels + Pixabay + Unsplash + Giphy"
+          echo "Leg3 Boss Approval - Live world demand"
+          echo "Leg4 Uploader God - World viral upload"
+          echo "Leg5 Self Evolution - Khud seekhe"
+          python main.py
+
+      - name: Upload Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: god-output-${{ github.run_number }}
+          path: |
+            output/
+            data/
+            logs.txt
+          if-no-files-found: ignore

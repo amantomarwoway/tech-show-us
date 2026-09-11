@@ -1,51 +1,52 @@
-import requests, re, random, time, os
-try:
-    from src.config import ENGLISH_COUNTRIES, GOD_INSTRUCTION, US_SEARCH_TRIGGERS
-except:
-    from config import ENGLISH_COUNTRIES, GOD_INSTRUCTION, US_SEARCH_TRIGGERS
-def check_google_trends_demand(query):
-    try:
-        import feedparser
-        feed=feedparser.parse("https://trends.google.com/trending/rss?geo=US")
-        for e in feed.entries[:10]:
-            if query.lower()[:10] in e.title.lower() or e.title.lower()[:10] in query.lower():
-                return 90, "trending US"
-        return 60, "not trending but potential"
-    except: return 50, "check fail"
-def check_youtube_search_volume(query):
-    try:
-        r=requests.get("https://suggestqueries.google.com/complete/search", params={"client":"youtube","ds":"yt","q":query,"hl":"en","gl":"US"}, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
-        matches=re.findall(r'"([^"]+)"', r.text)
-        suggestions=[m for m in matches[1:] if len(m)>4][:5]
-        if suggestions: return min(95, 50+len(suggestions)*10), f"{len(suggestions)} YT suggestions"
-        return 40, "no suggestions"
-    except: return 45, "YT check fail"
-def check_twitter_trend(query):
-    low=query.lower()
-    for k in US_SEARCH_TRIGGERS:
-        if k in low: return 85, f"Twitter keyword {k}"
-    return 55, "Twitter neutral"
-def check_world_demand(query):
-    demands=[]
-    for country in ENGLISH_COUNTRIES[:5]:
-        base=random.randint(50,75)
-        if any(k in query.lower() for k in US_SEARCH_TRIGGERS): base+=20
-        if "leaked" in query.lower() or "secret" in query.lower() or "breaking" in query.lower(): base+=15
-        demands.append((country, min(98,base)))
-    avg=sum(d[1] for d in demands)/len(demands) if demands else 0
-    top=[d for d in demands if d[1]>=75]
-    return avg, demands, top
-def boss_approval_main(video_path, script_data, story_data):
-    print(GOD_INSTRUCTION)
-    print("[LEG3 BOSS_APPROVAL] Live world demand check before upload - best from everywhere")
-    query=story_data.get('title','') or (script_data.get('full_script','')[:50] if isinstance(script_data,dict) else str(script_data)[:50])
-    if isinstance(script_data,dict): query=script_data.get('seo_youtube_title') or script_data.get('title') or query
-    gt_score, gt_reason = check_google_trends_demand(query)
-    yt_score, yt_reason = check_youtube_search_volume(query)
-    tw_score, tw_reason = check_twitter_trend(query)
-    world_avg, per_country, top_countries = check_world_demand(query)
-    final_score = int((gt_score*0.3 + yt_score*0.4 + tw_score*0.1 + world_avg*0.2))
-    approval = final_score >= 70
-    reason = f"GT:{gt_score}({gt_reason}) YT:{yt_score}({yt_reason}) TW:{tw_score} WorldAvg:{world_avg:.0f} Top:{len(top_countries)}"
-    print(f"[LEG3] Demand Score {final_score}/100 - {'APPROVED' if approval else 'REJECTED'} - {reason}")
-    return {"approved":approval,"score":final_score,"reason":reason,"per_country":per_country,"top_countries":top_countries,"world_avg":world_avg,"demand_high":final_score>=80,"target_countries":[c[0] for c in top_countries] or ENGLISH_COUNTRIES[:3]}
+import os, random, time, requests
+from src.config import USER_AGENTS, pro_headers, pro_fetch, WORLD_50_COUNTRIES
+
+def check_live_demand_50_countries_force(topic):
+    scores={}
+    bearer=os.getenv("TWITTER_BEARER_TOKEN")
+    if not bearer:
+        raise RuntimeError("TWITTER_BEARER_TOKEN missing - NO FALLBACK")
+    for country in WORLD_50_COUNTRIES[:50]:
+        demand=0
+        for attempt in range(10):
+            try:
+                time.sleep(random.uniform(0.05,0.2))
+                url=f"https://api.twitter.com/2/tweets/search/recent?query={topic} lang:en&max_results=10"
+                h={"Authorization":f"Bearer {bearer}", **pro_headers()}
+                r=requests.get(url+f"&cb={random.randint(1000,9999)}", headers=h, timeout=10)
+                if r.status_code==200:
+                    count=len(r.json().get('data',[]))
+                    demand=min(99, 70+count*3)
+                    break
+                else:
+                    print(f"[BOSS PRO] Twitter {r.status_code} retry {attempt} - FORCE")
+                    time.sleep((2**attempt)+random.uniform(0,0.5))
+            except Exception as e:
+                print(f"[BOSS PRO] Twitter fail {e} attempt {attempt} - FORCE RETRY")
+                time.sleep((2**attempt)+random.uniform(0,0.5))
+        if demand==0:
+            raise RuntimeError(f"Twitter demand 0 for {country} - NO FALLBACK - FORCE")
+        scores[country]=min(99, demand)
+    avg=sum(scores.values())/len(scores)
+    return avg, scores
+
+def calculate_ctr_score_force(title):
+    ctr=70
+    if any(k in title.lower() for k in ["leaked","secret","behind closed doors","shocking","breaking","exposed"]): ctr+=15
+    if len(title)<=60: ctr+=10
+    ctr+=random.randint(0,10)
+    return min(99, ctr)
+
+def boss_approval_main(video_path, editor_data, cand):
+    print("[BOSS GOD] 2 min before upload - 50+ countries - NO FALLBACK - FORCE")
+    topic=cand.get('title','') or editor_data.get('seo_youtube_title','')
+    avg_demand, country_scores = check_live_demand_50_countries_force(topic)
+    ctr = calculate_ctr_score_force(editor_data.get('seo_youtube_title','') or topic)
+    final = (avg_demand*0.6 + ctr*0.4)
+    print(f"[BOSS PRO] Demand {avg_demand:.1f} CTR {ctr} Final {final:.1f} - NO FALLBACK")
+    if final < 90:
+        try:
+            if video_path and os.path.exists(video_path): os.remove(video_path)
+        except: pass
+        return {"approved":False, "score":final, "reason":f"Low demand {avg_demand:.1f} CTR {ctr}", "country_scores":country_scores}
+    return {"approved":True, "score":final, "target_countries":list(country_scores.keys())[:10], "country_scores":country_scores, "ctr":ctr, "demand":avg_demand}

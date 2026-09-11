@@ -1,19 +1,16 @@
-# GOD LEVEL REQUIREMENTS - FINAL RUNNER SAFE
 feedparser
 requests
-urllib3>=2.0.0
-google-generativeai>=0.8.5
-openai>=1.0.0
 moviepy==1.0.3
 Pillow
 imageio-ffmpeg
 gtts
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-python-dateutil
-numpy
+openai
+google-generativeai
 beautifulsoup4
 duckduckgo_search
 yt-dlp
+numpy
+python-dateutil
+google-api-python-client
+google-auth
+google-auth-oauthlib

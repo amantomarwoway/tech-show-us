@@ -45,66 +45,68 @@ def clean_script_no_trim(text: str) -> str:
     return text
 
 def get_best_free_clips_from_script(script_data, num=20):
-    key=os.getenv("PEXELS_API_KEY")
     clips=[]
-    if isinstance(script_data, dict):
-        pexels_query = script_data.get('pexels_query', '')
-    else:
-        pexels_query = str(script_data)[:50]
-    search_q = pexels_query or "shocked man reaction"
-    if not key:
-        return [ColorClip(size=(WIDTH,HEIGHT), color=(30,20,40), duration=CLIP_DENSITY) for _ in range(num)]
-    try:
-        h={"Authorization":key}
-        q_clean = clean_id(search_q)
-        words_found = [w for w in re.findall(r'\w+', q_clean) if len(w)>2][:3]
-        sq_final = " ".join(words_found) if words_found else "shocked man reaction"
-        url=f"https://api.pexels.com/videos/search?query={sq_final}&per_page={num*2}&orientation=portrait&size=medium"
-        res=requests.get(url,headers=h,timeout=20).json()
-        videos=res.get('videos',[])
-        random.shuffle(videos)
-        for v in videos[:num*2]:
-            if len(clips)>=num: break
-            try:
-                video_files = sorted(v['video_files'], key=lambda x: x['width'])
-                link = video_files[-1]['link'] if video_files else None
-                if not link: continue
-                r = requests.get(link, timeout=30, stream=True)
-                if r.status_code != 200: continue
-                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-                tmp_path = tmp_file.name; tmp_file.close()
-                with open(tmp_path, 'wb') as f:
-                    for chunk in r.iter_content(8192):
-                        if chunk: f.write(chunk)
-                if os.path.getsize(tmp_path) < 50000: os.remove(tmp_path); continue
+    if isinstance(script_data, dict) and script_data.get('script_visual_segments'):
+        segments = script_data['script_visual_segments']
+        for idx, seg in enumerate(segments):
+            prompt = seg.get('visual_search_prompt', '').strip()
+            asset_type = seg.get('asset_type', 'video').lower()
+            if not prompt: continue
+            if asset_type == 'image':
                 try:
-                    video_clip = VideoFileClip(tmp_path)
-                    if video_clip.duration < 0.5: video_clip.close(); os.remove(tmp_path); continue
-                    final_clip = video_clip.subclip(0, min(2, video_clip.duration)).resize(height=1920).set_position('center').without_audio()
-                    clips.append(final_clip)
-                except:
-                    try: os.remove(tmp_path)
-                    except: pass
-                    continue
-            except: continue
+                    from duckduckgo_search import DDGS
+                    with DDGS() as ddgs:
+                        results = list(ddgs.images(prompt, max_results=2))
+                        if results:
+                            img_url = results[0].get('image') or results[0].get('thumbnail')
+                            if img_url:
+                                r = requests.get(img_url, timeout=15, headers={"User-Agent":"Mozilla/5.0"})
+                                if r.status_code == 200:
+                                    os.makedirs("temp", exist_ok=True)
+                                    path = f"temp/img_{idx}_{random.randint(1000,9999)}.jpg"
+                                    with open(path, 'wb') as f:
+                                        f.write(r.content)
+                                    try:
+                                        clip = ImageClip(path).set_duration(1.0)
+                                        clip = clip.resize(height=1920).set_position('center')
+                                        clips.append(clip)
+                                        continue
+                                    except: pass
+                except: pass
+                clips.append(ColorClip(size=(WIDTH,HEIGHT), color=(20,20,20), duration=1.0))
+            else:
+                try:
+                    import yt_dlp, glob
+                    os.makedirs("temp", exist_ok=True)
+                    out_tmpl = f"temp/clip_{idx}_%(id)s.%(ext)s"
+                    ydl_opts = {
+                        'format': 'best[height<=720][ext=mp4]/best[height<=720]/best',
+                        'outtmpl': out_tmpl,
+                        'quiet': True,
+                        'no_warnings': True,
+                        'noplaylist': True,
+                    }
+                    query = f"ytsearch3:{prompt}"
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.extract_info(query, download=True)
+                    files = glob.glob(f"temp/clip_{idx}_*.*")
+                    if files:
+                        vpath = files[0]
+                        try:
+                            vc = VideoFileClip(vpath)
+                            dur = min(1.8, vc.duration)
+                            if dur >= 0.5:
+                                cut = vc.subclip(0, dur).resize(height=1920).set_position('center').without_audio()
+                                cut = cut.set_duration(1.8)
+                                clips.append(cut)
+                                continue
+                        except:
+                            try: vc.close()
+                            except: pass
+                except: pass
+                clips.append(ColorClip(size=(WIDTH,HEIGHT), color=(30,20,40), duration=1.8))
         if clips:
-            random.shuffle(clips)
-            final_cuts=[]
-            for c in clips:
-                try:
-                    d = CLIP_DENSITY
-                    if hasattr(c, 'duration') and c.duration > d:
-                        start = random.uniform(0, max(0, c.duration-d-0.2))
-                        cut = c.subclip(start, start+d)
-                    else:
-                        cut = c.subclip(0, min(d, c.duration)) if hasattr(c, 'subclip') else c
-                    cut = cut.set_duration(d)
-                    final_cuts.append(cut)
-                except:
-                    final_cuts.append(c)
-            return final_cuts[:num]
-    except Exception as e:
-        print(f"Pexels error: {e}")
+            return clips
     return [ColorClip(size=(WIDTH,HEIGHT), color=(30,20,40), duration=CLIP_DENSITY) for _ in range(num)]
 
 def make_74k_white_bar_FINAL(text, bar_height=210):

@@ -1,0 +1,61 @@
+name: GOD LEVEL BOT - REAL AEROPLANE - RETENTION POWER
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Data
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: god-data-v1-${{ hashFiles('data/**') }}
+          restore-keys: |
+            god-data-v1-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Deps - Only FFmpeg
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update || true
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Deps - FIXED
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create dirs for detailed video
+        run: mkdir -p data output temp models && touch src/__init__.py
+
+      - name: Run GOD BOT - REAL AEROPLANE - Retention + Comment + Subscribe + End Tak
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PYTHONPATH: src:.
+        run: |
+          echo "REAL AEROPLANE - Retention Power - Comment + Subscribe + End Tak Rokne Ki Takat"
+          python main.py
+
+      - name: Upload Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: god-output-${{ github.run_number }}
+          path: |
+            output/
+            data/
+          if-no-files-found: ignore

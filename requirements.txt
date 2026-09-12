@@ -1,0 +1,22 @@
+# GOD LEVEL - REAL AEROPLANE - RETENTION POWER - FINAL DETAILED - GitHub Ready
+# Ye requirements 100% run karega - gtts hata diya, piper-tts add kiya
+
+requests
+urllib3<2.0.0
+feedparser
+google-generativeai>=0.8.5
+openai>=1.0.0
+moviepy>=1.0.3
+Pillow
+imageio-ffmpeg
+piper-tts>=1.2.0
+pytrends>=4.9.2
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+python-dateutil
+numpy
+beautifulsoup4
+duckduckgo_search
+yt-dlp

@@ -1,5 +1,4 @@
-name: GOD LEVEL BOT - REAL AEROPLANE - RETENTION POWER
-
+name: GOD LEVEL BOT - 5 LEGS - World Viral
 on:
   schedule:
     - cron: '0 */3 * * *'
@@ -10,34 +9,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Cache Data
         uses: actions/cache@v4
         with:
           path: data/
-          key: god-data-v1-${{ hashFiles('data/**') }}
-          restore-keys: |
-            god-data-v1-
-
+          key: god-data-${{ github.run_id }}
+          restore-keys: god-data-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install System Deps - Only FFmpeg
+      - name: Install System Deps
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update || true
-          sudo apt-get install -y ffmpeg
-
+          sudo apt-get install -y imagemagick ffmpeg
+          ffmpeg -version
       - name: Install Python Deps - FIXED
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Create dirs for detailed video
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+          python -c "from moviepy.editor import VideoFileClip; print('moviepy.editor OK')"
+      - name: Create dirs
         run: mkdir -p data output temp models && touch src/__init__.py
-
-      - name: Run GOD BOT - REAL AEROPLANE - Retention + Comment + Subscribe + End Tak
+      - name: Run GOD BOT
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -45,11 +39,11 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          PYTHONPATH: src:.
-        run: |
-          echo "REAL AEROPLANE - Retention Power - Comment + Subscribe + End Tak Rokne Ki Takat"
-          python main.py
-
+          PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
+        run: python main.py
+      - name: Debug Output
+        if: always()
+        run: ls -lh output/ data/ || true
       - name: Upload Artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,4 +52,5 @@ jobs:
           path: |
             output/
             data/
+            logs.txt
           if-no-files-found: ignore

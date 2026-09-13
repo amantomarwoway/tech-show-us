@@ -1,8 +1,8 @@
 """
-fact_checker.py - REAL AEROPLANE - DETAILED FIXED - NO GLOBAL PATCH - 2 of 3 PASS
-Guaranteed sources + safe pytrends + lenient pass for high score
+fact_checker.py - MUCKSCRAPER + OLLAMA - REAL AEROPLANE - NO GLOBAL PATCH - 2 of 3 PASS
+MuckScraper live sources + Ollama local fact check - 100% free
 """
-import re, time
+import re, time, os, requests
 
 def clean_id(text: str) -> str:
     if not text: return ""
@@ -12,8 +12,17 @@ def clean_id(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-# GUARANTEED sources jo news_fetcher actually deta hai - detailed
+# UPDATED: MuckScraper sources added + old guaranteed kept
 TOP_REAL_SOURCES = [
+    # MuckScraper new sources - 100% free live
+    "muckscraper_reuters_live",
+    "muckscraper_cnn_live",
+    "muckscraper_bbc_world",
+    "muckscraper_ap_live",
+    "muckscraper_guaranteed_ollama",
+    "muckscraper_reuters_live_html",
+    "muckscraper_cnn_live_html",
+    # Old guaranteed sources - fallback
     "google_trends_breakout",
     "google_trends_trending_now",
     "cnn_breaking",
@@ -33,11 +42,32 @@ VIRAL_KEYWORDS_REAL = [
     "trump", "biden", "fbi", "doj", "federal court", "election", "tariff", "trade war", "ban"
 ]
 
+def check_with_ollama_fact_check(query, topic):
+    """MuckScraper style - Ollama se fact check, 100% free"""
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    prompt = f"Is this news real breaking viral news? Topic: {topic} Query: {query}. Answer YES/NO and give reason in 10 words. Check if it has breaking, white house, trump, biden, tariff, shocking keywords and is recent."
+
+    try:
+        resp = requests.post(ollama_url, json={
+            "model": model,
+            "prompt": prompt,
+            "stream": False
+        }, timeout=8)
+        if resp.status_code == 200:
+            ans = resp.json().get("response", "").lower()
+            if "yes" in ans[:20]:
+                return True, f"Ollama YES: {ans[:60]}"
+            else:
+                return False, f"Ollama NO: {ans[:60]}"
+    except Exception as e:
+        print(f" [OLLAMA FACT CHECK] Not running {e} - fallback to pytrends")
+    return None, "Ollama not available"
+
 def check_google_trends_real_breakout(query, geo="US"):
-    """Safe Google Trends check - NO global patch"""
+    """Safe Google Trends check - NO global patch - MuckScraper fallback"""
     try:
         from pytrends.request import TrendReq
-        # Safe init - no monkey patch
         try:
             pytrends = TrendReq(hl='en-US', tz=360, timeout=10, retries=1)
         except TypeError:
@@ -46,7 +76,6 @@ def check_google_trends_real_breakout(query, geo="US"):
         pytrends.build_payload([query[:50]], timeframe='now 4-H', geo=geo)
         time.sleep(1)
 
-        # Check related queries for breakout
         try:
             related = pytrends.related_queries()
             if query[:50] in related:
@@ -57,7 +86,6 @@ def check_google_trends_real_breakout(query, geo="US"):
                             return True, f"Breakout {geo}: {row['query']}"
         except: pass
 
-        # Check interest spike
         try:
             data = pytrends.interest_over_time()
             if not data.empty and query[:50] in data.columns:
@@ -70,14 +98,13 @@ def check_google_trends_real_breakout(query, geo="US"):
     except Exception as e:
         err=str(e)
         if "429" in err: return False, f"429 blocked {geo}"
-        # Lenient pass if pytrends fails but query has high potential - detailed video ke liye
         if "method_whitelist" in err or "Retry" in err or "TrendReq" in err:
-            print(f" [REAL] {geo} pytrends bug - lenient pass for detailed")
+            print(f" [REAL] {geo} pytrends bug - lenient pass for MuckScraper")
             return True, f"Lenient pass {geo} - {err[:30]}"
         return False, f"Error {err[:50]}"
 
 def fact_check(full_script, approved_topic=None):
-    """DETAILED FACT CHECK - 2 of 3 PASS = VIDEO BANEGI"""
+    """DETAILED FACT CHECK - MUCKSCRAPER + OLLAMA - 2 of 3 PASS = VIDEO BANEGI"""
     try:
         if isinstance(approved_topic, dict):
             topic = approved_topic.get('title') or approved_topic.get('query') or ""
@@ -96,7 +123,7 @@ def fact_check(full_script, approved_topic=None):
         if len(topic) < 5 or len(query) < 3:
             return {"passed": False, "report": "Empty topic - cancel"}
 
-        print(f"\n🔍 [FACT CHECKER - DETAILED - REAL AEROPLANE]")
+        print(f"\n🔍 [FACT CHECKER - MUCKSCRAPER + OLLAMA]")
         print(f"Topic: {topic[:100]}")
         print(f"Query: {query}")
         print(f"Source: {source} | Score: {breakout_score} | Breakout: {is_breakout} | Vol: {search_volume}")
@@ -104,15 +131,16 @@ def fact_check(full_script, approved_topic=None):
         def check_1_real_top_source():
             sl=source.lower()
             is_top=any(t in sl for t in TOP_REAL_SOURCES)
-            # High score + top source = PASS
+            # MuckScraper source + high score = instant PASS
+            if "muckscraper" in sl and is_breakout and breakout_score>=5500:
+                print(f" [CHECK-1 MUCKSCRAPER] ✅ PASS - {breakout_score} from {source}")
+                return True, f"MUCKSCRAPER {source} Score {breakout_score}"
             if is_breakout and breakout_score>=5000 and is_top:
                 print(f" [CHECK-1 TOP SOURCE] ✅ PASS - {breakout_score} from {source}")
                 return True, f"TOP SOURCE {source} Score {breakout_score}"
-            # Medium score + high vol + top = PASS
             if is_breakout and breakout_score>=4000 and is_top and search_volume>=80:
                 return True, f"TOP {source} {breakout_score} vol {search_volume}"
-            # Guaranteed keyword + high score = PASS (detailed)
-            if is_breakout and breakout_score>=5500 and ("guaranteed" in sl or "google" in sl or "cnn" in sl or "breakout" in sl):
+            if is_breakout and breakout_score>=5500 and ("guaranteed" in sl or "google" in sl or "cnn" in sl or "breakout" in sl or "muckscraper" in sl):
                 print(f" [CHECK-1 GUARANTEED] ✅ PASS - {breakout_score} + {source}")
                 return True, f"GUARANTEED {source} {breakout_score}"
             return False, f"Not top source {source} {breakout_score}"
@@ -124,22 +152,34 @@ def fact_check(full_script, approved_topic=None):
                 return False, f"No viral kw - {found}"
             if len(query)<8 or breakout_score<2500:
                 return False, f"Low score {breakout_score} or short query"
+
+            # FIRST try Ollama fact check - MuckScraper style 100% free
+            ollama_res, ollama_msg = check_with_ollama_fact_check(query, topic)
+            if ollama_res is not None:
+                if ollama_res:
+                    print(f" [CHECK-2 OLLAMA VIRAL] ✅ PASS - {ollama_msg} kw {found}")
+                    return True, f"OLLAMA VIRAL {ollama_msg} kw {found}"
+                else:
+                    print(f" [CHECK-2 OLLAMA] ❌ FAIL - {ollama_msg}")
+
+            # Fallback to Google Trends
             us_pass, us_rep = check_google_trends_real_breakout(query, "US")
             if us_pass:
                 print(f" [CHECK-2 US VIRAL] ✅ PASS - {us_rep} kw {found}")
                 return True, f"US VIRAL {us_rep} kw {found}"
-            # Lenient for detailed - high score + viral kw
+
+            # Lenient for MuckScraper - high score + viral kw
             if found and breakout_score>=4500 and search_volume>=80:
                 print(f" [CHECK-2 LENIENT] ✅ PASS - kw {found} + {breakout_score}")
                 return True, f"Lenient kw {found} {breakout_score} vol {search_volume}"
-            return False, f"No US breakout {us_rep}"
+            return False, f"No US breakout {us_rep} | Ollama {ollama_msg}"
 
         def check_3_real_lakho_search():
             if not is_breakout:
                 return False, f"Not breakout flag"
-            if breakout_score<3500: # Lowered for detailed
+            if breakout_score<3500:
                 return False, f"Score {breakout_score}<3500"
-            if search_volume<60: # Lowered for detailed
+            if search_volume<60:
                 return False, f"Vol {search_volume}<60"
             est=breakout_score*180
             print(f" [CHECK-3 LAKHO] ✅ PASS - {breakout_score} = {est:,} searches")
@@ -149,16 +189,15 @@ def fact_check(full_script, approved_topic=None):
         c2,c2r=check_2_real_english_viral()
         c3,c3r=check_3_real_lakho_search()
 
-        print(f"\n🔍 [RESULT - DETAILED]")
+        print(f"\n🔍 [RESULT - MUCKSCRAPER + OLLAMA]")
         print(f" 1) Top Source: {'✅ PASS' if c1 else '❌ FAIL'} - {c1r}")
         print(f" 2) English Viral: {'✅ PASS' if c2 else '❌ FAIL'} - {c2r}")
         print(f" 3) Lakho Search: {'✅ PASS' if c3 else '❌ FAIL'} - {c3r}")
 
-        # 2 of 3 PASS = VIDEO BANEGI - detailed ke liye easy kiya
         pc=sum([c1,c2,c3])
         if pc>=2:
-            print(f" => ✅✅ FINAL PASS - {pc}/3 - DETAILED VIDEO BANEGI")
-            return {"passed": True, "report": f"REAL VIRAL {pc}/3 PASS | {c1r} | {c2r} | {c3r}"}
+            print(f" => ✅✅ FINAL PASS - {pc}/3 - MUCKSCRAPER VIDEO BANEGI")
+            return {"passed": True, "report": f"MUCKSCRAPER VIRAL {pc}/3 PASS | {c1r} | {c2r} | {c3r}"}
         else:
             print(f" => ❌ FINAL FAIL - {pc}/3 - Topic cancel, naya try")
             return {"passed": False, "report": f"NOT VIRAL FAIL {pc}/3 | {c1r} | {c2r} | {c3r}"}

@@ -50,8 +50,15 @@ jobs:
           python -c "import ollama; print('Ollama pip OK - Hook/Retain/Reward ready')" || echo "Ollama pip not installed, using requests fallback"
           python -c "from gtts import gTTS; print('gTTS OK - VUZA offline TTS ready')"
 
-      - name: Create dirs - VUZA OFFLINE
-        run: mkdir -p data output temp models && touch src/__init__.py && echo "Dirs ready for VUZA offline"
+      - name: Create dirs - VUZA OFFLINE + TOKEN_JSON
+        run: |
+          mkdir -p data output temp models && touch src/__init__.py
+          echo "$TOKEN_JSON" > token.json || echo '{}' > token.json
+          echo "$TOKEN_JSON" > data/token.json || true
+          ls -lh token.json || true
+          echo "Dirs ready for VUZA offline + TOKEN_JSON ready for upload"
+        env:
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
 
       - name: Run GOD BOT - MUCKSCRAPER + HOOK/RETAIN/REWARD + VUZA OFFLINE - 100% FREE
         env:
@@ -59,6 +66,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OLLAMA_MODEL: llama3.1:8b
           OLLAMA_URL: http://localhost:11434/api/generate
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
@@ -69,7 +77,7 @@ jobs:
           echo "Leg2 Script God - Automated-Shorts-Generator Hook/Retain/Reward - Ollama first, Gemini fallback"
           echo "Leg3 Editor God - VUZA / Open Montage offline - ColorClip + local assets, no paid API needed"
           echo "Leg4 Boss Approval - MuckScraper viral score + Ollama fact check - 2 of 3 PASS"
-          echo "Leg5 Uploader God - World viral upload - 11-15 sec retention power 1.6X"
+          echo "Leg5 Uploader God - World viral upload - 11-15 sec retention power 1.6X - TOKEN_JSON FIXED"
           python main.py
 
       - name: Upload Artifact - VUZA OFFLINE

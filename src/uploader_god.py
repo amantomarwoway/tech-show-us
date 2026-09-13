@@ -22,9 +22,7 @@ def get_youtube_service():
             client_id=client_id,
             client_secret=client_secret,
             scopes=[
-                "https://www.googleapis.com/auth/youtube.upload",
-                "https://www.googleapis.com/auth/youtube",
-                "https://www.googleapis.com/auth/youtube.force-ssl"
+                "https://www.googleapis.com/auth/youtube.upload"
             ]
         )
 
@@ -135,7 +133,7 @@ Source: {candidate.get('url','') or 'MuckScraper live'}
     if hook: extra_tags.append(clean_hook_tag(hook))
     extra_tags.extend(["vuza offline free", "ollama ai", "open montage"])
 
-    tags = list(dict.fromkeys(tags + extra_tags))[:15] # Unique + limit 15
+    tags = list(dict.fromkeys(tags + extra_tags))[:15]
 
     # Ensure video exists - VUZA offline fallback
     if not os.path.exists(video_path):
@@ -187,7 +185,6 @@ Source: {candidate.get('url','') or 'MuckScraper live'}
         youtube_id=response.get('id','')
         print(f"[UPLOADER] ✅ UPLOADED https://youtu.be/{youtube_id} - MUCKSCRAPER + HOOK/RETAIN/REWARD + VUZA OFFLINE - detailed viral")
 
-        # Thumbnail upload - detailed - VUZA
         if thumb_path and os.path.exists(thumb_path) and youtube_id:
             try:
                 service.thumbnails().set(videoId=youtube_id, media_body=MediaFileUpload(thumb_path, mimetype='image/jpeg')).execute()
@@ -195,7 +192,6 @@ Source: {candidate.get('url','') or 'MuckScraper live'}
             except Exception as e:
                 print(f"[UPLOADER] Thumb fail {e} - VUZA")
 
-        # Comment + Subscribe bait - Hook/Retain/Reward style
         try:
             comment_text = f"🚨 {hook[:60] if hook else 'Shocking leak'} - Do you think this is fair? Comment below - Should this be allowed? {reward[:40] if reward else 'This affects you!'} Subscribe before this gets deleted! 🔔 Source: {muckscraper_source or 'MuckScraper live'}"
             service.commentThreads().insert(

@@ -169,9 +169,6 @@ def main():
 
     print("\n--- LEG 1: RESEARCH GOD - MUCKSCRAPER + OLLAMA ---")
     stories = research_god_main()
-    if not stories:
-        print("[MAIN GOD] No stories - exit")
-        return
     print(f"[MAIN] Leg1 MuckScraper got {len(stories)} stories")
 
     approved=None
@@ -202,10 +199,6 @@ def main():
         print(f"[MAIN] APPROVED by Boss Score {boss_data.get('score')}")
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
-
-    if not approved:
-        print("[MAIN GOD] All candidates rejected by Boss - SAFE EXIT")
-        return
 
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved
 

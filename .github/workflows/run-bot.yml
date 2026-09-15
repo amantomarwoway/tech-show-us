@@ -1,0 +1,54 @@
+name: GOD LEVEL BOT - 5 LEGS
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache Data
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/
+            models/
+          key: god-data-${{ github.run_id }}
+          restore-keys: god-data-
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install System Deps
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y imagemagick ffmpeg
+          ffmpeg -version
+      
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+      
+      - name: Create Directories
+        run: |
+          mkdir -p data output temp models logs
+          mkdir -p output/videos output/thumbnails
+          touch src/__init__.py
+          touch src/collectors/__init__.py
+          touch src/intelligence/__init__.py
+          touch src/verification/__init__.py
+          touch src/writing/__init__.py
+          touch src/media/__init__.py
+          touch src/youtube/__init__.py
+          touch src/safety/__init__.py
+          touch src/learning/__init__.py
+          touch src/utils/__init__.py
+      

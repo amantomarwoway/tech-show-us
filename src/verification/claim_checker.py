@@ -75,7 +75,7 @@ def fact_check(full_script, approved_topic=None):
         c2_pass = any(kw in topic_lower for kw in viral_keywords) and breakout_score >= 2500
         
         # Check 3: Volume threshold
-        c3_pass = breakout_score >= 3500 and search_volume >= 60
+        c3_pass = breakout_score >= 2500 and search_volume >= 50
         
         # Count passes
         pass_count = sum([c1_pass, c2_pass, c3_pass])

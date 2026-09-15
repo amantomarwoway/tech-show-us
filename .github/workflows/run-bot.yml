@@ -2,16 +2,17 @@ name: GOD LEVEL BOT - 5 LEGS
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 60
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Cache Data
         uses: actions/cache@v4
         with:
@@ -20,23 +21,24 @@ jobs:
             models/
           key: god-data-${{ github.run_id }}
           restore-keys: god-data-
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install System Deps
         run: |
           sudo apt-get update || true
-          sudo apt-get install -y imagemagick ffmpeg
+          sudo apt-get install -y imagemagick ffmpeg fonts-dejavu fonts-liberation
           ffmpeg -version
-      
+          fc-list | head -20
+
       - name: Install Python Deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install --no-cache-dir -r requirements.txt
-      
+
       - name: Create Directories
         run: |
           mkdir -p data output temp models logs
@@ -51,4 +53,42 @@ jobs:
           touch src/safety/__init__.py
           touch src/learning/__init__.py
           touch src/utils/__init__.py
-      
+
+      - name: Run GOD BOT
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          UNSPLASH_API_KEY: ${{ secrets.UNSPLASH_API_KEY }}
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL: llama3.1:8b
+          PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
+          LOG_LEVEL: INFO
+        run: python main.py
+
+      - name: Debug Output
+        if: always()
+        run: |
+          echo "=== OUTPUT ==="
+          ls -lh output/ || true
+          echo "=== DATA ==="
+          ls -lh data/ || true
+          echo "=== LOGS ==="
+          tail -100 logs/bot.log || true
+
+      - name: Upload Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: god-output-${{ github.run_number }}
+          path: |
+            output/
+            data/
+            logs/
+          if-no-files-found: ignore
+          retention-days: 7

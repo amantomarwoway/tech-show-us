@@ -60,8 +60,8 @@ FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
 # 8K Resolution
-UPSCALE_WIDTH = 7680
-UPSCALE_HEIGHT = 4320
+UPSCALE_WIDTH = 4320
+UPSCALE_HEIGHT = 7680
 
 
 def load_font(path, size):

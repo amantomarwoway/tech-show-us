@@ -1,5 +1,41 @@
 """
 src/media/video_builder.py - BULLETPROOF video creation
+"""
+
+import os
+import random
+import wave
+import subprocess
+import tempfile
+import glob
+
+# 🚨 CRITICAL FIX: Pillow 10+ compatibility for MoviePy 1.0.3
+from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
+if not hasattr(Image, 'BICUBIC'):
+    Image.BICUBIC = Image.Resampling.BICUBIC
+if not hasattr(Image, 'BILINEAR'):
+    Image.BILINEAR = Image.Resampling.BILINEAR
+if not hasattr(Image, 'NEAREST'):
+    Image.NEAREST = Image.Resampling.NEAREST
+
+# HARD CHECK: MoviePy 1.x
+try:
+    from moviepy.editor import (
+        VideoFileClip, AudioFileClip, ImageClip, ColorClip,
+        CompositeVideoClip, CompositeAudioClip
+    )
+    import moviepy.video.fx.all as vfx
+    import moviepy.audio.fx.all as afx
+    print("[VIDEO_BUILDER] ✅ MoviePy 1.x loaded")
+except ImportError as e:
+    print(f"[VIDEO_BUILDER] ❌ MoviePy 1.x REQUIRED: {e}")
+    raise
+
+# ... rest of code
+"""
+src/media/video_builder.py - BULLETPROOF video creation
 MoviePy 1.0.3 ONLY - Script-based visuals + guaranteed output
 """
 

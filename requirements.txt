@@ -20,7 +20,7 @@ piper-tts>=1.2.0
 
 # Video - PIN TO 1.0.3 (moviepy.editor ONLY exists in 1.x)
 moviepy==1.0.3
-Pillow>=10.0.0,<11.0.0
+Pillow==10.3.0
 numpy>=1.24.0,<2.0.0
 imageio>=2.31.0
 imageio-ffmpeg>=0.4.9

@@ -26,6 +26,83 @@ logger = setup_logger(__name__)
 # LAZY IMPORTS - Fail gracefully
 # ============================================================
 
+def main():
+    logger.info("=" * 60)
+    logger.info("GOD LEVEL BOT START - 5 LEGS")
+    logger.info("=" * 60)
+    
+    init_db()
+    
+    stories = research_god_main()
+    if not stories:
+        logger.error("No stories found - exiting")
+        return
+    
+    logger.info(f"Got {len(stories)} candidate stories")
+    
+    approved = None
+    best_rejected = None  # Track best rejected
+    
+    for i, candidate in enumerate(stories[:5]):
+        logger.info(f"\nCANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
+        
+        script_data = generate_script_god(candidate)
+        
+        if script_data.get('confidence_score', 0) < 60:
+            logger.warning(f"Low confidence: {script_data.get('confidence_score')}")
+            continue
+        
+        # Fact check
+        fact_checker = safe_import('src.verification.claim_checker', 'fact_check')
+        if fact_checker:
+            fact_result = fact_checker(script_data.get('short_script', ''), candidate)
+            if not fact_result.get('passed', False):
+                logger.warning(f"Fact check failed: {fact_result.get('report', '')}")
+                continue
+        
+        editor_data = editor_god_main(script_data, candidate)
+        full_story = {**candidate, **script_data}
+        story_id = save_story(full_story)
+        video_path = create_video_god(script_data, editor_data)
+        
+        boss_data = boss_approval_main(video_path, script_data, full_story)
+        
+        # Track best rejected
+        if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
+            best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)
+        
+        if not boss_data.get('approved'):
+            logger.warning(f"REJECTED: {boss_data.get('reason')}")
+            continue
+        
+        approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
+        break
+    
+    # FALLBACK: If all rejected, use best rejected (safety net)
+    if not approved and best_rejected:
+        score = best_rejected[3].get('score', 0)
+        if score >= 65:  # Lower threshold for fallback
+            logger.warning(f"⚠️ All rejected - using best rejected (score {score:.1f})")
+            approved = best_rejected
+    
+    if not approved:
+        logger.error("All candidates rejected - SAFE EXIT")
+        return
+    
+    candidate, script_data, editor_data, boss_data, story_id, video_path = approved
+    
+    # Thumbnail
+    thumbnail_path = create_thumbnail(candidate, script_data)
+    
+    # Upload
+    video_id = uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data)
+    
+    if video_id:
+        mark_uploaded(story_id, video_id)
+        logger.info(f"UPLOADED: https://youtu.be/{video_id}")
+    
+    self_evolution_main()
+
 def safe_import(module_path, function_name=None):
     """Safely import a module/function with fallback"""
     try:

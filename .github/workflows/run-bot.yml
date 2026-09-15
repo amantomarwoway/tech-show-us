@@ -27,18 +27,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Deps (with emoji fonts)
+      - name: Install System Deps (EMOJI + FONTS)
         run: |
           sudo apt-get update || true
           sudo apt-get install -y \
             imagemagick ffmpeg \
-            fonts-dejavu fonts-liberation \
+            fonts-dejavu fonts-dejavu-extra fonts-liberation \
             fonts-noto-color-emoji \
-            fonts-noto-core
+            fonts-noto-core \
+            fonts-symbola
           fc-cache -f -v
-          echo "=== Emoji fonts check ==="
-          fc-list | grep -i emoji || echo "No emoji fonts"
-          fc-list | head -20
+          echo "=== EMOJI FONTS CHECK ==="
+          fc-list | grep -i emoji || echo "No emoji fonts found"
+          echo "=== DEJAVU FONTS ==="
+          fc-list | grep -i dejavu | head -5
+          echo "=== TOTAL FONTS ==="
+          fc-list | wc -l
 
       - name: Install Python Deps
         run: |
@@ -75,8 +79,11 @@ jobs:
       - name: Debug Output
         if: always()
         run: |
+          echo "=== OUTPUT ==="
           ls -lh output/ || true
+          echo "=== DATA ==="
           ls -lh data/ || true
+          echo "=== LOGS ==="
           tail -100 logs/bot.log || true
 
       - name: Upload Artifact

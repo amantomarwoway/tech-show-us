@@ -55,10 +55,10 @@ TARGET_COUNTRIES = ENGLISH_COUNTRIES + ["IN", "PH", "SG", "ZA", "NG", "KE"]
 # ============================================================
 
 PUBLISH_THRESHOLDS = {
-    "publish": 90,          # Publish immediately
-    "high_priority": 80,   # High priority
-    "medium": 70,          # Publish if resources available
-    "monitor": 60,         # Monitor for later
+    "publish": 75,          # Publish immediately
+    "high_priority": 65,   # High priority
+    "medium": 55,          # Publish if resources available
+    "monitor": 45,         # Monitor for later
     "reject": 0            # Reject
 }
 

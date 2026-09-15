@@ -5,6 +5,28 @@ All settings for the bot
 
 import os
 
+"""
+src/config.py - GOD LEVEL CONFIG
+"""
+
+import os
+
+# ============================================================
+# 🚨 CRITICAL FIX: Pillow 10+ compatibility for MoviePy 1.0.3
+# ============================================================
+from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
+if not hasattr(Image, 'BICUBIC'):
+    Image.BICUBIC = Image.Resampling.BICUBIC
+if not hasattr(Image, 'BILINEAR'):
+    Image.BILINEAR = Image.Resampling.BILINEAR
+if not hasattr(Image, 'NEAREST'):
+    Image.NEAREST = Image.Resampling.NEAREST
+# ============================================================
+
+# ... rest of config
+
 # ============================================================
 # GOD LEVEL INSTRUCTION
 # ============================================================

@@ -7,8 +7,7 @@ on:
 
 jobs:
   run-bot:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-latest    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +26,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Deps
+      - name: Install System Deps (with emoji fonts)
         run: |
           sudo apt-get update || true
-          sudo apt-get install -y imagemagick ffmpeg fonts-dejavu fonts-liberation
-          ffmpeg -version
+          sudo apt-get install -y \
+            imagemagick ffmpeg \
+            fonts-dejavu fonts-liberation \
+            fonts-noto-color-emoji \
+            fonts-noto-core
+          fc-cache -f -v
+          echo "=== Emoji fonts check ==="
+          fc-list | grep -i emoji || echo "No emoji fonts"
           fc-list | head -20
 
       - name: Install Python Deps
@@ -57,16 +62,11 @@ jobs:
       - name: Run GOD BOT
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          UNSPLASH_API_KEY: ${{ secrets.UNSPLASH_API_KEY }}
-          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
-          OLLAMA_MODEL: llama3.1:8b
           PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
           LOG_LEVEL: INFO
         run: python main.py
@@ -74,11 +74,8 @@ jobs:
       - name: Debug Output
         if: always()
         run: |
-          echo "=== OUTPUT ==="
           ls -lh output/ || true
-          echo "=== DATA ==="
           ls -lh data/ || true
-          echo "=== LOGS ==="
           tail -100 logs/bot.log || true
 
       - name: Upload Artifact

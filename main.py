@@ -13,7 +13,6 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -29,7 +28,6 @@ logger = setup_logger(__name__)
 # ============================================================
 
 def safe_import(module_path, function_name=None):
-    """Safely import a module/function with fallback"""
     try:
         if function_name:
             module = __import__(module_path, fromlist=[function_name])
@@ -46,7 +44,6 @@ def safe_import(module_path, function_name=None):
 # ============================================================
 
 def research_god_main():
-    """Multi-source news collection"""
     logger.info("=" * 60)
     logger.info("LEG 1: RESEARCH GOD")
     logger.info("=" * 60)
@@ -56,41 +53,41 @@ def research_god_main():
     rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
     if rss_collector:
         try:
-            rss_stories = rss_collector()
-            logger.info(f"RSS: {len(rss_stories)} stories")
-            all_stories.extend(rss_stories)
+            s = rss_collector()
+            logger.info(f"RSS: {len(s)} stories")
+            all_stories.extend(s)
         except Exception as e:
             logger.error(f"RSS failed: {e}")
     
     google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
     if google_collector:
         try:
-            google_stories = google_collector()
-            logger.info(f"Google News: {len(google_stories)} stories")
-            all_stories.extend(google_stories)
+            s = google_collector()
+            logger.info(f"Google News: {len(s)} stories")
+            all_stories.extend(s)
         except Exception as e:
             logger.error(f"Google News failed: {e}")
     
     trends_collector = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends_collector:
         try:
-            trend_stories = trends_collector()
-            logger.info(f"Trends: {len(trend_stories)} stories")
-            all_stories.extend(trend_stories)
+            s = trends_collector()
+            logger.info(f"Trends: {len(s)} stories")
+            all_stories.extend(s)
         except Exception as e:
             logger.error(f"Trends failed: {e}")
     
     reddit_collector = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit_collector:
         try:
-            reddit_stories = reddit_collector()
-            logger.info(f"Reddit: {len(reddit_stories)} stories")
-            all_stories.extend(reddit_stories)
+            s = reddit_collector()
+            logger.info(f"Reddit: {len(s)} stories")
+            all_stories.extend(s)
         except Exception as e:
             logger.error(f"Reddit failed: {e}")
     
     if not all_stories:
-        logger.warning("All collectors failed - using fallback")
+        logger.warning("All collectors failed - fallback")
         all_stories = get_guaranteed_stories()
     
     all_stories = deduplicate_stories(all_stories)
@@ -101,7 +98,6 @@ def research_god_main():
 
 
 def get_guaranteed_stories():
-    """Fallback stories"""
     return [
         {
             "title": "White House Shocker Shatters Families Tonight",
@@ -134,7 +130,6 @@ def get_guaranteed_stories():
 
 
 def deduplicate_stories(stories):
-    """Remove duplicates"""
     seen = set()
     unique = []
     for story in stories:
@@ -148,7 +143,6 @@ def deduplicate_stories(stories):
 
 
 def score_and_rank_stories(stories):
-    """Score and rank"""
     story_ranker = safe_import('src.intelligence.story_ranker', 'rank_stories')
     if story_ranker:
         try:
@@ -167,7 +161,6 @@ def score_and_rank_stories(stories):
 # ============================================================
 
 def editor_god_main(script_data, candidate):
-    """Script-based visual asset collection"""
     logger.info("=" * 60)
     logger.info("LEG 2: EDITOR GOD - Script-based visuals")
     logger.info("=" * 60)
@@ -221,7 +214,6 @@ def editor_god_main(script_data, candidate):
 # ============================================================
 
 def boss_approval_main(video_path, script_data, full_story):
-    """Quality gate"""
     logger.info("=" * 60)
     logger.info("LEG 3: BOSS APPROVAL")
     logger.info("=" * 60)
@@ -274,7 +266,6 @@ def boss_approval_main(video_path, script_data, full_story):
 # ============================================================
 
 def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
-    """YouTube upload"""
     logger.info("=" * 60)
     logger.info("LEG 4: UPLOADER GOD")
     logger.info("=" * 60)
@@ -316,15 +307,13 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
 
 
 def post_upload_tasks(video_id, script_data):
-    """Post-upload tasks"""
     comment_engine = safe_import('src.youtube.comment_engine', 'reply_to_comments')
     if comment_engine:
         try:
             comment_engine(video_id)
         except Exception as e:
             logger.error(f"Comment engine failed: {e}")
-    
-    logger.info(f"Analytics will be collected next run for {video_id}")
+    logger.info(f"Analytics next run for {video_id}")
 
 
 # ============================================================
@@ -332,12 +321,10 @@ def post_upload_tasks(video_id, script_data):
 # ============================================================
 
 def self_evolution_main():
-    """Performance learning"""
     logger.info("=" * 60)
     logger.info("LEG 5: SELF EVOLUTION")
     logger.info("=" * 60)
     
-    # Collect analytics FIRST
     try:
         from src.youtube.analytics_collector import collect_analytics
         collect_analytics()
@@ -362,9 +349,7 @@ def self_evolution_main():
 
 def generate_script_god(story):
     """
-    Generate SHORT + engaging title + script
-    - Title: 30-50 chars MAX
-    - Hook: 5 words + 1 emoji (auto-selected)
+    Generate SHORT title (25-45 chars) + engaging hook with emoji
     """
     topic = story.get('title', '')
     seo_title = story.get('seo_youtube_title', '') or topic
@@ -376,90 +361,88 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a YouTube Shorts CTR expert. Create a SHORT, punchy title + script.
+            prompt = f"""You are a YouTube Shorts CTR expert.
 
 TOPIC: {topic}
 
-🚨 TITLE RULES (STRICT):
-1. Title MUST be 30-50 characters (COUNT THEM!)
-2. Short, punchy, mobile-friendly
-3. NO long sentences. NO full news headline.
-4. Use ONE of these SHORT formulas:
-   • "The [X] Nobody Noticed"          (~28 chars)
-   • "[X] Just Got Leaked"              (~22 chars)
-   • "Why [X] Changes Everything"       (~28 chars)
-   • "[X] — What Really Happened"       (~30 chars)
-   • "This [X] Is Huge"                 (~18 chars)
-   • "[X]: The Real Story"              (~22 chars)
-5. Power words: leaked, exposed, revealed, warning, crisis, huge
-6. If title > 50 chars → make SHORTER
+🚨 TITLE RULES (VERY STRICT - COUNT CHARACTERS):
+- MUST be 25-45 characters ONLY
+- SHORT, punchy, mobile-friendly
+- Direct and action-oriented
+- Create curiosity gap
 
-❌ BAD (too long):
-- "Russian Strike on Train Station Near Ukraine-Poland Border Seen as Warning"
-- "We Must Heed Warnings of AI Tech Developers, Says UK Minister"
+FORMULA (pick ONE):
+1. "[ACTION] [SUBJECT]"           → "Russia Warns NATO"  (17)
+2. "Why [X] Is [Y]"                → "Why This Changes All" (22)
+3. "[X] Just [VERB]"               → "NATO Just Responded" (19)
+4. "The [X] Nobody Noticed"        → "The Detail Nobody Saw" (22)
+5. "[X]: The Real Story"           → "Ukraine: Real Story" (20)
+6. "[X] Just Changed"              → "This Just Changed" (17)
 
-✅ GOOD (short, punchy):
-- "Russia's Warning to NATO"           (25 chars)
-- "The AI Warning Nobody Heard"        (29 chars)
-- "Ukraine's Message to the West"      (30 chars)
-- "Why This Changes Everything"        (28 chars)
+❌ BAD EXAMPLES (TOO LONG, 50+ chars):
+"Russian Strike on Train Station Near Ukraine-Poland Border"
+"We Must Heed Warnings of AI Tech Developers, Says UK Minister"
+"White House Shocker Shatters Families Tonight - Leaked"
 
-🚨 WHITE BAR HOOK RULES:
-1. MAXIMUM 5 words (VERY short!)
-2. ALL CAPS
-3. Include EXACTLY 1 relevant emoji at END
-4. Create strong curiosity gap
+✅ GOOD EXAMPLES (25-45 chars):
+"Russia Warns NATO"                     (17)
+"The AI Warning Nobody Heard"           (28)
+"Ukraine's Message to the West"          (30)
+"This Changes Everything"                (24)
+"NATO's Final Warning"                   (20)
+"Tariffs Crush Millions"                 (23)
+"AI Just Changed Everything"             (27)
 
-🚨 EMOJI SELECTION RULE:
-Choose the MOST RELEVANT emoji based on topic. Options:
-- 🚨 breaking/urgent/alert
-- ⚠️ warning/danger/risk
-- 🔥 viral/hot/trending
-- 💥 shocking/explosive
-- 🚫 banned/blocked/refused
-- 👀 look/exposed/watching
-- ⚡ instant/breaking/fast
-- 🎯 direct/aimed/targeted
-- 💰 money/economy/tariffs
-- 🏛️ government/politics/congress
-- ⚔️ war/military/conflict
-- 🤖 AI/tech/robots
-- 📉 crash/drop/fall
-- 📈 rise/growth/surge
-- 🔒 secret/classified
-- ❗ important/critical
-- 🌍 global/world
-- 🏆 win/victory
-- ⚖️ law/court/justice
-- 🔔 alert/subscribe
+🚨 WHITE BAR HOOK (STRICT - MAX 5 WORDS + 1 EMOJI):
+- 4-5 words ONLY
+- ALL CAPS
+- EXACTLY 1 emoji at END
+- Strong curiosity gap
 
-Example hooks with emojis:
+Example hooks:
 - "THEY KNEW ALL ALONG 🚨"
-- "TARIFFS CRUSHING MILLIONS 💰"
-- "NATO'S FINAL WARNING ⚔️"
-- "AI JUST CHANGED EVERYTHING 🤖"
-- "THE SECRET IS OUT 🔒"
-- "MARKETS ARE CRASHING 📉"
+- "THIS CHANGES EVERYTHING 💥"
 - "WARNING IGNORED ⚠️"
 - "LEAKED JUST NOW 🔥"
+- "NOBODY NOTICED THIS 👀"
+- "TARIFFS CRUSH MILLIONS 💰"
+- "AI IS HERE 🤖"
+- "MARKETS ARE CRASHING 📉"
+
+EMOJI SELECTION (pick most relevant):
+- 🚨 breaking/urgent
+- ⚠️ warning/danger
+- 🔥 viral/hot
+- 💥 shocking
+- 💰 money/economy/tariffs
+- 🏛️ politics/government
+- ⚔️ war/military
+- 🤖 AI/tech
+- 📉 crash/drop
+- 📈 rise/surge
+- ⚖️ court/law
+- 🌍 global
+- 🚫 banned
+- 🔒 secret
+- 👀 exposed
 
 🚨 SCRIPT (40 words):
-- First sentence = strong hook
-- Use "reports say" for unverified
-- End with open loop
+- Strong hook first sentence
+- "reports say" for unverified
+- Open loop ending
 
 🚨 TAGS (15 max):
-- Mix of short (1-2 words) and specific
+- Mix of short (1-2 words) + specific
 - Include: breaking news, world news, viral, 2026
 
-OUTPUT JSON ONLY:
+OUTPUT JSON ONLY (NO EXTRA TEXT):
 {{
-    "short_script": "40-word script",
-    "seo_youtube_title": "30-50 char title ONLY",
+    "short_script": "40-word script here",
+    "seo_youtube_title": "SHORT TITLE 25-45 CHARS",
     "description": "SEO description with subscribe CTA",
-    "hashtags": ["#BreakingNews", "#WorldNews", "#TopicSpecific"],
+    "hashtags": ["#BreakingNews", "#WorldNews"],
     "tags": ["tag1", "tag2", "tag3"],
-    "viral_hook": "MAX 5 WORDS + 1 EMOJI",
+    "viral_hook": "MAX 5 WORDS + EMOJI",
     "mood": "tense dramatic",
     "confidence_score": 85
 }}
@@ -477,51 +460,60 @@ OUTPUT JSON ONLY:
                         if match:
                             data = json.loads(match.group())
                             
-                            # HARD LIMIT: Title 50 chars max
+                            # ============================================
+                            # HARD LIMITS
+                            # ============================================
+                            
+                            # Title: 45 chars max
                             title = data.get('seo_youtube_title', '')
-                            if len(title) > 50:
-                                # Smart truncate at word boundary
-                                title = title[:50].rsplit(' ', 1)[0]
-                                if len(title) < 25:
+                            if len(title) > 45:
+                                # Smart truncate
+                                title = title[:45].rsplit(' ', 1)[0]
+                                if len(title) < 20:
                                     title = title + "..."
                                 data['seo_youtube_title'] = title
+                                logger.info(f"   Title truncated to {len(title)} chars")
                             
-                            # HARD LIMIT: Hook 5 words + emoji
+                            # Hook: max 5 words + emoji
                             hook = data.get('viral_hook', '')
                             
-                            # Ensure emoji present
-                            emoji_pattern = re.compile(
-                                "[\U0001F300-\U0001F9FF\U00002600-\U000027BF]+",
+                            emoji_pat = re.compile(
+                                "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
                                 flags=re.UNICODE
                             )
                             
-                            if not emoji_pattern.search(hook):
-                                # Auto-add emoji based on topic
-                                topic_lower = topic.lower()
-                                if any(w in topic_lower for w in ['war', 'military', 'strike', 'missile', 'attack']):
+                            # Ensure emoji present
+                            if not emoji_pat.search(hook):
+                                t_low = topic.lower()
+                                if any(w in t_low for w in ['war', 'military', 'strike', 'missile', 'attack']):
                                     hook = hook + " ⚔️"
-                                elif any(w in topic_lower for w in ['tariff', 'trade', 'economy', 'money', 'dollar']):
+                                elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money', 'dollar']):
                                     hook = hook + " 💰"
-                                elif any(w in topic_lower for w in ['trump', 'biden', 'congress', 'senate', 'white house', 'government']):
+                                elif any(w in t_low for w in ['trump', 'biden', 'congress', 'senate', 'white house']):
                                     hook = hook + " 🏛️"
-                                elif any(w in topic_lower for w in ['ai', 'tech', 'robot', 'artificial']):
+                                elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial']):
                                     hook = hook + " 🤖"
-                                elif any(w in topic_lower for w in ['secret', 'leaked', 'classified', 'hidden']):
+                                elif any(w in t_low for w in ['secret', 'leaked', 'classified', 'hidden']):
                                     hook = hook + " 🔒"
-                                elif any(w in topic_lower for w in ['crash', 'drop', 'fall', 'plunge']):
+                                elif any(w in t_low for w in ['crash', 'drop', 'fall', 'plunge']):
                                     hook = hook + " 📉"
-                                elif any(w in topic_lower for w in ['rise', 'surge', 'grow', 'soar']):
-                                    hook = hook + " 📈"
-                                elif any(w in topic_lower for w in ['court', 'law', 'justice', 'supreme']):
+                                elif any(w in t_low for w in ['court', 'law', 'justice', 'supreme']):
                                     hook = hook + " ⚖️"
+                                elif any(w in t_low for w in ['warning', 'danger', 'risk']):
+                                    hook = hook + " ⚠️"
                                 else:
                                     hook = hook + " 🚨"
                             
-                            # Limit words
-                            words = hook.split()
-                            if len(words) > 6:
-                                words = words[:5] + [words[-1]]  # Keep last word (emoji)
-                                hook = " ".join(words)
+                            # Limit hook to 5 words + emoji
+                            words_h = hook.split()
+                            if len(words_h) > 6:
+                                # Keep first 5 words + emoji
+                                words_h = words_h[:5]
+                                # Find emoji
+                                emoji_only = emoji_pat.findall(hook)
+                                if emoji_only:
+                                    words_h.append(emoji_only[0])
+                                hook = " ".join(words_h)
                             
                             data['viral_hook'] = hook
                             
@@ -541,37 +533,50 @@ OUTPUT JSON ONLY:
 
 
 def get_template_script(topic, seo_title):
-    """Fallback with SHORT title + emoji hook"""
+    """Fallback - SHORT title + emoji hook"""
     
-    # Short title templates (max 50 chars)
+    # Extract key word (2-3 words max)
+    words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
+             ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 'said']]
+    
+    # Get 2 key words
+    key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "News")
+    
+    # Short title templates (25-45 chars)
     title_templates = [
-        f"The {topic[:25]} Nobody Noticed",
-        f"Why {topic[:30]} Matters",
-        f"{topic[:40]} Just Changed",
-        f"The Real {topic[:25]} Story",
+        f"{key[:35]} Just Changed",
+        f"Why {key[:30]} Matters",
+        f"The {key[:25]} Nobody Saw",
+        f"{key[:30]}: Real Story",
+        f"This {key[:28]} Is Huge",
     ]
     
     title = random.choice(title_templates)
-    if len(title) > 50:
-        title = title[:47] + "..."
+    if len(title) > 45:
+        title = title[:42] + "..."
     
-    # Auto-select emoji based on topic
-    topic_lower = topic.lower()
-    if any(w in topic_lower for w in ['war', 'military', 'strike', 'missile']):
+    # Auto emoji
+    t_low = topic.lower()
+    if any(w in t_low for w in ['war', 'military', 'strike', 'missile']):
         emoji = "⚔️"
-    elif any(w in topic_lower for w in ['tariff', 'trade', 'economy', 'money']):
+    elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money']):
         emoji = "💰"
-    elif any(w in topic_lower for w in ['trump', 'biden', 'congress', 'white house']):
+    elif any(w in t_low for w in ['trump', 'biden', 'congress', 'white house']):
         emoji = "🏛️"
-    elif any(w in topic_lower for w in ['ai', 'tech', 'robot']):
+    elif any(w in t_low for w in ['ai', 'tech', 'robot']):
         emoji = "🤖"
-    elif any(w in topic_lower for w in ['secret', 'leaked', 'classified']):
+    elif any(w in t_low for w in ['secret', 'leaked', 'classified']):
         emoji = "🔒"
-    elif any(w in topic_lower for w in ['court', 'law', 'justice']):
+    elif any(w in t_low for w in ['crash', 'drop', 'fall']):
+        emoji = "📉"
+    elif any(w in t_low for w in ['court', 'law', 'justice']):
         emoji = "⚖️"
+    elif any(w in t_low for w in ['warning', 'danger']):
+        emoji = "⚠️"
     else:
         emoji = "🚨"
     
+    # Hook (5 words + emoji)
     hook_templates = [
         f"THEY KNEW ALL ALONG {emoji}",
         f"THIS CHANGES EVERYTHING {emoji}",
@@ -604,7 +609,6 @@ def get_template_script(topic, seo_title):
 # ============================================================
 
 def create_video_god(script_data, editor_data):
-    """Create video"""
     logger.info("=" * 60)
     logger.info("VIDEO GENERATION")
     logger.info("=" * 60)
@@ -629,7 +633,6 @@ def create_video_god(script_data, editor_data):
 # ============================================================
 
 def create_thumbnail(candidate, script_data):
-    """Create thumbnail"""
     try:
         from PIL import Image, ImageDraw, ImageFont
         
@@ -648,7 +651,6 @@ def create_thumbnail(candidate, script_data):
         except:
             font = ImageFont.load_default()
         
-        # Text with shadow
         draw.text((640 + 4, 360 + 4), title[:40], font=font,
                   fill=(0, 0, 0), anchor="mm")
         draw.text((640, 360), title[:40], font=font,
@@ -668,7 +670,6 @@ def create_thumbnail(candidate, script_data):
 # ============================================================
 
 def main():
-    """Main orchestrator"""
     logger.info("=" * 60)
     logger.info("GOD LEVEL BOT START - 5 LEGS")
     logger.info(f"Time: {datetime.now().isoformat()}")
@@ -680,7 +681,6 @@ def main():
     stats = get_performance_stats()
     logger.info(f"Stats: {stats}")
     
-    # LEG 1
     stories = research_god_main()
     if not stories:
         logger.error("No stories - exit")
@@ -696,14 +696,12 @@ def main():
         logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
         logger.info(f"{'='*60}")
         
-        # Script
         script_data = generate_script_god(candidate)
         
         if script_data.get('confidence_score', 0) < 60:
             logger.warning(f"Low confidence: {script_data.get('confidence_score')}")
             continue
         
-        # Fact check
         logger.info("Fact checking...")
         fact_checker = safe_import('src.verification.claim_checker', 'fact_check')
         if fact_checker:
@@ -713,20 +711,15 @@ def main():
                 continue
             logger.info(f"✅ Fact check: {fact_result.get('report', '')}")
         
-        # LEG 2
         editor_data = editor_god_main(script_data, candidate)
         
-        # Save
         full_story = {**candidate, **script_data}
         story_id = save_story(full_story)
         
-        # Video
         video_path = create_video_god(script_data, editor_data)
         
-        # LEG 3
         boss_data = boss_approval_main(video_path, script_data, full_story)
         
-        # Track best rejected
         if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
             best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         
@@ -738,7 +731,6 @@ def main():
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
     
-    # Fallback: use best rejected if score >= 65
     if not approved and best_rejected:
         score = best_rejected[3].get('score', 0)
         if score >= 65:
@@ -751,10 +743,8 @@ def main():
     
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved
     
-    # Thumbnail
     thumbnail_path = create_thumbnail(candidate, script_data)
     
-    # LEG 4
     video_id = uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data)
     
     if video_id:
@@ -763,7 +753,6 @@ def main():
         logger.info(f"UPLOADED: https://youtu.be/{video_id}")
         logger.info(f"{'='*60}")
     
-    # LEG 5
     self_evolution_main()
     
     logger.info("\n" + "=" * 60)

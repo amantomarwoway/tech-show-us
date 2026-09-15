@@ -9,6 +9,7 @@ import time
 import traceback
 import json
 import random
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -22,86 +23,10 @@ from src.database import init_db, save_story, mark_uploaded, get_performance_sta
 
 logger = setup_logger(__name__)
 
-# ============================================================
-# LAZY IMPORTS - Fail gracefully
-# ============================================================
 
-def main():
-    logger.info("=" * 60)
-    logger.info("GOD LEVEL BOT START - 5 LEGS")
-    logger.info("=" * 60)
-    
-    init_db()
-    
-    stories = research_god_main()
-    if not stories:
-        logger.error("No stories found - exiting")
-        return
-    
-    logger.info(f"Got {len(stories)} candidate stories")
-    
-    approved = None
-    best_rejected = None  # Track best rejected
-    
-    for i, candidate in enumerate(stories[:5]):
-        logger.info(f"\nCANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
-        
-        script_data = generate_script_god(candidate)
-        
-        if script_data.get('confidence_score', 0) < 60:
-            logger.warning(f"Low confidence: {script_data.get('confidence_score')}")
-            continue
-        
-        # Fact check
-        fact_checker = safe_import('src.verification.claim_checker', 'fact_check')
-        if fact_checker:
-            fact_result = fact_checker(script_data.get('short_script', ''), candidate)
-            if not fact_result.get('passed', False):
-                logger.warning(f"Fact check failed: {fact_result.get('report', '')}")
-                continue
-        
-        editor_data = editor_god_main(script_data, candidate)
-        full_story = {**candidate, **script_data}
-        story_id = save_story(full_story)
-        video_path = create_video_god(script_data, editor_data)
-        
-        boss_data = boss_approval_main(video_path, script_data, full_story)
-        
-        # Track best rejected
-        if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
-            best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)
-        
-        if not boss_data.get('approved'):
-            logger.warning(f"REJECTED: {boss_data.get('reason')}")
-            continue
-        
-        approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
-        break
-    
-    # FALLBACK: If all rejected, use best rejected (safety net)
-    if not approved and best_rejected:
-        score = best_rejected[3].get('score', 0)
-        if score >= 65:  # Lower threshold for fallback
-            logger.warning(f"⚠️ All rejected - using best rejected (score {score:.1f})")
-            approved = best_rejected
-    
-    if not approved:
-        logger.error("All candidates rejected - SAFE EXIT")
-        return
-    
-    candidate, script_data, editor_data, boss_data, story_id, video_path = approved
-    
-    # Thumbnail
-    thumbnail_path = create_thumbnail(candidate, script_data)
-    
-    # Upload
-    video_id = uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data)
-    
-    if video_id:
-        mark_uploaded(story_id, video_id)
-        logger.info(f"UPLOADED: https://youtu.be/{video_id}")
-    
-    self_evolution_main()
+# ============================================================
+# SAFE IMPORT
+# ============================================================
 
 def safe_import(module_path, function_name=None):
     """Safely import a module/function with fallback"""
@@ -115,29 +40,28 @@ def safe_import(module_path, function_name=None):
         logger.warning(f"Import failed {module_path}: {e}")
         return None
 
+
 # ============================================================
 # LEG 1: RESEARCH GOD
 # ============================================================
 
 def research_god_main():
-    """Multi-source news collection with trend detection"""
+    """Multi-source news collection"""
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH GOD - Multi-source collection")
+    logger.info("LEG 1: RESEARCH GOD")
     logger.info("=" * 60)
     
     all_stories = []
     
-    # 1. RSS Collectors (free, no API key)
     rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
     if rss_collector:
         try:
             rss_stories = rss_collector()
-            logger.info(f"RSS collector: {len(rss_stories)} stories")
+            logger.info(f"RSS: {len(rss_stories)} stories")
             all_stories.extend(rss_stories)
         except Exception as e:
-            logger.error(f"RSS collector failed: {e}")
+            logger.error(f"RSS failed: {e}")
     
-    # 2. Google News Collector
     google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
     if google_collector:
         try:
@@ -147,7 +71,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Google News failed: {e}")
     
-    # 3. Trends Collector
     trends_collector = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends_collector:
         try:
@@ -157,7 +80,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Trends failed: {e}")
     
-    # 4. Reddit Collector
     reddit_collector = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit_collector:
         try:
@@ -167,84 +89,73 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Reddit failed: {e}")
     
-    # 5. Fallback - guaranteed stories
     if not all_stories:
-        logger.warning("All collectors failed - using guaranteed fallback")
+        logger.warning("All collectors failed - using fallback")
         all_stories = get_guaranteed_stories()
     
-    # Deduplicate
     all_stories = deduplicate_stories(all_stories)
-    
-    # Score and rank
     ranked = score_and_rank_stories(all_stories)
     
-    logger.info(f"LEG 1 COMPLETE: {len(ranked)} ranked stories")
+    logger.info(f"LEG 1 COMPLETE: {len(ranked)} stories")
     return ranked[:10]
 
 
 def get_guaranteed_stories():
-    """Guaranteed fallback stories - video will be made"""
+    """Fallback stories"""
     return [
         {
-            "title": "White House Shocker Shatters Families Tonight - Leaked Behind Closed Doors",
+            "title": "White House Shocker Shatters Families Tonight",
             "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
             "source": "guaranteed_google_news",
             "breakout_score": 6000,
             "is_breakout": True,
             "search_volume": 90,
-            "seo_youtube_title": "White House Shocker Shatters Families Tonight"
+            "seo_youtube_title": "White House Shocker Tonight"
         },
         {
-            "title": "Supreme Court Brutal Order Panic Millions - Secret Ruling Leaked",
+            "title": "Supreme Court Brutal Order Panic Millions",
             "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
             "source": "guaranteed_google_news",
             "breakout_score": 5800,
             "is_breakout": True,
             "search_volume": 88,
-            "seo_youtube_title": "Supreme Court Brutal Order Panic Millions"
+            "seo_youtube_title": "Supreme Court Brutal Order"
         },
         {
-            "title": "Brutal Tariffs Panic Millions of Families - White House Behind Closed Doors",
+            "title": "Brutal Tariffs Panic Millions of Families",
             "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
             "source": "guaranteed_google_news",
             "breakout_score": 5700,
             "is_breakout": True,
             "search_volume": 85,
-            "seo_youtube_title": "Brutal Tariffs Panic Millions of Families"
+            "seo_youtube_title": "Brutal Tariffs Panic Millions"
         },
     ]
 
 
 def deduplicate_stories(stories):
-    """Remove duplicate stories by title similarity"""
-    seen_titles = set()
+    """Remove duplicates"""
+    seen = set()
     unique = []
-    
     for story in stories:
         title = story.get('title', '').lower().strip()
-        # Simple dedup by first 30 chars
         key = title[:30] if len(title) > 30 else title
-        
-        if key not in seen_titles:
-            seen_titles.add(key)
+        if key not in seen:
+            seen.add(key)
             unique.append(story)
-    
-    logger.info(f"Deduplication: {len(stories)} -> {len(unique)} stories")
+    logger.info(f"Dedup: {len(stories)} -> {len(unique)}")
     return unique
 
 
 def score_and_rank_stories(stories):
-    """Score and rank stories using trend engine"""
-    trend_engine = safe_import('src.intelligence.trend_engine', 'calculate_trend_score')
+    """Score and rank"""
     story_ranker = safe_import('src.intelligence.story_ranker', 'rank_stories')
-    
     if story_ranker:
         try:
             return story_ranker(stories)
         except Exception as e:
-            logger.error(f"Story ranker failed: {e}")
+            logger.error(f"Ranker failed: {e}")
     
-    # Fallback: sort by breakout_score
     for story in stories:
         story['final_score'] = story.get('breakout_score', 0) / 100
     
@@ -256,12 +167,11 @@ def score_and_rank_stories(stories):
 # ============================================================
 
 def editor_god_main(script_data, candidate):
-    """SCRIPT-BASED visual asset collection"""
+    """Script-based visual asset collection"""
     logger.info("=" * 60)
     logger.info("LEG 2: EDITOR GOD - Script-based visuals")
     logger.info("=" * 60)
     
-    # Check Pexels key
     pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
     if pexels_key:
         logger.info(f"✅ PEXELS_API_KEY present (len={len(pexels_key)})")
@@ -275,7 +185,6 @@ def editor_god_main(script_data, candidate):
         "sound_effects": []
     }
     
-    # Get script text
     script_text = (
         script_data.get('short_script', '') or
         script_data.get('full_script', '') or
@@ -283,12 +192,11 @@ def editor_god_main(script_data, candidate):
     )
     
     if not script_text:
-        logger.warning("No script text for visual search")
+        logger.warning("No script text")
         return editor_data
     
     logger.info(f"📝 Script: {script_text[:100]}...")
     
-    # Call script-based finder
     try:
         from src.media.asset_finder import find_assets_for_script
         visuals = find_assets_for_script(script_text, num_clips=16)
@@ -296,10 +204,7 @@ def editor_god_main(script_data, candidate):
         logger.info(f"✅ Editor: {len(visuals)} visual assets")
     except Exception as e:
         logger.error(f"Asset finder failed: {e}")
-        import traceback
-        traceback.print_exc()
     
-    # Background music
     try:
         from src.media.asset_finder import find_background_music
         music = find_background_music(script_data.get('mood', 'news'))
@@ -316,9 +221,9 @@ def editor_god_main(script_data, candidate):
 # ============================================================
 
 def boss_approval_main(video_path, script_data, full_story):
-    """Live world demand check + final approval"""
+    """Quality gate"""
     logger.info("=" * 60)
-    logger.info("LEG 3: BOSS APPROVAL - Final quality gate")
+    logger.info("LEG 3: BOSS APPROVAL")
     logger.info("=" * 60)
     
     result = {
@@ -329,7 +234,6 @@ def boss_approval_main(video_path, script_data, full_story):
     }
     
     try:
-        # Check quality gate
         quality_gate = safe_import('src.safety.policy_filter', 'run_quality_gate')
         if quality_gate:
             gate_result = quality_gate(script_data, full_story)
@@ -338,22 +242,20 @@ def boss_approval_main(video_path, script_data, full_story):
                 logger.warning(f"Quality gate failed: {result['reason']}")
                 return result
         
-        # Calculate final score
         story_ranker = safe_import('src.intelligence.story_ranker', 'calculate_publish_score')
         if story_ranker:
             score = story_ranker(full_story)
             result['score'] = score
             
-            if score >= PUBLISH_THRESHOLDS['publish']:
+            if score >= 72:
                 result['approved'] = True
-                result['reason'] = f"High score: {score}"
-            elif score >= PUBLISH_THRESHOLDS['high_priority']:
+                result['reason'] = f"High score: {score:.1f}"
+            elif score >= 65:
                 result['approved'] = True
-                result['reason'] = f"High priority: {score}"
+                result['reason'] = f"Acceptable: {score:.1f}"
             else:
-                result['reason'] = f"Score too low: {score}"
+                result['reason'] = f"Score too low: {score:.1f}"
         else:
-            # Fallback: approve if script exists
             if script_data.get('short_script'):
                 result['approved'] = True
                 result['score'] = 75
@@ -372,9 +274,9 @@ def boss_approval_main(video_path, script_data, full_story):
 # ============================================================
 
 def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
-    """YouTube upload with full metadata"""
+    """YouTube upload"""
     logger.info("=" * 60)
-    logger.info("LEG 4: UPLOADER GOD - YouTube upload")
+    logger.info("LEG 4: UPLOADER GOD")
     logger.info("=" * 60)
     
     uploader = safe_import('src.youtube.uploader', 'upload_video')
@@ -383,7 +285,6 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
         return None
     
     try:
-        # Generate metadata
         metadata_gen = safe_import('src.writing.metadata_generator', 'generate_all_metadata')
         if metadata_gen:
             metadata = metadata_gen(script_data, candidate)
@@ -394,33 +295,28 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
                 "tags": script_data.get('tags', ['breaking news', 'world news'])
             }
         
-        # Upload
         video_id = uploader(
             video_path=video_path,
             thumbnail_path=thumbnail_path,
             title=metadata['title'],
             description=metadata['description'],
             tags=metadata['tags'],
-            category_id="25"  # News & Politics
+            category_id="25"
         )
         
         if video_id:
             logger.info(f"LEG 4 COMPLETE: https://youtu.be/{video_id}")
-            
-            # Post-upload tasks
             post_upload_tasks(video_id, script_data)
         
         return video_id
     
     except Exception as e:
         logger.error(f"Upload failed: {e}")
-        traceback.print_exc()
         return None
 
 
 def post_upload_tasks(video_id, script_data):
-    """Comment engine + analytics setup"""
-    # Comment engine
+    """Post-upload tasks"""
     comment_engine = safe_import('src.youtube.comment_engine', 'reply_to_comments')
     if comment_engine:
         try:
@@ -428,8 +324,7 @@ def post_upload_tasks(video_id, script_data):
         except Exception as e:
             logger.error(f"Comment engine failed: {e}")
     
-    # Schedule analytics collection
-    logger.info(f"Analytics will be collected in next run for {video_id}")
+    logger.info(f"Analytics will be collected next run for {video_id}")
 
 
 # ============================================================
@@ -437,16 +332,23 @@ def post_upload_tasks(video_id, script_data):
 # ============================================================
 
 def self_evolution_main():
-    """Learn from performance data"""
+    """Performance learning"""
     logger.info("=" * 60)
-    logger.info("LEG 5: SELF EVOLUTION - Performance learning")
+    logger.info("LEG 5: SELF EVOLUTION")
     logger.info("=" * 60)
+    
+    # Collect analytics FIRST
+    try:
+        from src.youtube.analytics_collector import collect_analytics
+        collect_analytics()
+    except Exception as e:
+        logger.warning(f"Analytics failed: {e}")
     
     performance_learner = safe_import('src.learning.performance_learner', 'learn_from_performance')
     if performance_learner:
         try:
             insights = performance_learner()
-            logger.info(f"Learning insights: {insights}")
+            logger.info(f"Insights: {insights}")
             return insights
         except Exception as e:
             logger.error(f"Learning failed: {e}")
@@ -455,11 +357,15 @@ def self_evolution_main():
 
 
 # ============================================================
-# SCRIPT GENERATION
+# SCRIPT GENERATION - SHORT TITLES + EMOJI HOOKS
 # ============================================================
 
 def generate_script_god(story):
-    """Generate script with ENGAGING title and tags"""
+    """
+    Generate SHORT + engaging title + script
+    - Title: 30-50 chars MAX
+    - Hook: 5 words + 1 emoji (auto-selected)
+    """
     topic = story.get('title', '')
     seo_title = story.get('seo_youtube_title', '') or topic
     
@@ -470,53 +376,91 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a VIRAL YouTube Shorts expert. Create a high-CTR title + script.
+            prompt = f"""You are a YouTube Shorts CTR expert. Create a SHORT, punchy title + script.
 
 TOPIC: {topic}
-SOURCE URL: {story.get('url', '')}
 
-🚨 CRITICAL RULES:
+🚨 TITLE RULES (STRICT):
+1. Title MUST be 30-50 characters (COUNT THEM!)
+2. Short, punchy, mobile-friendly
+3. NO long sentences. NO full news headline.
+4. Use ONE of these SHORT formulas:
+   • "The [X] Nobody Noticed"          (~28 chars)
+   • "[X] Just Got Leaked"              (~22 chars)
+   • "Why [X] Changes Everything"       (~28 chars)
+   • "[X] — What Really Happened"       (~30 chars)
+   • "This [X] Is Huge"                 (~18 chars)
+   • "[X]: The Real Story"              (~22 chars)
+5. Power words: leaked, exposed, revealed, warning, crisis, huge
+6. If title > 50 chars → make SHORTER
 
-1. TITLE (MUST be engaging, under 60 chars):
-   - Use ONE of these power formulas:
-     • "The Real Reason [X]"
-     • "[X] Just Changed Everything"  
-     • "What Nobody Told You About [X]"
-     • "[X] — The Part Everyone Missed"
-     • "Why [X] Is Bigger Than You Think"
-     • "[Number] Shocking Facts About [X]"
-   - Use ONE power word: leaked, exposed, shocking, revealed, secret, changes, warning, crisis, stunning
-   - NO generic titles like "Breaking News" or "Update"
-   - NO ALL CAPS
-   - NO clickbait lies
+❌ BAD (too long):
+- "Russian Strike on Train Station Near Ukraine-Poland Border Seen as Warning"
+- "We Must Heed Warnings of AI Tech Developers, Says UK Minister"
 
-2. VIRAL_HOOK (7 words max, for white bar):
-   - Must create CURIOSITY GAP
-   - Example: "THE PART NOBODY NOTICED", "THIS CHANGES EVERYTHING", "THEY KNEW ALL ALONG"
-   - All caps, punchy
+✅ GOOD (short, punchy):
+- "Russia's Warning to NATO"           (25 chars)
+- "The AI Warning Nobody Heard"        (29 chars)
+- "Ukraine's Message to the West"      (30 chars)
+- "Why This Changes Everything"        (28 chars)
 
-3. SCRIPT (40 words):
-   - First sentence = HOOK (grabs attention)
-   - Use "reports say" / "officials say" for unverified
-   - End with open loop
+🚨 WHITE BAR HOOK RULES:
+1. MAXIMUM 5 words (VERY short!)
+2. ALL CAPS
+3. Include EXACTLY 1 relevant emoji at END
+4. Create strong curiosity gap
 
-4. TAGS (15 max, engaging):
-   - Mix of: specific topic + broad keywords
-   - Include: breaking news, world news, [country], [person], [event]
-   - Include some trending: viral, shocking, 2026
+🚨 EMOJI SELECTION RULE:
+Choose the MOST RELEVANT emoji based on topic. Options:
+- 🚨 breaking/urgent/alert
+- ⚠️ warning/danger/risk
+- 🔥 viral/hot/trending
+- 💥 shocking/explosive
+- 🚫 banned/blocked/refused
+- 👀 look/exposed/watching
+- ⚡ instant/breaking/fast
+- 🎯 direct/aimed/targeted
+- 💰 money/economy/tariffs
+- 🏛️ government/politics/congress
+- ⚔️ war/military/conflict
+- 🤖 AI/tech/robots
+- 📉 crash/drop/fall
+- 📈 rise/growth/surge
+- 🔒 secret/classified
+- ❗ important/critical
+- 🌍 global/world
+- 🏆 win/victory
+- ⚖️ law/court/justice
+- 🔔 alert/subscribe
 
-5. HASHTAGS (5 max):
-   - #BreakingNews #WorldNews + topic-specific
+Example hooks with emojis:
+- "THEY KNEW ALL ALONG 🚨"
+- "TARIFFS CRUSHING MILLIONS 💰"
+- "NATO'S FINAL WARNING ⚔️"
+- "AI JUST CHANGED EVERYTHING 🤖"
+- "THE SECRET IS OUT 🔒"
+- "MARKETS ARE CRASHING 📉"
+- "WARNING IGNORED ⚠️"
+- "LEAKED JUST NOW 🔥"
+
+🚨 SCRIPT (40 words):
+- First sentence = strong hook
+- Use "reports say" for unverified
+- End with open loop
+
+🚨 TAGS (15 max):
+- Mix of short (1-2 words) and specific
+- Include: breaking news, world news, viral, 2026
 
 OUTPUT JSON ONLY:
 {{
     "short_script": "40-word script",
-    "seo_youtube_title": "ENGAGING title under 60 chars",
-    "description": "SEO description with keywords + subscribe CTA",
+    "seo_youtube_title": "30-50 char title ONLY",
+    "description": "SEO description with subscribe CTA",
     "hashtags": ["#BreakingNews", "#WorldNews", "#TopicSpecific"],
-    "tags": ["engaging tag 1", "engaging tag 2"],
-    "viral_hook": "PUNCHY HOOK 7 WORDS MAX",
-    "mood": "tense dramatic news",
+    "tags": ["tag1", "tag2", "tag3"],
+    "viral_hook": "MAX 5 WORDS + 1 EMOJI",
+    "mood": "tense dramatic",
     "confidence_score": 85
 }}
 """
@@ -529,19 +473,61 @@ OUTPUT JSON ONLY:
                     text = getattr(resp, 'text', '')
                     
                     if text:
-                        import re
                         match = re.search(r'\{.*\}', text, re.DOTALL)
                         if match:
                             data = json.loads(match.group())
                             
-                            # Validate title
+                            # HARD LIMIT: Title 50 chars max
                             title = data.get('seo_youtube_title', '')
-                            if len(title) > 100:
-                                data['seo_youtube_title'] = title[:97] + '...'
+                            if len(title) > 50:
+                                # Smart truncate at word boundary
+                                title = title[:50].rsplit(' ', 1)[0]
+                                if len(title) < 25:
+                                    title = title + "..."
+                                data['seo_youtube_title'] = title
+                            
+                            # HARD LIMIT: Hook 5 words + emoji
+                            hook = data.get('viral_hook', '')
+                            
+                            # Ensure emoji present
+                            emoji_pattern = re.compile(
+                                "[\U0001F300-\U0001F9FF\U00002600-\U000027BF]+",
+                                flags=re.UNICODE
+                            )
+                            
+                            if not emoji_pattern.search(hook):
+                                # Auto-add emoji based on topic
+                                topic_lower = topic.lower()
+                                if any(w in topic_lower for w in ['war', 'military', 'strike', 'missile', 'attack']):
+                                    hook = hook + " ⚔️"
+                                elif any(w in topic_lower for w in ['tariff', 'trade', 'economy', 'money', 'dollar']):
+                                    hook = hook + " 💰"
+                                elif any(w in topic_lower for w in ['trump', 'biden', 'congress', 'senate', 'white house', 'government']):
+                                    hook = hook + " 🏛️"
+                                elif any(w in topic_lower for w in ['ai', 'tech', 'robot', 'artificial']):
+                                    hook = hook + " 🤖"
+                                elif any(w in topic_lower for w in ['secret', 'leaked', 'classified', 'hidden']):
+                                    hook = hook + " 🔒"
+                                elif any(w in topic_lower for w in ['crash', 'drop', 'fall', 'plunge']):
+                                    hook = hook + " 📉"
+                                elif any(w in topic_lower for w in ['rise', 'surge', 'grow', 'soar']):
+                                    hook = hook + " 📈"
+                                elif any(w in topic_lower for w in ['court', 'law', 'justice', 'supreme']):
+                                    hook = hook + " ⚖️"
+                                else:
+                                    hook = hook + " 🚨"
+                            
+                            # Limit words
+                            words = hook.split()
+                            if len(words) > 6:
+                                words = words[:5] + [words[-1]]  # Keep last word (emoji)
+                                hook = " ".join(words)
+                            
+                            data['viral_hook'] = hook
                             
                             logger.info(f"✅ Script by {model}")
-                            logger.info(f"   Title: {data.get('seo_youtube_title', '')}")
-                            logger.info(f"   Hook: {data.get('viral_hook', '')}")
+                            logger.info(f"   Title ({len(data['seo_youtube_title'])} chars): {data['seo_youtube_title']}")
+                            logger.info(f"   Hook: {data['viral_hook']}")
                             return data
                 except Exception as e:
                     logger.warning(f"Model {model}: {str(e)[:80]}")
@@ -555,23 +541,46 @@ OUTPUT JSON ONLY:
 
 
 def get_template_script(topic, seo_title):
-    """Fallback with engaging title"""
-    # Extract key nouns
-    words = topic.split()
-    key_topic = " ".join(words[:5])
+    """Fallback with SHORT title + emoji hook"""
     
-    # Random engaging title template
-    templates = [
-        f"The Real Reason Behind {key_topic}",
-        f"{key_topic} Just Changed Everything",
-        f"What Nobody Told You About {key_topic}",
-        f"Why {key_topic} Matters More Than You Think",
+    # Short title templates (max 50 chars)
+    title_templates = [
+        f"The {topic[:25]} Nobody Noticed",
+        f"Why {topic[:30]} Matters",
+        f"{topic[:40]} Just Changed",
+        f"The Real {topic[:25]} Story",
     ]
     
-    import random
-    title = random.choice(templates)
-    if len(title) > 60:
-        title = title[:57] + '...'
+    title = random.choice(title_templates)
+    if len(title) > 50:
+        title = title[:47] + "..."
+    
+    # Auto-select emoji based on topic
+    topic_lower = topic.lower()
+    if any(w in topic_lower for w in ['war', 'military', 'strike', 'missile']):
+        emoji = "⚔️"
+    elif any(w in topic_lower for w in ['tariff', 'trade', 'economy', 'money']):
+        emoji = "💰"
+    elif any(w in topic_lower for w in ['trump', 'biden', 'congress', 'white house']):
+        emoji = "🏛️"
+    elif any(w in topic_lower for w in ['ai', 'tech', 'robot']):
+        emoji = "🤖"
+    elif any(w in topic_lower for w in ['secret', 'leaked', 'classified']):
+        emoji = "🔒"
+    elif any(w in topic_lower for w in ['court', 'law', 'justice']):
+        emoji = "⚖️"
+    else:
+        emoji = "🚨"
+    
+    hook_templates = [
+        f"THEY KNEW ALL ALONG {emoji}",
+        f"THIS CHANGES EVERYTHING {emoji}",
+        f"WARNING IGNORED {emoji}",
+        f"NOBODY NOTICED THIS {emoji}",
+        f"THE PART EVERYONE MISSED {emoji}",
+    ]
+    
+    hook = random.choice(hook_templates)
     
     return {
         "short_script": f"Breaking: {topic}. According to reports, this changes everything. Officials say the situation is developing. What happens next?",
@@ -579,68 +588,12 @@ def get_template_script(topic, seo_title):
         "description": f"{topic} - breaking news update. Subscribe for more.",
         "hashtags": ["#BreakingNews", "#WorldNews", "#GlobalNews"],
         "tags": [
-            "breaking news", "world news", "politics", "usa news",
-            "viral news", "shocking", "2026", "government",
+            "breaking news", "world news", "politics", "usa",
+            "viral", "shocking", "2026", "government",
             "international", "headlines", "leaked", "revealed",
-            "exposed", "crisis", "developing story"
+            "exposed", "crisis", "developing"
         ],
-        "viral_hook": "THE PART NOBODY NOTICED",
-        "mood": "tense dramatic news",
-        "confidence_score": 80
-    }
-
-
-def build_script_prompt(topic, seo_title, story):
-    """Build prompt for script generation"""
-    return f"""
-You are a YouTube Shorts scriptwriter for a global English news channel.
-
-TOPIC: {topic}
-SEO TITLE: {seo_title}
-SOURCE: {story.get('url', '')}
-
-Write a 40-50 word script for an 11-15 second YouTube Short.
-
-REQUIREMENTS:
-1. First sentence MUST be a shocking hook (pattern interrupt)
-2. Use "according to reports" or "officials say" for unverified claims
-3. NO fake urgency, NO "hello guys", NO channel intro
-4. End with open loop or "what happens next" question
-5. Factual, accurate, politically neutral in presentation
-6. Include visual search prompts for each segment
-
-OUTPUT JSON ONLY:
-{{
-    "short_script": "40-50 word script",
-    "long_script": "180-240 word version",
-    "seo_youtube_title": "under 60 chars, high CTR",
-    "title_with_hashtag": "title #Breaking #News",
-    "description": "SEO description with keywords",
-    "hashtags": ["#breakingnews", "#worldnews"],
-    "tags": ["breaking news", "world news", "politics"],
-    "script_visual_segments": [
-        {{"segment_text": "text", "asset_type": "video", "visual_search_prompt": "specific visual search"}}
-    ],
-    "mood": "tense/dramatic/neutral",
-    "confidence_score": 85
-}}
-"""
-
-
-def get_template_script(topic, seo_title):
-    """Template fallback script"""
-    return {
-        "short_script": f"Breaking: {topic}. According to reports, this development could affect millions. Officials say the situation is still developing. What happens next?",
-        "long_script": f"Breaking news: {topic}. According to multiple sources, this is a developing story. Here's what we know so far. Officials have confirmed the basic facts. The situation continues to evolve. We will update as more information becomes available.",
-        "seo_youtube_title": seo_title[:60],
-        "title_with_hashtag": f"{seo_title[:50]} #Breaking #News",
-        "title_without_hashtag": seo_title[:60],
-        "description": f"{topic} - breaking news update. Follow for more.",
-        "hashtags": ["#breakingnews", "#worldnews", "#politics"],
-        "tags": ["breaking news", "world news", "politics", "usa news"],
-        "script_visual_segments": [
-            {"segment_text": f"Breaking {topic}", "asset_type": "video", "visual_search_prompt": "breaking news studio"}
-        ],
+        "viral_hook": hook,
         "mood": "tense dramatic news",
         "confidence_score": 80
     }
@@ -651,30 +604,63 @@ def get_template_script(topic, seo_title):
 # ============================================================
 
 def create_video_god(script_data, editor_data):
-    """Create video using all available assets"""
+    """Create video"""
     logger.info("=" * 60)
-    logger.info("VIDEO GENERATION - Creating Short")
+    logger.info("VIDEO GENERATION")
     logger.info("=" * 60)
     
     try:
-        video_builder = safe_import('src.media.video_builder', 'create_video')
-        if video_builder:
-            # Merge script and editor data
-            merged = {**script_data, **editor_data}
-            merged['full_script'] = script_data.get('short_script', '')
-            merged['title'] = script_data.get('seo_youtube_title', '')
-            
-            video_path = video_builder(merged, editor_data)
-            logger.info(f"Video created: {video_path}")
-            return video_path
-        else:
-            logger.error("Video builder not available")
-            return "output/videos/final.mp4"
-    
+        from src.media.video_builder import create_video
+        merged = {**script_data, **editor_data}
+        merged['full_script'] = script_data.get('short_script', '')
+        merged['title'] = script_data.get('seo_youtube_title', '')
+        
+        video_path = create_video(merged, editor_data)
+        logger.info(f"Video: {video_path}")
+        return video_path
     except Exception as e:
-        logger.error(f"Video creation failed: {e}")
+        logger.error(f"Video failed: {e}")
         traceback.print_exc()
         return "output/videos/final.mp4"
+
+
+# ============================================================
+# THUMBNAIL
+# ============================================================
+
+def create_thumbnail(candidate, script_data):
+    """Create thumbnail"""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        
+        os.makedirs("output/thumbnails", exist_ok=True)
+        thumb_path = "output/thumbnails/thumb.jpg"
+        
+        img = Image.new('RGB', (1280, 720), (15, 15, 40))
+        draw = ImageDraw.Draw(img)
+        
+        title = script_data.get('seo_youtube_title', candidate.get('title', 'Breaking'))
+        
+        try:
+            font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 70
+            )
+        except:
+            font = ImageFont.load_default()
+        
+        # Text with shadow
+        draw.text((640 + 4, 360 + 4), title[:40], font=font,
+                  fill=(0, 0, 0), anchor="mm")
+        draw.text((640, 360), title[:40], font=font,
+                  fill=(255, 255, 255), anchor="mm")
+        
+        img.save(thumb_path, quality=95)
+        logger.info(f"Thumbnail: {thumb_path}")
+        return thumb_path
+    
+    except Exception as e:
+        logger.error(f"Thumbnail failed: {e}")
+        return None
 
 
 # ============================================================
@@ -682,85 +668,93 @@ def create_video_god(script_data, editor_data):
 # ============================================================
 
 def main():
-    """Main orchestrator - 5 legs pipeline"""
+    """Main orchestrator"""
     logger.info("=" * 60)
     logger.info("GOD LEVEL BOT START - 5 LEGS")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
     logger.info(GOD_INSTRUCTION)
     
-    # Initialize database
     init_db()
     
-    # Show performance stats
     stats = get_performance_stats()
-    logger.info(f"Performance stats: {stats}")
+    logger.info(f"Stats: {stats}")
     
-    # LEG 1: RESEARCH
+    # LEG 1
     stories = research_god_main()
     if not stories:
-        logger.error("No stories found - exiting")
+        logger.error("No stories - exit")
         return
     
-    logger.info(f"LEG 1: Got {len(stories)} candidate stories")
+    logger.info(f"Got {len(stories)} candidates")
     
-    # Try each candidate until one is approved
     approved = None
+    best_rejected = None
     
     for i, candidate in enumerate(stories[:5]):
         logger.info(f"\n{'='*60}")
-        logger.info(f"CANDIDATE {i+1}/{min(5, len(stories))}: {candidate.get('title', '')[:60]}")
+        logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
         logger.info(f"{'='*60}")
         
-        # Generate script
+        # Script
         script_data = generate_script_god(candidate)
         
-        if script_data.get('confidence_score', 0) < 70:
-            logger.warning(f"Low confidence script: {script_data.get('confidence_score')}")
+        if script_data.get('confidence_score', 0) < 60:
+            logger.warning(f"Low confidence: {script_data.get('confidence_score')}")
             continue
         
-        # FACT CHECKING
-        logger.info("Running fact check...")
+        # Fact check
+        logger.info("Fact checking...")
         fact_checker = safe_import('src.verification.claim_checker', 'fact_check')
         if fact_checker:
             fact_result = fact_checker(script_data.get('short_script', ''), candidate)
             if not fact_result.get('passed', False):
                 logger.warning(f"Fact check failed: {fact_result.get('report', '')}")
                 continue
-            logger.info(f"Fact check passed: {fact_result.get('report', '')}")
+            logger.info(f"✅ Fact check: {fact_result.get('report', '')}")
         
-        # LEG 2: EDITOR
+        # LEG 2
         editor_data = editor_god_main(script_data, candidate)
         
-        # Save to database
+        # Save
         full_story = {**candidate, **script_data}
         story_id = save_story(full_story)
         
-        # Create video
+        # Video
         video_path = create_video_god(script_data, editor_data)
         
-        # LEG 3: BOSS APPROVAL
+        # LEG 3
         boss_data = boss_approval_main(video_path, script_data, full_story)
         
+        # Track best rejected
+        if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
+            best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)
+        
         if not boss_data.get('approved'):
-            logger.warning(f"REJECTED by Boss: {boss_data.get('reason')}")
+            logger.warning(f"REJECTED: {boss_data.get('reason')}")
             continue
         
-        logger.info(f"APPROVED by Boss: {boss_data.get('reason')}")
+        logger.info(f"APPROVED: {boss_data.get('reason')}")
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
     
+    # Fallback: use best rejected if score >= 65
+    if not approved and best_rejected:
+        score = best_rejected[3].get('score', 0)
+        if score >= 65:
+            logger.warning(f"⚠️ Using best rejected (score {score:.1f})")
+            approved = best_rejected
+    
     if not approved:
-        logger.error("All candidates rejected - SAFE EXIT")
+        logger.error("All rejected - SAFE EXIT")
         return
     
-    # Unpack approved
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved
     
-    # Create thumbnail
+    # Thumbnail
     thumbnail_path = create_thumbnail(candidate, script_data)
     
-    # LEG 4: UPLOADER
+    # LEG 4
     video_id = uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data)
     
     if video_id:
@@ -769,45 +763,12 @@ def main():
         logger.info(f"UPLOADED: https://youtu.be/{video_id}")
         logger.info(f"{'='*60}")
     
-    # LEG 5: SELF EVOLUTION
+    # LEG 5
     self_evolution_main()
     
     logger.info("\n" + "=" * 60)
-    logger.info("GOD LEVEL BOT COMPLETE - 5 LEGS DONE")
+    logger.info("GOD LEVEL BOT COMPLETE")
     logger.info("=" * 60)
-
-
-def create_thumbnail(candidate, script_data):
-    """Create thumbnail image"""
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-        
-        os.makedirs("output/thumbnails", exist_ok=True)
-        thumb_path = "output/thumbnails/thumb.jpg"
-        
-        # Create 1280x720 thumbnail
-        img = Image.new('RGB', (1280, 720), (20, 20, 40))
-        draw = ImageDraw.Draw(img)
-        
-        # Add title text
-        title = candidate.get('title', 'Breaking News')[:50]
-        
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 60)
-        except:
-            font = ImageFont.load_default()
-        
-        # Draw text with outline
-        draw.text((640, 360), title, font=font, fill=(255, 255, 255), anchor="mm", 
-                  stroke_width=3, stroke_fill=(0, 0, 0))
-        
-        img.save(thumb_path, quality=95)
-        logger.info(f"Thumbnail created: {thumb_path}")
-        return thumb_path
-    
-    except Exception as e:
-        logger.error(f"Thumbnail failed: {e}")
-        return None
 
 
 if __name__ == "__main__":

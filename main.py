@@ -378,7 +378,7 @@ def generate_script_god(story):
             
             prompt = build_script_prompt(topic, seo_title, story)
             
-            for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            for model in ["gemini-3.6-flash", "gemini-1.5-flash"]:
                 try:
                     resp = client.models.generate_content(model=model, contents=prompt)
                     text = getattr(resp, 'text', '')

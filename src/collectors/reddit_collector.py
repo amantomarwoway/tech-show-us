@@ -1,5 +1,5 @@
 """
-src/collectors/reddit_collector.py - Reddit JSON API (free, no auth needed)
+src/collectors/reddit_collector.py - Reddit JSON API (FIXED)
 """
 
 import requests
@@ -9,24 +9,39 @@ from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-SUBREDDITS = ['news', 'worldnews', 'politics', 'Conservative', 'Liberal']
+SUBREDDITS = ['news', 'worldnews', 'politics']
+
+# FIXED: Proper User-Agent (Reddit blocks generic ones)
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0; +https://github.com/yourusername)',
+    'Accept': 'application/json'
+}
+
 
 def collect_reddit_trends():
     """Collect trending posts from Reddit JSON API"""
     stories = []
     
-    for subreddit in SUBREDDITS[:3]:
+    for subreddit in SUBREDDITS:
         try:
-            url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit=10"
-            headers = {'User-Agent': 'NewsBot/1.0'}
+            url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit=15"
             
-            resp = requests.get(url, headers=headers, timeout=10)
+            # FIXED: Longer timeout + proper headers
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            
+            if resp.status_code == 429:
+                logger.warning(f"Reddit rate limited for r/{subreddit}")
+                time.sleep(5)
+                continue
             
             if resp.status_code != 200:
+                logger.warning(f"Reddit r/{subreddit} status: {resp.status_code}")
                 continue
             
             data = resp.json()
             posts = data.get('data', {}).get('children', [])
+            
+            logger.info(f"Reddit r/{subreddit}: {len(posts)} raw posts")
             
             for post in posts:
                 post_data = post.get('data', {})
@@ -35,10 +50,10 @@ def collect_reddit_trends():
                 if len(title) < 20:
                     continue
                 
-                # Check for news keywords
                 title_lower = title.lower()
-                news_keywords = ['breaking', 'trump', 'biden', 'white house', 'supreme court',
-                                'congress', 'election', 'war', 'tariff', 'economy']
+                news_keywords = ['breaking', 'trump', 'biden', 'white house',
+                               'supreme court', 'congress', 'election', 'war',
+                               'tariff', 'economy', 'ukraine', 'russia', 'china']
                 
                 if not any(kw in title_lower for kw in news_keywords):
                     continue
@@ -47,7 +62,7 @@ def collect_reddit_trends():
                     "title": title,
                     "url": f"https://reddit.com{post_data.get('permalink', '')}",
                     "source": "reddit_rising_breakout",
-                    "source_tier": 3,  # Lower credibility - signal only
+                    "source_tier": 3,
                     "breakout_score": random.randint(3500, 5000),
                     "is_breakout": True,
                     "search_volume": random.randint(60, 85),
@@ -57,11 +72,11 @@ def collect_reddit_trends():
                     "reddit_comments": post_data.get('num_comments', 0)
                 })
             
-            logger.info(f"Reddit r/{subreddit}: {len(stories)} total")
-            time.sleep(1)  # Rate limit
-            
+            time.sleep(2)  # Rate limit
+        
         except Exception as e:
-            logger.warning(f"Reddit r/{subreddit} failed: {e}")
+            logger.warning(f"Reddit r/{subreddit} failed: {str(e)[:80]}")
             continue
     
+    logger.info(f"Reddit total: {len(stories)} stories")
     return stories

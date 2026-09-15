@@ -1,4 +1,34 @@
 """
+src/media/video_builder.py - Video creation (MoviePy 1.0.3)
+"""
+
+import os
+import random
+import wave
+import subprocess
+import sys
+
+# FIX: MoviePy 1.x import
+try:
+    from moviepy.editor import (
+        VideoFileClip, AudioFileClip, ImageClip, ColorClip,
+        CompositeVideoClip, CompositeAudioClip
+    )
+    import moviepy.video.fx.all as vfx
+    import moviepy.audio.fx.all as afx
+    MOVIEPY_OK = True
+except ImportError as e:
+    print(f"[VIDEO_BUILDER] MoviePy 1.x required: {e}")
+    MOVIEPY_OK = False
+
+from PIL import Image, ImageDraw, ImageFont
+from src.utils.logger import setup_logger
+from src.config import VIDEO_CONFIG, TTS_CONFIG, PATHS
+
+logger = setup_logger(__name__)
+
+# ... rest of the code (same as before)
+"""
 src/media/video_builder.py - Video creation with MoviePy + FFmpeg
 """
 

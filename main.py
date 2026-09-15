@@ -256,10 +256,17 @@ def score_and_rank_stories(stories):
 # ============================================================
 
 def editor_god_main(script_data, candidate):
-    """Visual asset collection from everywhere"""
+    """SCRIPT-BASED visual asset collection"""
     logger.info("=" * 60)
-    logger.info("LEG 2: EDITOR GOD - Visual asset collection")
+    logger.info("LEG 2: EDITOR GOD - Script-based visuals")
     logger.info("=" * 60)
+    
+    # Check Pexels key
+    pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
+    if pexels_key:
+        logger.info(f"✅ PEXELS_API_KEY present (len={len(pexels_key)})")
+    else:
+        logger.warning("❌ PEXELS_API_KEY MISSING")
     
     editor_data = {
         "segments": [],
@@ -268,27 +275,37 @@ def editor_god_main(script_data, candidate):
         "sound_effects": []
     }
     
-    # Get visual segments from script
-    segments = script_data.get('script_visual_segments', [])
+    # Get script text
+    script_text = (
+        script_data.get('short_script', '') or
+        script_data.get('full_script', '') or
+        script_data.get('viral_hook', '')
+    )
     
-    # Asset finder
-    asset_finder = safe_import('src.media.asset_finder', 'find_assets_for_segments')
-    if asset_finder:
-        try:
-            visuals = asset_finder(segments, candidate)
-            editor_data['visuals'] = visuals
-            logger.info(f"Found {len(visuals)} visual assets")
-        except Exception as e:
-            logger.error(f"Asset finder failed: {e}")
+    if not script_text:
+        logger.warning("No script text for visual search")
+        return editor_data
     
-    # Get background music
-    music_finder = safe_import('src.media.asset_finder', 'find_background_music')
-    if music_finder:
-        try:
-            music = music_finder(script_data.get('mood', 'news'))
-            editor_data['background_music'] = music
-        except Exception as e:
-            logger.error(f"Music finder failed: {e}")
+    logger.info(f"📝 Script: {script_text[:100]}...")
+    
+    # Call script-based finder
+    try:
+        from src.media.asset_finder import find_assets_for_script
+        visuals = find_assets_for_script(script_text, num_clips=16)
+        editor_data['visuals'] = visuals
+        logger.info(f"✅ Editor: {len(visuals)} visual assets")
+    except Exception as e:
+        logger.error(f"Asset finder failed: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Background music
+    try:
+        from src.media.asset_finder import find_background_music
+        music = find_background_music(script_data.get('mood', 'news'))
+        editor_data['background_music'] = music
+    except:
+        pass
     
     logger.info("LEG 2 COMPLETE")
     return editor_data

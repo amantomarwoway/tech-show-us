@@ -12,6 +12,22 @@ src/config.py - GOD LEVEL CONFIG
 import os
 
 # ============================================================
+# VIDEO LAYOUT CONSTANTS
+# ============================================================
+
+TOP_BLACK_STRIP_HEIGHT = 200      # Top black strip (was 150)
+WHITE_BAR_HEIGHT = 210             # White bar below top strip
+BOTTOM_BLACK_STRIP_HEIGHT = 200   # NEW: Bottom black strip
+VIDEO_CONTENT_AREA = 1920 - TOP_BLACK_STRIP_HEIGHT - WHITE_BAR_HEIGHT - BOTTOM_BLACK_STRIP_HEIGHT
+# = 1310px for main video content
+
+# Video layout:
+# [0-200]       : Top black strip
+# [200-410]     : White bar (viral hook)
+# [410-1720]    : Main video content (1310px)
+# [1720-1920]   : Bottom black strip
+
+# ============================================================
 # 🚨 CRITICAL FIX: Pillow 10+ compatibility for MoviePy 1.0.3
 # ============================================================
 from PIL import Image

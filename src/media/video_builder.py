@@ -1,8 +1,11 @@
 """
-src/media/video_builder.py - ULTIMATE ENGAGEMENT EDITION
-- AI-based best frame selection (entire video analysis)
-- Bold white bar with auto emoji
-- Top black strip 200px + Bottom black strip 200px
+src/media/video_builder.py - FINAL PRODUCTION VERSION
+- Auto-shrink white bar text (no cut)
+- Bold with thick stroke
+- Emoji via native rendering + fallback
+- Top black strip with branding
+- Bottom black strip clean
+- AI best frame selection
 """
 
 import os
@@ -13,7 +16,7 @@ import tempfile
 import glob
 import re
 
-# 🚨 CRITICAL FIX: Pillow 10+ compatibility for MoviePy 1.0.3
+# Pillow 10+ compatibility
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageStat
 if not hasattr(Image, 'ANTIALIAS'):
     Image.ANTIALIAS = Image.LANCZOS
@@ -24,7 +27,7 @@ if not hasattr(Image, 'BILINEAR'):
 if not hasattr(Image, 'NEAREST'):
     Image.NEAREST = Image.Resampling.NEAREST
 
-# HARD CHECK: MoviePy 1.x
+# MoviePy 1.x
 try:
     from moviepy.editor import (
         VideoFileClip, AudioFileClip, ImageClip, ColorClip,
@@ -32,9 +35,9 @@ try:
     )
     import moviepy.video.fx.all as vfx
     import moviepy.audio.fx.all as afx
-    print("[VIDEO_BUILDER] ✅ MoviePy 1.x loaded")
+    print("[VIDEO_BUILDER] MoviePy 1.x loaded")
 except ImportError as e:
-    print(f"[VIDEO_BUILDER] ❌ MoviePy 1.x REQUIRED: {e}")
+    print(f"[VIDEO_BUILDER] MoviePy 1.x REQUIRED: {e}")
     raise
 
 from src.utils.logger import setup_logger
@@ -42,13 +45,29 @@ from src.config import VIDEO_CONFIG, TTS_CONFIG, PATHS
 
 logger = setup_logger(__name__)
 
-WIDTH = VIDEO_CONFIG['WIDTH']
-HEIGHT = VIDEO_CONFIG['HEIGHT']
+WIDTH = VIDEO_CONFIG['WIDTH']       # 1080
+HEIGHT = VIDEO_CONFIG['HEIGHT']     # 1920
 
-# NEW LAYOUT
-TOP_BLACK_STRIP = 200
-WHITE_BAR_HEIGHT = 210
+# LAYOUT (fixed, exact)
+TOP_BLACK_STRIP = 180
+WHITE_BAR_HEIGHT = 200
 BOTTOM_BLACK_STRIP = 200
+
+# FONTS
+FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
+FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+
+
+def load_font(path, size):
+    """Load font safely"""
+    try:
+        return ImageFont.truetype(path, size)
+    except:
+        try:
+            return ImageFont.truetype(FONT_BOLD, size)
+        except:
+            return ImageFont.load_default()
 
 
 # ============================================================
@@ -59,68 +78,51 @@ def get_tts_voice():
     try:
         from piper import PiperVoice
         import requests
-        
         model_path = TTS_CONFIG['model_path']
         config_path = TTS_CONFIG['config_path']
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        
         if not os.path.exists(model_path) or os.path.getsize(model_path) < 100000:
-            logger.info("Downloading Piper TTS...")
             r = requests.get(TTS_CONFIG['model_url'], timeout=120)
-            if r.status_code == 200 and len(r.content) > 100000:
+            if r.status_code == 200:
                 with open(model_path, 'wb') as f:
                     f.write(r.content)
-        
         if not os.path.exists(config_path):
             r = requests.get(TTS_CONFIG['config_url'], timeout=60)
             if r.status_code == 200:
                 with open(config_path, 'wb') as f:
                     f.write(r.content)
-        
-        voice = PiperVoice.load(model_path, config_path)
-        logger.info("✅ TTS voice loaded")
-        return voice
+        return PiperVoice.load(model_path, config_path)
     except Exception as e:
-        logger.error(f"❌ TTS failed: {e}")
+        logger.error(f"TTS failed: {e}")
         return None
 
 
 def generate_audio(script_text, voice):
     audio_path = os.path.join(PATHS['temp'], 'voice.wav')
     os.makedirs(PATHS['temp'], exist_ok=True)
-    
     if not voice:
-        return create_silent_audio(audio_path, duration=12)
-    
+        return create_silent_audio(audio_path, 12)
     try:
-        audio_chunks = []
-        sample_rate = 22050
-        
+        chunks = []
+        sr = 22050
         try:
             gen = voice.synthesize(script_text, length_scale=1.25,
                                    noise_scale=0.6, noise_w_scale=0.75)
         except TypeError:
             gen = voice.synthesize(script_text)
-        
-        for chunk in gen:
-            audio_chunks.append(chunk)
-            sample_rate = chunk.sample_rate
-        
-        if not audio_chunks:
-            return create_silent_audio(audio_path, duration=12)
-        
+        for c in gen:
+            chunks.append(c)
+            sr = c.sample_rate
+        if not chunks:
+            return create_silent_audio(audio_path, 12)
         with wave.open(audio_path, 'wb') as wav:
-            wav.setnchannels(1)
-            wav.setsampwidth(2)
-            wav.setframerate(sample_rate)
-            for chunk in audio_chunks:
-                wav.writeframes(chunk.audio_int16_bytes)
-        
-        logger.info(f"✅ Audio generated")
+            wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(sr)
+            for c in chunks:
+                wav.writeframes(c.audio_int16_bytes)
         return audio_path
     except Exception as e:
-        logger.error(f"❌ Audio failed: {e}")
-        return create_silent_audio(audio_path, duration=12)
+        logger.error(f"Audio failed: {e}")
+        return create_silent_audio(audio_path, 12)
 
 
 def create_silent_audio(path, duration=12):
@@ -135,320 +137,266 @@ def create_silent_audio(path, duration=12):
 
 
 # ============================================================
-# 🎯 AI-BASED BEST FRAME SELECTION
+# 🤖 AI BEST FRAME SELECTION
 # ============================================================
 
 def analyze_frame_engagement(frame_array):
-    """
-    Score a single frame for engagement (0-100)
-    Higher = better for CTR
-    """
+    """Score frame 0-100 for engagement"""
     try:
         import numpy as np
-        
         img = Image.fromarray(frame_array)
         gray = img.convert('L')
-        
-        # 1. Contrast (std dev of grayscale)
         stat = ImageStat.Stat(gray)
         contrast = stat.stddev[0]
-        
-        # 2. Brightness (optimal 120-180)
         brightness = stat.mean[0]
         brightness_score = 100 - abs(brightness - 150) * 1.5
-        
-        # 3. Colorfulness (saturation variance)
         hsv = img.convert('HSV')
-        hsv_stat = ImageStat.Stat(hsv)
-        colorfulness = hsv_stat.stddev[1]
-        
-        # 4. Edge density (sharpness)
+        colorfulness = ImageStat.Stat(hsv).stddev[1]
         edges = gray.filter(ImageFilter.FIND_EDGES)
-        edge_stat = ImageStat.Stat(edges)
-        sharpness = edge_stat.mean[0]
-        
-        # 5. Center-weighted interest (subjects usually centered)
+        sharpness = ImageStat.Stat(edges).mean[0]
         w, h = img.size
-        center = img.crop((w // 4, h // 4, 3 * w // 4, 3 * h // 4))
-        center_stat = ImageStat.Stat(center.convert('L'))
-        center_contrast = center_stat.stddev[0]
-        
-        # 6. Face detection (skin tone heuristic)
+        center = img.crop((w//4, h//4, 3*w//4, 3*h//4))
+        center_contrast = ImageStat.Stat(center.convert('L')).stddev[0]
         np_arr = np.array(center.convert('RGB'))
-        r, g, b = np_arr[:, :, 0], np_arr[:, :, 1], np_arr[:, :, 2]
-        skin_mask = (
-            (r > 95) & (g > 40) & (b > 20) &
-            (r > g) & (r > b) & (abs(r.astype(int) - g.astype(int)) > 15)
-        )
-        skin_ratio = skin_mask.sum() / max(1, skin_mask.size)
-        
-        # Weighted score
+        r, g, b = np_arr[:,:,0], np_arr[:,:,1], np_arr[:,:,2]
+        skin = (r > 95) & (g > 40) & (b > 20) & (r > g) & (r > b) & (abs(r.astype(int)-g.astype(int)) > 15)
+        skin_ratio = skin.sum() / max(1, skin.size)
         score = (
-            min(100, contrast * 1.8) * 0.20 +          # Contrast
-            max(0, brightness_score) * 0.15 +           # Brightness
-            min(100, colorfulness * 2.5) * 0.15 +       # Color
-            min(100, sharpness * 4) * 0.15 +            # Sharpness
-            min(100, center_contrast * 1.5) * 0.15 +    # Center
-            min(100, skin_ratio * 500) * 0.20           # Face
+            min(100, contrast * 1.8) * 0.20 +
+            max(0, brightness_score) * 0.15 +
+            min(100, colorfulness * 2.5) * 0.15 +
+            min(100, sharpness * 4) * 0.15 +
+            min(100, center_contrast * 1.5) * 0.15 +
+            min(100, skin_ratio * 500) * 0.20
         )
-        
         return score
-    except Exception as e:
+    except:
         return 50
 
 
-def find_best_moment_across_video(video_path, num_samples=30):
-    """
-    Analyze entire video, find single most engaging moment
-    Returns: (best_timestamp, best_score, all_scores)
-    """
+def find_best_moment(video_path, num_samples=20):
+    """Find best frame in video"""
     try:
         vid = VideoFileClip(video_path, audio=False)
-        duration = vid.duration
-        
-        if duration < 0.5:
+        dur = vid.duration
+        if dur < 0.5:
             vid.close()
-            return 0.0, 50, []
-        
-        timestamps = [i * duration / num_samples for i in range(num_samples)]
-        
-        scores = []
-        best_score = -1
-        best_timestamp = 0
-        
-        for ts in timestamps:
+            return 0.0, 50
+        best_ts, best_sc = 0, -1
+        for i in range(num_samples):
+            ts = i * dur / num_samples
             try:
                 frame = vid.get_frame(ts)
-                score = analyze_frame_engagement(frame)
-                scores.append((ts, score))
-                
-                if score > best_score:
-                    best_score = score
-                    best_timestamp = ts
+                sc = analyze_frame_engagement(frame)
+                if sc > best_sc:
+                    best_sc = sc
+                    best_ts = ts
             except:
                 continue
-        
         vid.close()
-        
-        logger.info(f"🎯 Analyzed {len(scores)} frames")
-        logger.info(f"🎯 Best: {best_timestamp:.2f}s (score: {best_score:.1f})")
-        
-        # Log top 3
-        sorted_moments = sorted(scores, key=lambda x: x[1], reverse=True)[:3]
-        for ts, sc in sorted_moments:
-            logger.info(f"   → {ts:.2f}s: {sc:.1f}")
-        
-        return best_timestamp, best_score, scores
-    
-    except Exception as e:
-        logger.warning(f"Analysis failed: {e}")
-        return 0.0, 50, []
-
-
-def find_best_frame_from_video(video_path, num_samples=30):
-    """Wrapper"""
-    ts, score, _ = find_best_moment_across_video(video_path, num_samples)
-    return ts, score
+        return best_ts, best_sc
+    except:
+        return 0.0, 50
 
 
 # ============================================================
-# 🎨 BOLD WHITE BAR WITH AUTO EMOJI
+# 🎯 SMART TEXT SIZING (NO CUT)
 # ============================================================
 
-EMOJI_PATTERN = re.compile(
-    "["
-    "\U0001F300-\U0001F5FF"   # Symbols & Pictographs
-    "\U0001F600-\U0001F64F"   # Emoticons
-    "\U0001F680-\U0001F6FF"   # Transport
-    "\U0001F700-\U0001F77F"   # Alchemical
-    "\U0001F780-\U0001F7FF"   # Geometric
-    "\U0001F800-\U0001F8FF"   # Supplemental Arrows
-    "\U0001F900-\U0001F9FF"   # Supplemental Symbols
-    "\U0001FA00-\U0001FA6F"   # Chess
-    "\U0001FA70-\U0001FAFF"   # Symbols Extended
-    "\U00002600-\U000026FF"   # Misc Symbols
-    "\U00002700-\U000027BF"   # Dingbats
-    "\U0001F1E0-\U0001F1FF"   # Flags
-    "]+", flags=re.UNICODE
-)
+def wrap_text_to_width(text, font, max_width, draw):
+    """Wrap text to fit width"""
+    words = text.split()
+    lines = []
+    current = []
+    for word in words:
+        test = " ".join(current + [word])
+        bbox = draw.textbbox((0, 0), test, font=font)
+        w = bbox[2] - bbox[0]
+        if w <= max_width:
+            current.append(word)
+        else:
+            if current:
+                lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
+    return lines
 
 
-def auto_select_emoji(topic):
-    """Auto-select best emoji based on topic"""
-    t = topic.lower()
+def find_best_font_size(text, max_width, max_height, max_lines=2, start_size=72):
+    """Find font size that fits text"""
+    temp_img = Image.new('RGB', (10, 10))
+    draw = ImageDraw.Draw(temp_img)
     
-    if any(w in t for w in ['war', 'military', 'strike', 'missile', 'attack', 'invasion']):
-        return "⚔️"
-    if any(w in t for w in ['tariff', 'trade', 'economy', 'money', 'dollar', 'cost', 'price']):
-        return "💰"
-    if any(w in t for w in ['trump', 'biden', 'congress', 'senate', 'white house', 'president']):
-        return "🏛️"
-    if any(w in t for w in ['ai', 'tech', 'robot', 'artificial', 'chatgpt', 'google', 'apple']):
-        return "🤖"
-    if any(w in t for w in ['secret', 'leaked', 'classified', 'hidden', 'exposed']):
-        return "🔒"
-    if any(w in t for w in ['crash', 'drop', 'fall', 'plunge', 'slump']):
-        return "📉"
-    if any(w in t for w in ['rise', 'surge', 'grow', 'soar', 'jump']):
-        return "📈"
-    if any(w in t for w in ['court', 'law', 'justice', 'supreme']):
-        return "⚖️"
-    if any(w in t for w in ['ban', 'blocked', 'banned', 'refused']):
-        return "🚫"
-    if any(w in t for w in ['global', 'world', 'international']):
-        return "🌍"
-    if any(w in t for w in ['warning', 'danger', 'risk', 'threat']):
-        return "⚠️"
-    if any(w in t for w in ['win', 'victory', 'triumph']):
-        return "🏆"
-    if any(w in t for w in ['watch', 'look', 'see', 'view']):
-        return "👀"
+    for size in range(start_size, 24, -2):
+        font = load_font(FONT_BOLD, size)
+        lines = wrap_text_to_width(text, font, max_width, draw)
+        
+        if len(lines) <= max_lines:
+            # Check height
+            total_h = 0
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                total_h += (bbox[3] - bbox[1]) + 10
+            
+            if total_h <= max_height:
+                return font, lines, size
     
-    return "🚨"
+    # Fallback: smallest size
+    font = load_font(FONT_BOLD, 32)
+    lines = wrap_text_to_width(text, font, max_width, draw)
+    return font, lines[:max_lines], 32
 
 
-def make_engaging_white_bar(text, topic=""):
-    """
-    ULTRA BOLD white bar with emoji
-    - Maximum font weight
-    - Auto emoji
-    - Strong accent colors
-    """
-    total_height = TOP_BLACK_STRIP + WHITE_BAR_HEIGHT
-    
-    img = Image.new('RGB', (WIDTH, total_height), (0, 0, 0))
+# ============================================================
+# 🎨 TOP BLACK STRIP (BRANDING)
+# ============================================================
+
+def make_top_black_strip():
+    """Top black strip with channel branding"""
+    img = Image.new('RGB', (WIDTH, TOP_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Random accent color
-    accents = [
-        (255, 215, 0),    # Gold
-        (255, 30, 30),    # Red
-        (0, 200, 255),    # Cyan
-        (50, 255, 100),   # Green
-        (255, 80, 200),   # Pink
-        (255, 130, 0),    # Orange
-        (200, 0, 255),    # Purple
-    ]
-    accent_color = random.choice(accents)
+    # Red accent line at bottom
+    draw.rectangle([0, TOP_BLACK_STRIP - 5, WIDTH, TOP_BLACK_STRIP], fill=(220, 30, 30))
     
-    # White bar gradient
-    for y in range(WHITE_BAR_HEIGHT):
-        ratio = y / WHITE_BAR_HEIGHT
-        r = int(255 - ratio * 15)
-        g = int(255 - ratio * 15)
-        b = int(255 - ratio * 15)
-        draw.line(
-            [(0, TOP_BLACK_STRIP + y), (WIDTH, TOP_BLACK_STRIP + y)],
-            fill=(r, g, b)
-        )
+    # Channel name (left side)
+    font_ch = load_font(FONT_BOLD, 42)
+    draw.text((30, TOP_BLACK_STRIP // 2), "UNCOVERED USA", 
+              font=font_ch, fill=(255, 255, 255), anchor='lm')
     
-    # Thick accent bars (25px)
-    draw.rectangle(
-        [0, TOP_BLACK_STRIP, 25, TOP_BLACK_STRIP + WHITE_BAR_HEIGHT],
-        fill=accent_color
+    # LIVE dot (right side)
+    dot_x = WIDTH - 180
+    dot_y = TOP_BLACK_STRIP // 2
+    draw.ellipse([dot_x - 12, dot_y - 12, dot_x + 12, dot_y + 12], fill=(255, 30, 30))
+    
+    font_live = load_font(FONT_BOLD, 38)
+    draw.text((dot_x + 25, dot_y), "LIVE", font=font_live, 
+              fill=(255, 255, 255), anchor='lm')
+    
+    path = os.path.join(PATHS['temp'], f"top_{random.randint(1, 999999)}.png")
+    img.save(path, quality=95)
+    return path
+
+
+# ============================================================
+# 🎨 WHITE BAR (AUTO-FIT TEXT + BOLD + EMOJI)
+# ============================================================
+
+def render_emoji_manually(draw, text, x, y, size=70):
+    """
+    Manually draw emoji as fallback (colored circle if font fails)
+    """
+    try:
+        emoji_font = ImageFont.truetype(FONT_EMOJI, size)
+        draw.text((x, y), text, font=emoji_font, embedded_color=True, anchor='mm')
+        return True
+    except:
+        return False
+
+
+def make_white_bar(text, topic=""):
+    """
+    FINAL white bar:
+    - Auto font size (no cut)
+    - Max 2 lines
+    - Bold + thick shadow
+    - Emoji at end
+    - Red accent bars left + right
+    """
+    total_h = WHITE_BAR_HEIGHT
+    img = Image.new('RGB', (WIDTH, total_h), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    
+    # Gradient white
+    for y in range(total_h):
+        ratio = y / total_h
+        shade = int(255 - ratio * 12)
+        draw.line([(0, y), (WIDTH, y)], fill=(shade, shade, shade))
+    
+    # Red accent bars
+    draw.rectangle([0, 0, 18, total_h], fill=(220, 30, 30))
+    draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=(220, 30, 30))
+    
+    # Separate emoji from text
+    emoji_pattern = re.compile(
+        "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
+        flags=re.UNICODE
     )
-    draw.rectangle(
-        [WIDTH - 25, TOP_BLACK_STRIP, WIDTH, TOP_BLACK_STRIP + WHITE_BAR_HEIGHT],
-        fill=accent_color
+    emojis = emoji_pattern.findall(text)
+    text_only = emoji_pattern.sub('', text).strip().upper()
+    
+    # Auto-add emoji if missing
+    if not emojis:
+        tl = topic.lower() if topic else text_only.lower()
+        if any(w in tl for w in ['war', 'military', 'strike', 'missile', 'attack']):
+            emojis = ["⚔️"]
+        elif any(w in tl for w in ['tariff', 'trade', 'economy', 'money']):
+            emojis = ["💰"]
+        elif any(w in tl for w in ['trump', 'biden', 'congress', 'white house']):
+            emojis = ["🏛️"]
+        elif any(w in tl for w in ['ai', 'tech', 'robot']):
+            emojis = ["🤖"]
+        elif any(w in tl for w in ['secret', 'leaked', 'classified']):
+            emojis = ["🔒"]
+        elif any(w in tl for w in ['crash', 'drop', 'fall']):
+            emojis = ["📉"]
+        elif any(w in tl for w in ['court', 'law', 'justice']):
+            emojis = ["⚖️"]
+        elif any(w in tl for w in ['warning', 'danger', 'risk']):
+            emojis = ["⚠️"]
+        else:
+            emojis = ["🚨"]
+    
+    emoji_char = emojis[0]
+    
+    # Add emoji to text
+    full_text = text_only + " " + emoji_char
+    
+    # Max width for text
+    max_text_width = WIDTH - 60  # Padding
+    max_text_height = total_h - 40
+    
+    # Find best font size (auto-fit)
+    font, lines, size = find_best_font_size(
+        full_text, max_text_width, max_text_height, max_lines=2, start_size=76
     )
     
-    # ============================================================
-    # EMOJI HANDLING
-    # ============================================================
+    logger.info(f"   White bar font: {size}px, {len(lines)} lines")
     
-    # Check if emoji exists
-    if not EMOJI_PATTERN.search(text):
-        # Auto-add emoji
-        emoji = auto_select_emoji(topic or text)
-        text = text.strip() + " " + emoji
-        logger.info(f"   Auto-emoji added: {emoji}")
-    
-    # Split text without removing emoji
-    text_clean = text.strip()
-    
-    # ============================================================
-    # SPLIT INTO LINES (keep emoji)
-    # ============================================================
-    
-    # Remove emoji temporarily to count words
-    text_no_emoji = EMOJI_PATTERN.sub('', text_clean).strip()
-    emojis_found = EMOJI_PATTERN.findall(text_clean)
-    
-    words = text_no_emoji.split()
-    
-    if len(words) >= 4:
-        mid = (len(words) + 1) // 2
-        line1 = " ".join(words[:mid])
-        line2 = " ".join(words[mid:])
-        
-        # Add emoji to second line
-        if emojis_found:
-            line2 = line2 + " " + "".join(emojis_found)
-        
-        lines = [line1, line2]
-    elif len(words) >= 2:
-        lines = [text_no_emoji + " " + "".join(emojis_found) if emojis_found else text_no_emoji]
-    else:
-        lines = [text_clean]
-    
-    # ============================================================
-    # FONT LOADING
-    # ============================================================
-    
-    bold_font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    
-    def load_font(paths, size):
-        for p in paths:
-            try:
-                return ImageFont.truetype(p, size)
-            except:
-                continue
-        return ImageFont.load_default()
-    
-    text_color = (5, 5, 5)
-    
-    # ============================================================
-    # RENDER
-    # ============================================================
-    
+    # Draw text centered
     if len(lines) == 1:
-        # Single line - BIG font
-        font = load_font(bold_font_paths, 76)
-        
-        bbox = draw.textbbox((0, 0), lines[0], font=font)
+        line = lines[0]
+        bbox = draw.textbbox((0, 0), line, font=font)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
         x = (WIDTH - tw) // 2
-        y = TOP_BLACK_STRIP + (WHITE_BAR_HEIGHT - th) // 2
+        y = (total_h - th) // 2
         
-        # Strong shadow (4 directions)
-        for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4)]:
-            draw.text((x + dx, y + dy), lines[0], font=font, fill=(140, 140, 140))
-        
+        # THICK shadow (4 directions)
+        for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3)]:
+            draw.text((x + dx, y + dy), line, font=font, fill=(180, 180, 180))
+        # Outline
+        for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
+            draw.text((x + dx, y + dy), line, font=font, fill=(80, 80, 80))
         # Main
-        draw.text((x, y), lines[0], font=font, fill=text_color)
+        draw.text((x, y), line, font=font, fill=(10, 10, 10))
     
     else:
         # Two lines
-        font = load_font(bold_font_paths, 58)
-        
+        line_h = max_text_height // 2
         for i, line in enumerate(lines[:2]):
             bbox = draw.textbbox((0, 0), line, font=font)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
             x = (WIDTH - tw) // 2
-            y = TOP_BLACK_STRIP + 30 + i * 82
+            y = 20 + i * line_h
             
-            # Strong shadow
             for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3)]:
-                draw.text((x + dx, y + dy), line, font=font, fill=(140, 140, 140))
-            
-            # Main
-            draw.text((x, y), line, font=font, fill=text_color)
+                draw.text((x + dx, y + dy), line, font=font, fill=(180, 180, 180))
+            for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
+                draw.text((x + dx, y + dy), line, font=font, fill=(80, 80, 80))
+            draw.text((x, y), line, font=font, fill=(10, 10, 10))
     
     path = os.path.join(PATHS['temp'], f"whitebar_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
@@ -456,13 +404,25 @@ def make_engaging_white_bar(text, topic=""):
 
 
 # ============================================================
-# BOTTOM BLACK STRIP
+# 🎨 BOTTOM BLACK STRIP
 # ============================================================
 
 def make_bottom_black_strip():
-    """Create bottom black strip"""
+    """Bottom strip with CTA"""
     img = Image.new('RGB', (WIDTH, BOTTOM_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
+    
+    # Red line at top
+    draw.rectangle([0, 0, WIDTH, 5], fill=(220, 30, 30))
+    
+    # Subscribe text
+    font_cta = load_font(FONT_BOLD, 44)
+    draw.text((WIDTH // 2, 70), "SUBSCRIBE FOR MORE", 
+              font=font_cta, fill=(255, 255, 255), anchor='mm')
+    
+    font_sub = load_font(FONT_BOLD, 32)
+    draw.text((WIDTH // 2, 140), "🔔 New videos every 6 hours", 
+              font=font_sub, fill=(180, 180, 180), anchor='mm')
     
     path = os.path.join(PATHS['temp'], f"bottom_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
@@ -470,38 +430,25 @@ def make_bottom_black_strip():
 
 
 # ============================================================
-# CAPTION TEXT IMAGE
+# CAPTIONS
 # ============================================================
 
-def make_text_image(text, fontsize=70, color='white', stroke=6):
-    img = Image.new('RGBA', (WIDTH, 300), (0, 0, 0, 0))
+def make_caption_image(text, fontsize=72, color='#FFFFFF', stroke=7):
+    """Caption with thick outline"""
+    img = Image.new('RGBA', (WIDTH, 260), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    font = load_font(FONT_BOLD, fontsize)
     
-    try:
-        font = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fontsize
-        )
-    except:
-        font = ImageFont.load_default()
+    # Black outline (thick)
+    for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (-3, 0), (3, 0), (0, -3), (0, 3)]:
+        draw.text((WIDTH//2 + dx, 130 + dy), text, font=font,
+                  fill='black', anchor='mm')
     
-    # Shadow
-    draw.text(
-        (WIDTH // 2 + 3, 153), text,
-        font=font, fill=(0, 0, 0, 180),
-        stroke_width=stroke + 2, stroke_fill='black',
-        anchor='mm'
-    )
+    # Color fill
+    draw.text((WIDTH//2, 130), text, font=font,
+              fill=color, anchor='mm')
     
-    # Main
-    draw.text(
-        (WIDTH // 2, 150), text,
-        font=font, fill=color,
-        stroke_width=stroke, stroke_fill='black',
-        anchor='mm'
-    )
-    
-    os.makedirs(PATHS['temp'], exist_ok=True)
-    path = os.path.join(PATHS['temp'], f"txt_{random.randint(1, 999999)}.png")
+    path = os.path.join(PATHS['temp'], f"cap_{random.randint(1, 999999)}.png")
     img.save(path)
     return path
 
@@ -510,65 +457,47 @@ def make_text_image(text, fontsize=70, color='white', stroke=6):
 # GRADIENT FALLBACK
 # ============================================================
 
-def create_gradient_image(path, color1, color2, text=""):
-    img = Image.new('RGB', (WIDTH, HEIGHT), color1)
-    draw = ImageDraw.Draw(img)
-    
-    for y in range(HEIGHT):
-        ratio = y / HEIGHT
-        r = int(color1[0] * (1 - ratio) + color2[0] * ratio)
-        g = int(color1[1] * (1 - ratio) + color2[1] * ratio)
-        b = int(color1[2] * (1 - ratio) + color2[2] * ratio)
-        draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
-    
-    if text:
-        try:
-            font = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90
-            )
-        except:
-            font = ImageFont.load_default()
-        
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        x = (WIDTH - tw) // 2
-        y = (HEIGHT - th) // 2
-        
-        for dx in [-4, 0, 4]:
-            for dy in [-4, 0, 4]:
-                draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0))
-        draw.text((x, y), text, font=font, fill=(255, 255, 255))
-    
-    img.save(path)
-    return path
-
-
-def create_generated_visuals(script_text, num=15):
-    logger.info(f"🎨 Generating {num} gradient visuals")
-    visuals = []
-    words = script_text.split()
-    
-    color_pairs = [
+def create_gradient_visual(text="", index=0):
+    colors = [
         ((10, 15, 40), (60, 30, 100)),
         ((20, 10, 10), (100, 40, 30)),
         ((5, 20, 30), (30, 80, 120)),
         ((15, 15, 15), (60, 60, 60)),
         ((30, 20, 5), (120, 80, 20)),
     ]
+    c1, c2 = colors[index % len(colors)]
     
-    for i in range(num):
-        color1, color2 = random.choice(color_pairs)
-        text = words[i].upper() if i < len(words) else ""
-        path = os.path.join(PATHS['temp'], f"grad_{random.randint(1, 999999)}.png")
-        create_gradient_image(path, color1, color2, text)
-        visuals.append(path)
+    img = Image.new('RGB', (WIDTH, HEIGHT), c1)
+    draw = ImageDraw.Draw(img)
     
-    return visuals
+    for y in range(HEIGHT):
+        r = y / HEIGHT
+        col = (
+            int(c1[0]*(1-r) + c2[0]*r),
+            int(c1[1]*(1-r) + c2[1]*r),
+            int(c1[2]*(1-r) + c2[2]*r),
+        )
+        draw.line([(0, y), (WIDTH, y)], fill=col)
+    
+    if text:
+        font = load_font(FONT_BOLD, 100)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        x = (WIDTH - tw) // 2
+        y = (HEIGHT - th) // 2
+        for dx in [-4, 0, 4]:
+            for dy in [-4, 0, 4]:
+                draw.text((x+dx, y+dy), text, font=font, fill=(0, 0, 0))
+        draw.text((x, y), text, font=font, fill=(255, 255, 255))
+    
+    path = os.path.join(PATHS['temp'], f"grad_{random.randint(1, 999999)}.png")
+    img.save(path)
+    return path
 
 
 # ============================================================
-# MAIN VIDEO CREATION
+# 🎬 MAIN
 # ============================================================
 
 def create_video(script_data, editor_data=None):
@@ -584,13 +513,11 @@ def create_video(script_data, editor_data=None):
         f"short_{random.randint(1000, 9999)}.mp4"
     )
     
-    # SCRIPT
     script_text = (
         script_data.get('full_script', '') or
         script_data.get('short_script', '') or
-        "Breaking news update. This is a developing story."
+        "Breaking news update."
     )
-    
     words = script_text.split()[:VIDEO_CONFIG['WORDS_TARGET']]
     script_text = " ".join(words)
     logger.info(f"📝 Script: {len(words)} words")
@@ -598,326 +525,205 @@ def create_video(script_data, editor_data=None):
     # TTS
     voice = get_tts_voice()
     audio_path = generate_audio(script_text, voice)
-    
     if not audio_path or not os.path.exists(audio_path):
-        audio_path = create_silent_audio(
-            os.path.join(PATHS['temp'], 'silent.wav'), 12
-        )
+        audio_path = create_silent_audio(os.path.join(PATHS['temp'], 'silent.wav'), 12)
     
     audio = AudioFileClip(audio_path)
     total_duration = audio.duration
-    
     speed = VIDEO_CONFIG.get('TTS_SPEED', 1.0)
     if speed != 1.0:
         audio = audio.fx(vfx.speedx, speed)
         total_duration = audio.duration
-    
-    total_duration = max(
-        VIDEO_CONFIG['DURATION_MIN'],
-        min(VIDEO_CONFIG['DURATION_MAX'], total_duration)
-    )
-    
+    total_duration = max(VIDEO_CONFIG['DURATION_MIN'], min(VIDEO_CONFIG['DURATION_MAX'], total_duration))
     logger.info(f"⏱️ Duration: {total_duration:.1f}s")
     
     # VISUALS
     clips_needed = int(total_duration / VIDEO_CONFIG['CLIP_DENSITY']) + 2
-    logger.info(f"📊 Clips needed: {clips_needed}")
     
     visual_paths = []
-    
     if editor_data and editor_data.get('visuals'):
         for v in editor_data['visuals']:
-            path = v.get('path') if isinstance(v, dict) else None
-            if path and os.path.exists(path):
-                visual_paths.append(path)
-        logger.info(f"Editor provided: {len(visual_paths)} clips")
+            p = v.get('path') if isinstance(v, dict) else None
+            if p and os.path.exists(p):
+                visual_paths.append(p)
+        logger.info(f"Editor: {len(visual_paths)} clips")
     
     if len(visual_paths) < clips_needed:
-        logger.info(f"⚠️ Downloading more...")
         try:
             from src.media.asset_finder import find_assets_for_script
-            new_assets = find_assets_for_script(script_text, num_clips=clips_needed)
-            for a in new_assets:
-                path = a.get('path') if isinstance(a, dict) else None
-                if path and os.path.exists(path) and path not in visual_paths:
-                    visual_paths.append(path)
-            logger.info(f"After download: {len(visual_paths)}")
+            new = find_assets_for_script(script_text, num_clips=clips_needed)
+            for a in new:
+                p = a.get('path') if isinstance(a, dict) else None
+                if p and os.path.exists(p) and p not in visual_paths:
+                    visual_paths.append(p)
         except Exception as e:
             logger.error(f"Download failed: {e}")
     
     if len(visual_paths) < clips_needed:
-        logger.warning(f"🚨 Generating fallback")
-        try:
-            needed = clips_needed - len(visual_paths)
-            generated = create_generated_visuals(script_text, num=needed)
-            visual_paths.extend(generated)
-        except Exception as e:
-            logger.error(f"Fallback failed: {e}")
+        needed = clips_needed - len(visual_paths)
+        for i in range(needed):
+            visual_paths.append(create_gradient_visual(script_text.split()[i % len(script_text.split())].upper() if script_text.split() else "", i))
     
-    if not visual_paths:
-        for i in range(clips_needed):
-            color = (random.randint(20, 50), random.randint(20, 50), random.randint(60, 100))
-            visual_paths.append(('color', color))
+    logger.info(f"✅ FINAL: {len(visual_paths)} clips")
     
-    logger.info(f"✅ FINAL: {len(visual_paths)} visual assets")
+    # 🎯 AI BEST FRAME SELECTION
+    logger.info("🎯 Finding best frame...")
+    best_idx, best_ts, best_sc = 0, 0.0, -1
     
-    # ============================================================
-    # 🎯 AI-BASED BEST MOMENT SELECTION (ENTIRE VIDEO ANALYSIS)
-    # ============================================================
+    for idx, vp in enumerate(visual_paths[:6]):
+        if isinstance(vp, str) and os.path.exists(vp) and vp.lower().endswith(('.mp4', '.mov', '.webm')):
+            ts, sc = find_best_moment(vp, 15)
+            if sc > best_sc:
+                best_sc = sc
+                best_idx = idx
+                best_ts = ts
+                logger.info(f"   Clip {idx}: {ts:.2f}s (score: {sc:.1f}) ⭐")
     
-    logger.info("🎯 Analyzing all clips for BEST moment...")
+    if best_idx > 0:
+        visual_paths.insert(0, visual_paths.pop(best_idx))
+        logger.info(f"🔄 Winner clip {best_idx} moved to first")
     
-    best_clip_idx = 0
-    best_timestamp = 0.0
-    best_score = -1
-    
-    # Analyze first 8 clips (max)
-    for idx, vp in enumerate(visual_paths[:8]):
-        if isinstance(vp, str) and os.path.exists(vp):
-            if vp.lower().endswith(('.mp4', '.mov', '.webm', '.avi')):
-                try:
-                    ts, score, _ = find_best_moment_across_video(vp, num_samples=15)
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_clip_idx = idx
-                        best_timestamp = ts
-                        logger.info(f"   Clip {idx}: {ts:.2f}s (score: {score:.1f}) ⭐")
-                except Exception as e:
-                    logger.warning(f"   Clip {idx} failed: {e}")
-                    continue
-    
-    logger.info(f"🏆 WINNER: Clip {best_clip_idx} at {best_timestamp:.2f}s (score: {best_score:.1f})")
-    
-    # Reorder: winner clip goes first
-    if best_clip_idx > 0:
-        winning = visual_paths.pop(best_clip_idx)
-        visual_paths.insert(0, winning)
-        logger.info(f"🔄 Winner moved to first position")
-    
-    best_start_time = best_timestamp
-    
-    # ============================================================
     # BUILD CLIPS
-    # ============================================================
-    
     video_clips = []
-    current_time = 0
-    clip_idx = 0
-    clip_density = VIDEO_CONFIG['CLIP_DENSITY']
+    current = 0
+    idx = 0
+    density = VIDEO_CONFIG['CLIP_DENSITY']
     
-    while current_time < total_duration:
-        clip_duration = min(clip_density, total_duration - current_time)
-        asset = visual_paths[clip_idx % len(visual_paths)]
+    while current < total_duration:
+        dur = min(density, total_duration - current)
+        asset = visual_paths[idx % len(visual_paths)]
         
         try:
             if isinstance(asset, tuple) and asset[0] == 'color':
-                sub = ColorClip((WIDTH, HEIGHT), color=asset[1], duration=clip_duration)
-            
+                sub = ColorClip((WIDTH, HEIGHT), color=asset[1], duration=dur)
             elif isinstance(asset, str) and os.path.exists(asset):
                 ext = asset.lower()
-                
                 if ext.endswith(('.mp4', '.mov', '.webm', '.avi')):
                     vid = VideoFileClip(asset, audio=False)
                     vid = vid.resize(height=HEIGHT)
-                    
                     if vid.w > WIDTH:
-                        vid = vid.crop(x_center=vid.w / 2, width=WIDTH)
+                        vid = vid.crop(x_center=vid.w/2, width=WIDTH)
                     elif vid.w < WIDTH:
                         vid = vid.resize(width=WIDTH)
                     
-                    # 🎯 First clip uses best moment timestamp
-                    if clip_idx == 0 and best_start_time > 0:
-                        start = best_start_time
-                        logger.info(f"🎬 First frame at {start:.2f}s (highest engagement)")
+                    if idx == 0 and best_ts > 0:
+                        start = best_ts
                     else:
-                        max_start = max(0, vid.duration - clip_duration)
-                        start = random.uniform(0, max_start) if max_start > 0 else 0
+                        mx = max(0, vid.duration - dur)
+                        start = random.uniform(0, mx) if mx > 0 else 0
                     
-                    end_time = min(start + clip_duration, vid.duration)
-                    sub = vid.subclip(start, end_time)
-                    sub = sub.set_duration(clip_duration)
-                
+                    end = min(start + dur, vid.duration)
+                    sub = vid.subclip(start, end).set_duration(dur)
                 elif ext.endswith(('.png', '.jpg', '.jpeg')):
-                    sub = ImageClip(asset).set_duration(clip_duration)
-                    sub = sub.resize(height=HEIGHT)
+                    sub = ImageClip(asset).set_duration(dur).resize(height=HEIGHT)
                     if sub.w > WIDTH:
-                        sub = sub.crop(x_center=sub.w / 2, width=WIDTH)
+                        sub = sub.crop(x_center=sub.w/2, width=WIDTH)
                     elif sub.w < WIDTH:
                         sub = sub.resize(width=WIDTH)
-                    sub = sub.resize(lambda t: 1.0 + 0.05 * t / clip_duration)
-                
+                    sub = sub.resize(lambda t: 1.0 + 0.05*t/dur)
                 else:
-                    sub = ColorClip((WIDTH, HEIGHT), color=(20, 20, 50), duration=clip_duration)
-            
+                    sub = ColorClip((WIDTH, HEIGHT), color=(20, 20, 50), duration=dur)
             else:
-                sub = ColorClip((WIDTH, HEIGHT), color=(20, 20, 50), duration=clip_duration)
-            
-            sub = sub.set_start(current_time)
+                sub = ColorClip((WIDTH, HEIGHT), color=(20, 20, 50), duration=dur)
+            sub = sub.set_start(current)
             video_clips.append(sub)
-        
         except Exception as e:
-            logger.warning(f"Clip {clip_idx} failed: {e}")
-            fallback = ColorClip(
-                (WIDTH, HEIGHT),
-                color=(random.randint(20, 50), random.randint(20, 50), random.randint(60, 100)),
-                duration=clip_duration
-            ).set_start(current_time)
-            video_clips.append(fallback)
+            logger.warning(f"Clip {idx} failed: {e}")
+            video_clips.append(ColorClip((WIDTH, HEIGHT), color=(30, 30, 60), duration=dur).set_start(current))
         
-        current_time += clip_duration
-        clip_idx += 1
+        current += dur
+        idx += 1
     
-    logger.info(f"🎞️ Compositing {len(video_clips)} clips...")
+    # LAYOUT: video area between strips
+    video_top = TOP_BLACK_STRIP + WHITE_BAR_HEIGHT
+    video_h = HEIGHT - video_top - BOTTOM_BLACK_STRIP
     
-    # ============================================================
-    # BASE COMPOSITE WITH LAYOUT
-    # ============================================================
-    
-    video_area_top = TOP_BLACK_STRIP + WHITE_BAR_HEIGHT
-    video_area_height = HEIGHT - video_area_top - BOTTOM_BLACK_STRIP
-    
-    adjusted_clips = []
+    adjusted = []
     for clip in video_clips:
         try:
-            clip_resized = clip.resize(height=video_area_height)
-            
-            if clip_resized.w > WIDTH:
-                clip_resized = clip_resized.crop(x_center=clip_resized.w / 2, width=WIDTH)
-            elif clip_resized.w < WIDTH:
-                clip_resized = clip_resized.resize(width=WIDTH)
-            
-            clip_resized = clip_resized.set_position((0, video_area_top))
-            adjusted_clips.append(clip_resized)
-        except Exception as e:
-            adjusted_clips.append(clip)
+            r = clip.resize(height=video_h)
+            if r.w > WIDTH:
+                r = r.crop(x_center=r.w/2, width=WIDTH)
+            elif r.w < WIDTH:
+                r = r.resize(width=WIDTH)
+            r = r.set_position((0, video_top))
+            adjusted.append(r)
+        except:
+            adjusted.append(clip)
     
-    base = CompositeVideoClip(
-        adjusted_clips,
-        size=(WIDTH, HEIGHT)
-    ).set_duration(total_duration)
+    base = CompositeVideoClip(adjusted, size=(WIDTH, HEIGHT)).set_duration(total_duration)
     
-    # ============================================================
     # OVERLAYS
-    # ============================================================
-    
     overlays = []
     
-    # White bar
+    # 1. Top black strip
+    overlays.append(ImageClip(make_top_black_strip()).set_duration(total_duration).set_position((0, 0)))
+    
+    # 2. White bar
     viral_hook = (
         script_data.get('viral_hook', '') or
         script_data.get('title', '')[:40] or
         "BREAKING NEWS"
     )
-    
-    topic_for_emoji = script_data.get('title', '') or script_data.get('seo_youtube_title', '')
-    
+    topic = script_data.get('title', '') or script_data.get('seo_youtube_title', '')
     logger.info(f"🎨 White bar: '{viral_hook}'")
     
     try:
-        whitebar_path = make_engaging_white_bar(viral_hook, topic_for_emoji)
-        whitebar = ImageClip(whitebar_path).set_duration(total_duration).set_position((0, 0))
-        overlays.append(whitebar)
+        wb = make_white_bar(viral_hook, topic)
+        overlays.append(ImageClip(wb).set_duration(total_duration).set_position((0, TOP_BLACK_STRIP)))
     except Exception as e:
         logger.warning(f"White bar failed: {e}")
     
-    # Bottom strip
-    try:
-        bottom_path = make_bottom_black_strip()
-        bottom_strip = ImageClip(bottom_path).set_duration(total_duration).set_position((0, HEIGHT - BOTTOM_BLACK_STRIP))
-        overlays.append(bottom_strip)
-    except Exception as e:
-        logger.warning(f"Bottom strip failed: {e}")
+    # 3. Bottom strip
+    overlays.append(ImageClip(make_bottom_black_strip()).set_duration(total_duration).set_position((0, HEIGHT - BOTTOM_BLACK_STRIP)))
     
-    # Captions
+    # 4. Captions
     words = script_text.split()
     word_dur = total_duration / max(len(words), 1)
-    
-    keywords_red = [
-        'BREAKING', 'SHOCKING', 'TRUMP', 'BIDEN', 'WAR', 'DEAD',
-        'KILLED', 'LEAKED', 'SECRET', 'FBI', 'COURT', 'RUSSIA',
-        'UKRAINE', 'CHINA', 'MISSILE', 'STRIKE', 'POLAND', 'NATO',
-        'USA', 'AMERICA', 'EMERGENCY', 'CRISIS', 'EXPOSED', 'REVEALED'
-    ]
+    red_kw = ['BREAKING','SHOCKING','TRUMP','BIDEN','WAR','DEAD','KILLED','LEAKED','SECRET','FBI','COURT','RUSSIA','UKRAINE','CHINA','MISSILE','STRIKE','POLAND','NATO','USA','AMERICA','CRISIS','EXPOSED']
     
     for i, word in enumerate(words):
-        start = i * word_dur
-        if start >= total_duration:
+        st = i * word_dur
+        if st >= total_duration:
             break
-        
-        is_kw = any(k in word.upper() for k in keywords_red)
+        is_kw = any(k in word.upper() for k in red_kw)
         color = '#FF0000' if is_kw else '#FFFFFF'
-        fontsize = 80 if is_kw else 70
-        
+        fs = 78 if is_kw else 68
         try:
-            path = make_text_image(word.upper(), fontsize, color, 7)
-            cap = ImageClip(path).set_duration(word_dur * 1.2).set_start(start)
-            cap = cap.set_position(('center', 0.78), relative=True)
-            
+            p = make_caption_image(word.upper(), fs, color, 7)
+            cap = ImageClip(p).set_duration(word_dur * 1.2).set_start(st)
+            cap = cap.set_position(('center', 0.82), relative=True)
             if is_kw:
-                cap = cap.resize(lambda t: 1.3 - 0.3 * min(1, t / word_dur))
-            
+                cap = cap.resize(lambda t: 1.25 - 0.25*min(1, t/word_dur))
             overlays.append(cap)
         except:
             continue
     
     logger.info(f"✅ {len(overlays)} overlays")
     
-    # FINAL
-    final = CompositeVideoClip(
-        [base] + overlays,
-        size=(WIDTH, HEIGHT)
-    ).set_duration(total_duration)
-    
+    final = CompositeVideoClip([base] + overlays, size=(WIDTH, HEIGHT)).set_duration(total_duration)
     final = final.set_audio(audio)
     
-    # WRITE
     fps = random.choice(VIDEO_CONFIG['FPS_CHOICES'])
-    logger.info(f"💾 Writing at {fps} fps...")
+    temp_out = output_path.replace('.mp4', '_raw.mp4')
     
-    temp_output = output_path.replace('.mp4', '_raw.mp4')
-    
-    final.write_videofile(
-        temp_output,
-        fps=fps,
-        codec='libx264',
-        audio_codec='aac',
-        preset='ultrafast',
-        threads=4,
-        logger=None
-    )
-    
-    logger.info(f"✅ Raw written")
-    
-    # FFMPEG FILTER
-    logger.info("🎨 FFmpeg filters...")
+    final.write_videofile(temp_out, fps=fps, codec='libx264', audio_codec='aac',
+                          preset='ultrafast', threads=4, logger=None)
     
     try:
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", temp_output,
-            "-vf", "noise=alls=5:allf=t,hue=h=2:s=1.08",
-            "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-r", str(fps),
-            output_path
-        ]
-        
+        cmd = ["ffmpeg", "-y", "-i", temp_out,
+               "-vf", "noise=alls=5:allf=t,hue=h=2:s=1.08",
+               "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
+               "-c:a", "aac", "-b:a", "128k", "-r", str(fps), output_path]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        
         if result.returncode == 0:
-            os.remove(temp_output)
-            logger.info(f"✅ FFmpeg applied")
+            os.remove(temp_out)
         else:
-            logger.warning(f"FFmpeg failed")
-            os.rename(temp_output, output_path)
+            os.rename(temp_out, output_path)
+    except:
+        if os.path.exists(temp_out):
+            os.rename(temp_out, output_path)
     
-    except Exception as e:
-        logger.warning(f"FFmpeg error: {e}")
-        if os.path.exists(temp_output):
-            os.rename(temp_output, output_path)
-    
-    # Cleanup
     try:
         for f in glob.glob(os.path.join(PATHS['temp'], "*.png")):
             os.remove(f)
@@ -926,8 +732,5 @@ def create_video(script_data, editor_data=None):
     except:
         pass
     
-    logger.info("=" * 50)
-    logger.info(f"🎉 VIDEO READY")
-    logger.info("=" * 50)
-    
+    logger.info(f"🎉 VIDEO READY: {output_path}")
     return output_path

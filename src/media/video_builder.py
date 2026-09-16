@@ -1,9 +1,11 @@
 """
-src/media/video_builder.py - FINAL PRODUCTION
-- White bar text NO CUT (up to 3 lines)
-- First frame HUMAN EMOTION (Pexels photos API)
-- Human emotion from title/text
-- 8K upscale
+src/media/video_builder.py - FINAL PRODUCTION v2
+- White bar text NO CUT (up to 3 lines, normal size)
+- Question-based hook (no emoji)
+- Green accents (not red)
+- Clean top strip (no LIVE/UNCOVERED USA)
+- First frame: HUMAN EMOTION + ZOOM IN effect (1 second)
+- 8K upscale ONLY (no 4K fallback)
 """
 
 import os
@@ -53,6 +55,10 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
+# Colors
+GREEN_ACCENT = (34, 139, 34)     # Forest green
+DARK_GREEN = (0, 100, 0)         # Dark green
+
 # 8K Resolution (Vertical 9:16 for Shorts)
 UPSCALE_WIDTH = 4320
 UPSCALE_HEIGHT = 7680
@@ -73,7 +79,7 @@ def load_font(path, size):
 # ============================================================
 
 def detect_emotion_from_text(text):
-    """Detect emotion → return (emotion, query)"""
+    """Detect emotion → return (emotion, query) for human expression"""
     if not text:
         return ('neutral', 'serious man portrait')
     
@@ -103,12 +109,14 @@ def detect_emotion_from_text(text):
         return ('surprise', 'surprised man portrait')
     if any(w in t for w in ['court', 'law', 'justice', 'supreme']):
         return ('serious', 'serious lawyer portrait')
+    if any(w in t for w in ['biden', 'hunter', 'silence', 'breaks']):
+        return ('serious', 'serious man face')
     
     return ('neutral', 'serious man portrait')
 
 
 def fetch_human_emotion_image(query):
-    """Fetch human emotion photo from Pexels PHOTOS API (v1/search)"""
+    """Fetch human emotion photo from Pexels PHOTOS API"""
     import requests
     
     key = os.getenv("PEXELS_API_KEY", "").strip()
@@ -321,7 +329,7 @@ def find_best_moment(video_path, num_samples=20):
 
 
 # ============================================================
-# 🎯 WHITE BAR - NO CUT FIX (up to 3 lines)
+# 🎯 WHITE BAR - QUESTION + SMALLER FONT + NO EMOJI
 # ============================================================
 
 def wrap_text_to_width(text, font, max_width, draw):
@@ -343,7 +351,8 @@ def wrap_text_to_width(text, font, max_width, draw):
     return lines
 
 
-def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=76):
+def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=62):
+    """Auto-fit text - start size 62 (normal)"""
     temp_img = Image.new('RGB', (10, 10))
     draw = ImageDraw.Draw(temp_img)
     
@@ -373,57 +382,33 @@ def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=76)
 
 
 def make_white_bar(text, topic=""):
-    """White bar - NO TEXT CUT"""
+    """White bar with QUESTION text - no emoji, green accents"""
     total_h = WHITE_BAR_HEIGHT
     img = Image.new('RGB', (WIDTH, total_h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
     
+    # Gradient
     for y in range(total_h):
         ratio = y / total_h
         shade = int(255 - ratio * 12)
         draw.line([(0, y), (WIDTH, y)], fill=(shade, shade, shade))
     
-    draw.rectangle([0, 0, 18, total_h], fill=(220, 30, 30))
-    draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=(220, 30, 30))
+    # GREEN accents (not red)
+    draw.rectangle([0, 0, 18, total_h], fill=GREEN_ACCENT)
+    draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=GREEN_ACCENT)
     
-    emoji_pattern = re.compile(
-        "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
-        flags=re.UNICODE
-    )
-    emojis = emoji_pattern.findall(text)
-    text_only = emoji_pattern.sub('', text).strip().upper()
+    # Text only - no emoji
+    text_only = text.strip().upper()
     
-    if not emojis:
-        tl = topic.lower() if topic else text_only.lower()
-        if any(w in tl for w in ['war', 'military', 'strike', 'missile', 'attack']):
-            emojis = ["⚔️"]
-        elif any(w in tl for w in ['space', 'launch', 'nasa', 'rocket']):
-            emojis = ["🚀"]
-        elif any(w in tl for w in ['tariff', 'trade', 'economy', 'money', 'cost']):
-            emojis = ["💰"]
-        elif any(w in tl for w in ['trump', 'biden', 'congress', 'white house']):
-            emojis = ["🏛️"]
-        elif any(w in tl for w in ['ai', 'tech', 'robot']):
-            emojis = ["🤖"]
-        elif any(w in tl for w in ['secret', 'leaked', 'classified']):
-            emojis = ["🔒"]
-        elif any(w in tl for w in ['crash', 'drop', 'fall']):
-            emojis = ["📉"]
-        elif any(w in tl for w in ['court', 'law', 'justice']):
-            emojis = ["⚖️"]
-        elif any(w in tl for w in ['warning', 'danger', 'risk']):
-            emojis = ["⚠️"]
-        else:
-            emojis = ["🚨"]
-    
-    emoji_char = emojis[0]
-    full_text = text_only + " " + emoji_char
+    # Ensure question mark
+    if text_only and '?' not in text_only:
+        text_only = text_only.rstrip('.!') + '?'
     
     max_text_width = WIDTH - 100
     max_text_height = total_h - 30
     
     font, lines, size = find_best_font_size(
-        full_text, max_text_width, max_text_height, max_lines=3, start_size=76
+        text_only, max_text_width, max_text_height, max_lines=3, start_size=62
     )
     
     logger.info(f"   White bar font: {size}px, {len(lines)} lines")
@@ -442,12 +427,15 @@ def make_white_bar(text, topic=""):
         tw = bbox[2] - bbox[0]
         x = (WIDTH - tw) // 2
         
+        # Shadow
         for dx, dy in [(-2, -2), (2, 2)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(150, 150, 150))
         
+        # Outline
         for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(40, 40, 40))
         
+        # Main
         draw.text((x, current_y), line, font=font, fill=(5, 5, 5))
         
         current_y += line_heights[i] + 8
@@ -458,14 +446,15 @@ def make_white_bar(text, topic=""):
 
 
 # ============================================================
-# 🎯 FIRST FRAME - HUMAN EMOTION (1 second)
+# 🎯 FIRST FRAME - HUMAN EMOTION + ZOOM IN (1 second)
 # ============================================================
 
 def create_text_based_first_frame(white_bar_text, topic=""):
-    """First frame 1s - HUMAN EMOTION visual from Pexels"""
+    """First frame - HUMAN EMOTION photo + question text + green accent"""
     img = Image.new('RGB', (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
+    # Emotion detection
     emotion, query = detect_emotion_from_text(topic or white_bar_text)
     logger.info(f"   🎭 Emotion: {emotion} | Query: '{query}'")
     
@@ -474,6 +463,7 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     if emotion_img:
         img = emotion_img.copy()
         
+        # Dark overlay for text readability
         overlay = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 160))
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, overlay).convert('RGB')
@@ -481,44 +471,32 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         
         logger.info(f"   ✅ Human emotion visual loaded from Pexels PHOTOS")
     else:
+        # Gradient fallback
         for y in range(HEIGHT):
             ratio = y / HEIGHT
             r = int(10 + ratio * 30)
             g = int(10 + ratio * 20)
             b = int(40 + ratio * 60)
             draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
-        logger.warning(f"   ⚠️ Using gradient fallback (no human photo)")
+        logger.warning(f"   ⚠️ Using gradient fallback")
     
+    # GREEN accent shape (left side)
     overlay_shape = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     shape_draw = ImageDraw.Draw(overlay_shape)
     shape_draw.polygon(
         [(0, 0), (350, 0), (150, HEIGHT), (0, HEIGHT)],
-        fill=(220, 30, 30, 200)
+        fill=(34, 139, 34, 200)
     )
     img = img.convert('RGBA')
     img = Image.alpha_composite(img, overlay_shape).convert('RGB')
     draw = ImageDraw.Draw(img)
     
-    emoji_pattern = re.compile(
-        "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
-        flags=re.UNICODE
-    )
-    emojis = emoji_pattern.findall(white_bar_text)
-    text_only = emoji_pattern.sub('', white_bar_text).strip().upper()
+    # Question text (no emoji)
+    text_only = white_bar_text.strip().upper()
+    if text_only and '?' not in text_only:
+        text_only = text_only.rstrip('.!') + '?'
     
-    if not emojis:
-        tl = (topic or text_only).lower()
-        if any(w in tl for w in ['space', 'launch', 'nasa', 'rocket']):
-            emojis = ["🚀"]
-        elif any(w in tl for w in ['war', 'military', 'strike']):
-            emojis = ["⚔️"]
-        elif any(w in tl for w in ['cost', 'money', 'tariff']):
-            emojis = ["💰"]
-        else:
-            emojis = ["🚨"]
-    
-    full_text = text_only + " " + emojis[0]
-    
+    # Auto-fit question text
     italic_fonts = [FONT_BOLD_ITALIC, FONT_BOLD]
     
     def load_italic(paths, size):
@@ -533,10 +511,10 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     lines = []
     max_w = WIDTH - 250
     
-    for size in range(130, 40, -5):
+    for size in range(110, 40, -5):
         f = load_italic(italic_fonts, size)
         
-        words = full_text.split()
+        words = text_only.split()
         test_lines = []
         current = []
         
@@ -561,7 +539,7 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     
     if not font:
         font = load_italic(italic_fonts, 60)
-        lines = [full_text]
+        lines = [text_only]
     
     line_height = int(font.size * 1.3) if hasattr(font, 'size') else 120
     total_text_h = len(lines) * line_height
@@ -573,13 +551,16 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         x = (WIDTH - tw) // 2 + 80
         y = y_start + i * line_height
         
+        # Strong shadow
         for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5),
                        (0, -5), (0, 5), (-5, 0), (5, 0)]:
             draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
         
+        # Main text
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
     
-    draw.rectangle([0, HEIGHT - 40, WIDTH, HEIGHT], fill=(220, 30, 30))
+    # GREEN bottom accent
+    draw.rectangle([0, HEIGHT - 40, WIDTH, HEIGHT], fill=GREEN_ACCENT)
     
     path = os.path.join(PATHS['temp'], f"firstframe_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
@@ -592,22 +573,14 @@ def create_text_based_first_frame(white_bar_text, topic=""):
 # ============================================================
 
 def make_top_black_strip():
+    """Top strip - CLEAN (no LIVE, no UNCOVERED USA), green line"""
     img = Image.new('RGB', (WIDTH, TOP_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    draw.rectangle([0, TOP_BLACK_STRIP - 5, WIDTH, TOP_BLACK_STRIP], fill=(220, 30, 30))
+    # GREEN line at bottom
+    draw.rectangle([0, TOP_BLACK_STRIP - 5, WIDTH, TOP_BLACK_STRIP], fill=GREEN_ACCENT)
     
-    font_ch = load_font(FONT_BOLD, 42)
-    draw.text((30, TOP_BLACK_STRIP // 2), "UNCOVERED USA",
-              font=font_ch, fill=(255, 255, 255), anchor='lm')
-    
-    dot_x = WIDTH - 180
-    dot_y = TOP_BLACK_STRIP // 2
-    draw.ellipse([dot_x - 12, dot_y - 12, dot_x + 12, dot_y + 12], fill=(255, 30, 30))
-    
-    font_live = load_font(FONT_BOLD, 38)
-    draw.text((dot_x + 25, dot_y), "LIVE", font=font_live,
-              fill=(255, 255, 255), anchor='lm')
+    # Empty black top strip - no text
     
     path = os.path.join(PATHS['temp'], f"top_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
@@ -615,10 +588,12 @@ def make_top_black_strip():
 
 
 def make_bottom_black_strip():
+    """Bottom strip with green line and CTA"""
     img = Image.new('RGB', (WIDTH, BOTTOM_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    draw.rectangle([0, 0, WIDTH, 5], fill=(220, 30, 30))
+    # GREEN line at top
+    draw.rectangle([0, 0, WIDTH, 5], fill=GREEN_ACCENT)
     
     font_cta = load_font(FONT_BOLD, 44)
     draw.text((WIDTH // 2, 70), "SUBSCRIBE FOR MORE",
@@ -685,13 +660,13 @@ def create_gradient_visual(text="", index=0):
 
 
 # ============================================================
-# 8K UPSCALE (Memory-Optimized for GitHub Actions)
+# 8K UPSCALE (NO FALLBACK - 8K ONLY)
 # ============================================================
 
 def upscale_to_8k(input_path):
     """
     Upscale to 8K (4320x7680) vertical for Shorts
-    Memory-optimized for GitHub Actions (7GB RAM)
+    No fallback - if fails, returns original
     """
     try:
         logger.info("=" * 50)
@@ -744,7 +719,7 @@ def upscale_to_8k(input_path):
             cmd,
             capture_output=True,
             text=True,
-            timeout=1500  # 25 min max
+            timeout=1500
         )
         
         elapsed = time.time() - start_time
@@ -772,56 +747,14 @@ def upscale_to_8k(input_path):
                 except:
                     pass
             
-            logger.warning(f"⚠️ Falling back to 4K upscale...")
-            return upscale_to_4k_fallback(input_path)
+            logger.warning(f"⚠️ Returning original video (no fallback)")
+            return input_path
     
     except subprocess.TimeoutExpired:
         logger.error("❌ [8K UPSCALE] Timeout (25 min)")
-        logger.warning(f"⚠️ Falling back to 4K upscale...")
-        return upscale_to_4k_fallback(input_path)
+        return input_path
     except Exception as e:
         logger.error(f"❌ [8K UPSCALE] Error: {e}")
-        return input_path
-
-
-def upscale_to_4k_fallback(input_path):
-    """Fallback: 4K upscale if 8K fails"""
-    try:
-        logger.info("🎬 [4K FALLBACK] Starting...")
-        
-        output_4k = input_path.replace('.mp4', '_4k.mp4')
-        
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            "-vf", "scale=2160:3840:flags=lanczos",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "22",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-movflags", "+faststart",
-            output_4k
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        
-        if result.returncode == 0 and os.path.exists(output_4k):
-            size_mb = os.path.getsize(output_4k) / (1024 * 1024)
-            logger.info(f"✅ [4K FALLBACK] Done | Size: {size_mb:.1f}MB")
-            
-            try:
-                os.remove(input_path)
-            except:
-                pass
-            os.rename(output_4k, input_path)
-            return input_path
-        else:
-            logger.warning(f"❌ 4K also failed")
-            return input_path
-    except Exception as e:
-        logger.error(f"❌ 4K fallback error: {e}")
         return input_path
 
 
@@ -994,11 +927,13 @@ def create_video(script_data, editor_data=None):
     # OVERLAYS
     overlays = []
     
+    # 1. Top strip (clean, no LIVE/UNCOVERED USA)
     overlays.append(ImageClip(make_top_black_strip()).set_duration(total_duration).set_position((0, 0)))
     
+    # 2. White bar (question)
     viral_hook = (script_data.get('viral_hook', '') or
-                  script_data.get('title', '')[:40] or
-                  "BREAKING NEWS")
+                  script_data.get('title', '')[:60] or
+                  "WHAT JUST HAPPENED?")
     topic = script_data.get('title', '') or script_data.get('seo_youtube_title', '')
     logger.info(f"🎨 White bar: '{viral_hook}'")
     
@@ -1008,9 +943,10 @@ def create_video(script_data, editor_data=None):
     except Exception as e:
         logger.warning(f"White bar failed: {e}")
     
+    # 3. Bottom strip
     overlays.append(ImageClip(make_bottom_black_strip()).set_duration(total_duration).set_position((0, HEIGHT - BOTTOM_BLACK_STRIP)))
     
-    # Captions
+    # 4. Captions
     words = script_text.split()
     word_dur = total_duration / max(len(words), 1)
     red_kw = ['BREAKING','SHOCKING','TRUMP','BIDEN','WAR','DEAD','KILLED','LEAKED',
@@ -1034,17 +970,20 @@ def create_video(script_data, editor_data=None):
         except:
             continue
     
-    # FIRST FRAME (1 second) - ON TOP
+    # 5. FIRST FRAME (1 second) - HUMAN EMOTION + ZOOM IN - ON TOP
     try:
         first_frame_img = create_text_based_first_frame(viral_hook, topic)
+        
+        # ZOOM IN effect: 1.0 → 1.15 over 1 second
         first_frame_clip = (
             ImageClip(first_frame_img)
             .set_duration(1.0)
             .set_start(0)
-            .set_position((0, 0))
+            .resize(lambda t: 1.0 + 0.15 * t)  # ZOOM IN 15%
+            .set_position('center')
         )
         overlays.append(first_frame_clip)
-        logger.info("🎯 First frame (1s, human emotion) added ON TOP")
+        logger.info("🎯 First frame (1s, human emotion, ZOOM IN) added ON TOP")
     except Exception as e:
         logger.warning(f"First frame failed: {e}")
     
@@ -1062,7 +1001,7 @@ def create_video(script_data, editor_data=None):
                           preset='ultrafast', threads=4, logger=None)
     logger.info(f"✅ Raw written")
     
-    # FFMPEG
+    # FFMPEG filter
     logger.info("🎨 FFmpeg filters...")
     try:
         cmd = ["ffmpeg", "-y", "-i", temp_out,
@@ -1079,7 +1018,7 @@ def create_video(script_data, editor_data=None):
         if os.path.exists(temp_out):
             os.rename(temp_out, output_path)
     
-    # 8K UPSCALE (before return)
+    # 8K UPSCALE (only, no fallback)
     logger.info("🎬 8K upscale for upload...")
     output_path = upscale_to_8k(output_path)
     

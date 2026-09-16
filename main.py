@@ -1,6 +1,9 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT
-Zero-cost, fully automated, editorial intelligence system
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v2
+Question-hook based system
+- Title: Question + 1 hashtag
+- White bar: 4-5 word question (no emoji)
+- Script: Answers the question
 """
 
 import os
@@ -106,7 +109,7 @@ def get_guaranteed_stories():
             "breakout_score": 6000,
             "is_breakout": True,
             "search_volume": 90,
-            "seo_youtube_title": "White House Shocker Tonight"
+            "seo_youtube_title": "What Did White House Just Do?"
         },
         {
             "title": "Supreme Court Brutal Order Panic Millions",
@@ -115,7 +118,7 @@ def get_guaranteed_stories():
             "breakout_score": 5800,
             "is_breakout": True,
             "search_volume": 88,
-            "seo_youtube_title": "Supreme Court Brutal Order"
+            "seo_youtube_title": "Who Will Supreme Court Target?"
         },
         {
             "title": "Brutal Tariffs Panic Millions of Families",
@@ -124,7 +127,7 @@ def get_guaranteed_stories():
             "breakout_score": 5700,
             "is_breakout": True,
             "search_volume": 85,
-            "seo_youtube_title": "Brutal Tariffs Panic Millions"
+            "seo_youtube_title": "Who Pays The New Tariffs?"
         },
     ]
 
@@ -344,12 +347,15 @@ def self_evolution_main():
 
 
 # ============================================================
-# SCRIPT GENERATION - SHORT TITLES + EMOJI HOOKS
+# SCRIPT GENERATION - QUESTION-BASED
 # ============================================================
 
 def generate_script_god(story):
     """
-    Generate SHORT title (25-45 chars) + engaging hook with emoji
+    Generate QUESTION-based script:
+    - Title: Question + 1 hashtag (30-50 chars)
+    - White bar: 4-5 word question (NO emoji)
+    - Script: Answers the question
     """
     topic = story.get('title', '')
     seo_title = story.get('seo_youtube_title', '') or topic
@@ -361,88 +367,81 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a YouTube Shorts CTR expert.
+            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert. Create a question-based viral short.
 
 TOPIC: {topic}
 
-🚨 TITLE RULES (VERY STRICT - COUNT CHARACTERS):
-- MUST be 25-45 characters ONLY
-- SHORT, punchy, mobile-friendly
-- Direct and action-oriented
-- Create curiosity gap
+🚨 TITLE RULES (VERY STRICT):
+- MUST be a QUESTION (ends with "?")
+- MUST be 30-50 characters (including hashtag)
+- MUST have EXACTLY 1 hashtag at the END
+- NO more than 1 hashtag
+- Question should create curiosity
+- Example: "Why Did He Stay Silent? #Breaking"
+- Example: "Who Really Pays Tariffs? #Economy"
+- Example: "What's Hidden In The Bill? #Politics"
 
-FORMULA (pick ONE):
-1. "[ACTION] [SUBJECT]"           → "Russia Warns NATO"  (17)
-2. "Why [X] Is [Y]"                → "Why This Changes All" (22)
-3. "[X] Just [VERB]"               → "NATO Just Responded" (19)
-4. "The [X] Nobody Noticed"        → "The Detail Nobody Saw" (22)
-5. "[X]: The Real Story"           → "Ukraine: Real Story" (20)
-6. "[X] Just Changed"              → "This Just Changed" (17)
+✅ GOOD TITLES (Question + 1 hashtag):
+- "Why Did Biden Stay Silent? #Breaking"
+- "Who Really Pays The Tariffs? #Economy"
+- "What's In The Secret Bill? #Politics"
+- "Is This The End For NATO? #WorldNews"
+- "Why Are Markets Crashing? #Market"
+- "Who Controls The AI Race? #Tech"
 
-❌ BAD EXAMPLES (TOO LONG, 50+ chars):
-"Russian Strike on Train Station Near Ukraine-Poland Border"
-"We Must Heed Warnings of AI Tech Developers, Says UK Minister"
-"White House Shocker Shatters Families Tonight - Leaked"
+❌ BAD TITLES:
+- "Russia Warns NATO" (not a question)
+- "Why This Changes Everything" (no hashtag)
+- "Hunter Biden News #Breaking #Politics" (2 hashtags)
+- "Why Did This Happen? #Breaking #News #Viral" (3 hashtags)
 
-✅ GOOD EXAMPLES (25-45 chars):
-"Russia Warns NATO"                     (17)
-"The AI Warning Nobody Heard"           (28)
-"Ukraine's Message to the West"          (30)
-"This Changes Everything"                (24)
-"NATO's Final Warning"                   (20)
-"Tariffs Crush Millions"                 (23)
-"AI Just Changed Everything"             (27)
-
-🚨 WHITE BAR HOOK (STRICT - MAX 5 WORDS + 1 EMOJI):
-- 4-5 words ONLY
+🚨 WHITE BAR HOOK RULES (VERY STRICT):
+- MUST be a QUESTION (ends with "?")
+- MUST be exactly 4-5 WORDS
+- NO EMOJI
 - ALL CAPS
-- EXACTLY 1 emoji at END
-- Strong curiosity gap
+- Question related to topic
+- Example: "WHY DID HE STAY SILENT?" (5 words)
+- Example: "WHO REALLY PAYS TARIFFS?" (4 words)
+- Example: "WHAT IS HE HIDING?" (4 words)
+- Example: "IS THIS THE END?" (4 words)
+- Example: "WHO CONTROLS THE AI?" (4 words)
 
-Example hooks:
-- "THEY KNEW ALL ALONG 🚨"
-- "THIS CHANGES EVERYTHING 💥"
-- "WARNING IGNORED ⚠️"
-- "LEAKED JUST NOW 🔥"
-- "NOBODY NOTICED THIS 👀"
-- "TARIFFS CRUSH MILLIONS 💰"
-- "AI IS HERE 🤖"
-- "MARKETS ARE CRASHING 📉"
+✅ GOOD HOOKS (4-5 words, question):
+- "WHY DID HE STAY SILENT?"  (5)
+- "WHO REALLY PAYS TARIFFS?"  (4)
+- "WHAT IS HE HIDING?"  (4)
+- "IS THIS THE REAL END?"  (5)
+- "WHO WINS THIS WAR?"  (4)
+- "WHY NOW, WHY HIM?"  (5)
 
-EMOJI SELECTION (pick most relevant):
-- 🚨 breaking/urgent
-- ⚠️ warning/danger
-- 🔥 viral/hot
-- 💥 shocking
-- 💰 money/economy/tariffs
-- 🏛️ politics/government
-- ⚔️ war/military
-- 🤖 AI/tech
-- 📉 crash/drop
-- 📈 rise/surge
-- ⚖️ court/law
-- 🌍 global
-- 🚫 banned
-- 🔒 secret
-- 👀 exposed
+❌ BAD HOOKS:
+- "THEY KNEW ALL ALONG"  (not a question)
+- "THIS CHANGES EVERYTHING?"  (not 4-5 words)
+- "WHY DID HE STAY SILENT? 🚨"  (has emoji)
 
-🚨 SCRIPT (40 words):
-- Strong hook first sentence
-- "reports say" for unverified
-- Open loop ending
+🚨 SCRIPT RULES (40 words):
+- MUST ANSWER the question asked in white bar
+- Start with strong hook (answer first line)
+- Provide clear answer with context
+- "reports say" for unverified claims
+- End with what happens next
+
+EXAMPLE SCRIPT for "WHY DID HE STAY SILENT?":
+"Reports say he refused comment because of ongoing investigation. Officials confirm he was advised to stay quiet. Legal experts say this could backfire. What happens next is unclear."
 
 🚨 TAGS (15 max):
-- Mix of short (1-2 words) + specific
-- Include: breaking news, world news, viral, 2026
+- Mix of short + specific
+- Include: breaking news, world news, viral
 
 OUTPUT JSON ONLY (NO EXTRA TEXT):
 {{
-    "short_script": "40-word script here",
-    "seo_youtube_title": "SHORT TITLE 25-45 CHARS",
+    "short_script": "40-word script that ANSWERS the question",
+    "seo_youtube_title": "Question? #OneHashtag",
     "description": "SEO description with subscribe CTA",
-    "hashtags": ["#BreakingNews", "#WorldNews"],
+    "hashtags": ["#Breaking"],
     "tags": ["tag1", "tag2", "tag3"],
-    "viral_hook": "MAX 5 WORDS + EMOJI",
+    "viral_hook": "4-5 WORD QUESTION?",
     "mood": "tense dramatic",
     "confidence_score": 85
 }}
@@ -461,64 +460,74 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             data = json.loads(match.group())
                             
                             # ============================================
-                            # HARD LIMITS
+                            # HARD LIMITS & FIXES
                             # ============================================
                             
-                            # Title: 45 chars max
-                            title = data.get('seo_youtube_title', '')
-                            if len(title) > 45:
-                                # Smart truncate
-                                title = title[:45].rsplit(' ', 1)[0]
-                                if len(title) < 20:
-                                    title = title + "..."
-                                data['seo_youtube_title'] = title
-                                logger.info(f"   Title truncated to {len(title)} chars")
-                            
-                            # Hook: max 5 words + emoji
+                            # --- Fix viral_hook (question, 4-5 words, no emoji) ---
                             hook = data.get('viral_hook', '')
                             
+                            # Remove any emoji
                             emoji_pat = re.compile(
                                 "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
                                 flags=re.UNICODE
                             )
+                            hook = emoji_pat.sub('', hook).strip()
                             
-                            # Ensure emoji present
-                            if not emoji_pat.search(hook):
-                                t_low = topic.lower()
-                                if any(w in t_low for w in ['war', 'military', 'strike', 'missile', 'attack']):
-                                    hook = hook + " ⚔️"
-                                elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money', 'dollar']):
-                                    hook = hook + " 💰"
-                                elif any(w in t_low for w in ['trump', 'biden', 'congress', 'senate', 'white house']):
-                                    hook = hook + " 🏛️"
-                                elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial']):
-                                    hook = hook + " 🤖"
-                                elif any(w in t_low for w in ['secret', 'leaked', 'classified', 'hidden']):
-                                    hook = hook + " 🔒"
-                                elif any(w in t_low for w in ['crash', 'drop', 'fall', 'plunge']):
-                                    hook = hook + " 📉"
-                                elif any(w in t_low for w in ['court', 'law', 'justice', 'supreme']):
-                                    hook = hook + " ⚖️"
-                                elif any(w in t_low for w in ['warning', 'danger', 'risk']):
-                                    hook = hook + " ⚠️"
-                                else:
-                                    hook = hook + " 🚨"
+                            # Ensure question mark
+                            if hook and not hook.endswith('?'):
+                                hook = hook.rstrip('.!') + '?'
                             
-                            # Limit hook to 5 words + emoji
-                            words_h = hook.split()
-                            if len(words_h) > 6:
-                                # Keep first 5 words + emoji
-                                words_h = words_h[:5]
-                                # Find emoji
-                                emoji_only = emoji_pat.findall(hook)
-                                if emoji_only:
-                                    words_h.append(emoji_only[0])
-                                hook = " ".join(words_h)
+                            # Limit to 5 words
+                            hook_words = hook.rstrip('?').split()
+                            if len(hook_words) > 5:
+                                hook_words = hook_words[:5]
+                            hook = " ".join(hook_words).upper() + "?"
+                            
+                            # Ensure 4-5 words
+                            if len(hook_words) < 4:
+                                # Add question word
+                                if 'WHAT' not in hook.upper() and 'WHO' not in hook.upper() and 'WHY' not in hook.upper() and 'HOW' not in hook.upper():
+                                    hook = "WHY " + hook.upper()
+                                    hook_words = hook.rstrip('?').split()
+                                    if len(hook_words) > 5:
+                                        hook_words = hook_words[:5]
+                                    hook = " ".join(hook_words).upper() + "?"
                             
                             data['viral_hook'] = hook
                             
+                            # --- Fix seo_youtube_title (question + 1 hashtag) ---
+                            title = data.get('seo_youtube_title', '')
+                            
+                            # Remove all hashtags
+                            title_clean = re.sub(r'#\w+', '', title).strip()
+                            
+                            # Ensure question mark
+                            if title_clean and not title_clean.endswith('?'):
+                                title_clean = title_clean.rstrip('.!,') + '?'
+                            
+                            # Add ONE hashtag
+                            hashtag = data.get('hashtags', ['#Breaking'])[0] if data.get('hashtags') else '#Breaking'
+                            if not hashtag.startswith('#'):
+                                hashtag = '#' + hashtag
+                            hashtag = hashtag.split()[0]  # Only first hashtag
+                            
+                            # Combine
+                            title_full = f"{title_clean} {hashtag}"
+                            
+                            # Limit length to 50 chars
+                            if len(title_full) > 50:
+                                # Truncate title portion
+                                max_title_len = 50 - len(hashtag) - 1
+                                title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
+                                if not title_clean.endswith('?'):
+                                    title_clean = title_clean.rstrip('.!,') + '?'
+                                title_full = f"{title_clean} {hashtag}"
+                            
+                            data['seo_youtube_title'] = title_full
+                            data['hashtags'] = [hashtag]
+                            
                             logger.info(f"✅ Script by {model}")
-                            logger.info(f"   Title ({len(data['seo_youtube_title'])} chars): {data['seo_youtube_title']}")
+                            logger.info(f"   Title ({len(title_full)} chars): {title_full}")
                             logger.info(f"   Hook: {data['viral_hook']}")
                             return data
                 except Exception as e:
@@ -533,65 +542,69 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
 
 
 def get_template_script(topic, seo_title):
-    """Fallback - SHORT title + emoji hook"""
+    """Fallback - Question-based title + hook"""
     
-    # Extract key word (2-3 words max)
+    # Extract key words
     words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
              ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 'said']]
     
-    # Get 2 key words
     key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "News")
     
-    # Short title templates (25-45 chars)
+    # Question title templates
     title_templates = [
-        f"{key[:35]} Just Changed",
-        f"Why {key[:30]} Matters",
-        f"The {key[:25]} Nobody Saw",
-        f"{key[:30]}: Real Story",
-        f"This {key[:28]} Is Huge",
+        f"Why Did {key[:20]} Happen?",
+        f"Who Really Wins From {key[:15]}?",
+        f"What's The Truth About {key[:15]}?",
+        f"Is {key[:20]} The Real Problem?",
+        f"How Did This Change {key[:15]}?",
     ]
     
-    title = random.choice(title_templates)
-    if len(title) > 45:
-        title = title[:42] + "..."
+    title_q = random.choice(title_templates)
     
-    # Auto emoji
+    # Determine hashtag based on topic
     t_low = topic.lower()
     if any(w in t_low for w in ['war', 'military', 'strike', 'missile']):
-        emoji = "⚔️"
+        hashtag = "#Breaking"
+        hook = "WHO WINS THIS WAR?"
     elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money']):
-        emoji = "💰"
+        hashtag = "#Economy"
+        hook = "WHO PAYS FOR THIS?"
     elif any(w in t_low for w in ['trump', 'biden', 'congress', 'white house']):
-        emoji = "🏛️"
+        hashtag = "#Politics"
+        hook = "WHY DID HE STAY SILENT?"
     elif any(w in t_low for w in ['ai', 'tech', 'robot']):
-        emoji = "🤖"
+        hashtag = "#Tech"
+        hook = "WHO CONTROLS THE AI?"
     elif any(w in t_low for w in ['secret', 'leaked', 'classified']):
-        emoji = "🔒"
+        hashtag = "#Breaking"
+        hook = "WHAT ARE THEY HIDING?"
     elif any(w in t_low for w in ['crash', 'drop', 'fall']):
-        emoji = "📉"
+        hashtag = "#Market"
+        hook = "WHY ARE MARKETS CRASHING?"
     elif any(w in t_low for w in ['court', 'law', 'justice']):
-        emoji = "⚖️"
+        hashtag = "#Justice"
+        hook = "WHO WINS IN COURT?"
     elif any(w in t_low for w in ['warning', 'danger']):
-        emoji = "⚠️"
+        hashtag = "#Breaking"
+        hook = "WHY WAS THIS IGNORED?"
     else:
-        emoji = "🚨"
+        hashtag = "#Breaking"
+        hook = "WHY NOW, WHY HIM?"
     
-    # Hook (5 words + emoji)
-    hook_templates = [
-        f"THEY KNEW ALL ALONG {emoji}",
-        f"THIS CHANGES EVERYTHING {emoji}",
-        f"WARNING IGNORED {emoji}",
-        f"NOBODY NOTICED THIS {emoji}",
-        f"THE PART EVERYONE MISSED {emoji}",
-    ]
-    
-    hook = random.choice(hook_templates)
+    # Combine title + hashtag
+    title_full = f"{title_q[:45]} {hashtag}"
+    if len(title_full) > 50:
+        max_title = 50 - len(hashtag) - 1
+        title_q = title_q[:max_title].rsplit(' ', 1)[0]
+        if not title_q.endswith('?'):
+            title_q = title_q.rstrip('.!,') + '?'
+        title_full = f"{title_q} {hashtag}"
     
     return {
-        "short_script": f"Breaking: {topic}. According to reports, this changes everything. Officials say the situation is developing. What happens next?",
-        "seo_youtube_title": title,
-        "description": f"{topic} - breaking news update. Subscribe for more.",
-        "hashtags": ["#BreakingNews", "#WorldNews", "#GlobalNews"],
+        "short_script": f"Reports say the answer is more complicated than it looks. Officials confirm the basic facts. Legal experts say this could backfire. The situation is still developing. Here's what we know so far.",
+        "seo_youtube_title": title_full,
+        "description": f"{topic} - answer to your question. Subscribe for more.",
+        "hashtags": [hashtag],
         "tags": [
             "breaking news", "world news", "politics", "usa",
             "viral", "shocking", "2026", "government",

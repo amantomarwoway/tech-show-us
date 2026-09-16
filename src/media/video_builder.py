@@ -56,7 +56,7 @@ BOTTOM_BLACK_STRIP = 200
 
 # FONTS
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
+FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
 # 8K Resolution
@@ -989,8 +989,8 @@ def create_video(script_data, editor_data=None):
     # 🎬 8K UPSCALE (Before Return)
     # ============================================================
     
-    logger.info("🎬 8K upscale for upload...")
-    output_path = upscale_to_8k(output_path)
+    logger.info("🎬 16K upscale for upload...")
+    output_path = upscale_to_16k(output_path)
     
     # Cleanup
     try:
@@ -1002,7 +1002,7 @@ def create_video(script_data, editor_data=None):
         pass
     
     logger.info("=" * 50)
-    logger.info(f"🎉 VIDEO READY (8K): {output_path}")
+    logger.info(f"🎉 VIDEO READY (16K): {output_path}")
     logger.info("=" * 50)
     
     return output_path

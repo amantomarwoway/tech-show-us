@@ -53,6 +53,7 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
+# 8K Resolution (Vertical 9:16 for Shorts)
 UPSCALE_WIDTH = 4320
 UPSCALE_HEIGHT = 7680
 
@@ -74,7 +75,7 @@ def load_font(path, size):
 def detect_emotion_from_text(text):
     """Detect emotion → return (emotion, query)"""
     if not text:
-        return ('neutral', 'serious person portrait')
+        return ('neutral', 'serious man portrait')
     
     t = text.lower()
     
@@ -107,10 +108,7 @@ def detect_emotion_from_text(text):
 
 
 def fetch_human_emotion_image(query):
-    """
-    Fetch human emotion photo from Pexels PHOTOS API (v1/search)
-    Returns: PIL Image or None
-    """
+    """Fetch human emotion photo from Pexels PHOTOS API (v1/search)"""
     import requests
     
     key = os.getenv("PEXELS_API_KEY", "").strip()
@@ -118,7 +116,6 @@ def fetch_human_emotion_image(query):
         return None
     
     try:
-        # Use PHOTOS API (v1), not videos
         url = (
             f"https://api.pexels.com/v1/search"
             f"?query={requests.utils.quote(query)}"
@@ -143,7 +140,6 @@ def fetch_human_emotion_image(query):
         
         random.shuffle(photos)
         
-        # Try up to 3 photos
         for photo in photos[:3]:
             try:
                 img_url = (
@@ -160,15 +156,12 @@ def fetch_human_emotion_image(query):
                 if r.status_code != 200:
                     continue
                 
-                # Save temp
                 tmp_path = os.path.join(PATHS['temp'], f"emotion_{random.randint(1, 999999)}.jpg")
                 with open(tmp_path, 'wb') as f:
                     f.write(r.content)
                 
-                # Load and resize to fill
                 img = Image.open(tmp_path).convert('RGB')
                 
-                # Smart crop to fill
                 img_ratio = img.width / img.height
                 target_ratio = WIDTH / HEIGHT
                 
@@ -185,7 +178,6 @@ def fetch_human_emotion_image(query):
                     top = (new_h - HEIGHT) // 2
                     img = img.crop((0, top, WIDTH, top + HEIGHT))
                 
-                # Cleanup
                 try:
                     os.remove(tmp_path)
                 except:
@@ -333,7 +325,6 @@ def find_best_moment(video_path, num_samples=20):
 # ============================================================
 
 def wrap_text_to_width(text, font, max_width, draw):
-    """Wrap text to width"""
     words = text.split()
     lines = []
     current = []
@@ -353,14 +344,9 @@ def wrap_text_to_width(text, font, max_width, draw):
 
 
 def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=76):
-    """
-    FIXED: Auto-fit text - up to 3 lines
-    Font size will SHRINK until text fits
-    """
     temp_img = Image.new('RGB', (10, 10))
     draw = ImageDraw.Draw(temp_img)
     
-    # Try from big to small
     for size in range(start_size, 20, -2):
         try:
             font = ImageFont.truetype(FONT_BOLD_ITALIC, size)
@@ -369,17 +355,15 @@ def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=76)
         
         lines = wrap_text_to_width(text, font, max_width, draw)
         
-        # Check both line count AND total height
         if len(lines) <= max_lines:
             total_h = 0
             for line in lines:
                 bbox = draw.textbbox((0, 0), line, font=font)
-                total_h += (bbox[3] - bbox[1]) + 8  # spacing
+                total_h += (bbox[3] - bbox[1]) + 8
             
             if total_h <= max_height:
                 return font, lines, size
     
-    # Fallback: smallest size
     try:
         font = ImageFont.truetype(FONT_BOLD_ITALIC, 24)
     except:
@@ -394,17 +378,14 @@ def make_white_bar(text, topic=""):
     img = Image.new('RGB', (WIDTH, total_h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
     
-    # Gradient
     for y in range(total_h):
         ratio = y / total_h
         shade = int(255 - ratio * 12)
         draw.line([(0, y), (WIDTH, y)], fill=(shade, shade, shade))
     
-    # Red accents
     draw.rectangle([0, 0, 18, total_h], fill=(220, 30, 30))
     draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=(220, 30, 30))
     
-    # Emoji split
     emoji_pattern = re.compile(
         "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
         flags=re.UNICODE
@@ -412,7 +393,6 @@ def make_white_bar(text, topic=""):
     emojis = emoji_pattern.findall(text)
     text_only = emoji_pattern.sub('', text).strip().upper()
     
-    # Auto emoji
     if not emojis:
         tl = topic.lower() if topic else text_only.lower()
         if any(w in tl for w in ['war', 'military', 'strike', 'missile', 'attack']):
@@ -439,18 +419,15 @@ def make_white_bar(text, topic=""):
     emoji_char = emojis[0]
     full_text = text_only + " " + emoji_char
     
-    # Max width with padding
     max_text_width = WIDTH - 100
     max_text_height = total_h - 30
     
-    # Auto-fit (up to 3 lines, shrink if needed)
     font, lines, size = find_best_font_size(
         full_text, max_text_width, max_text_height, max_lines=3, start_size=76
     )
     
     logger.info(f"   White bar font: {size}px, {len(lines)} lines")
     
-    # Calculate total text height
     line_heights = []
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font)
@@ -459,22 +436,18 @@ def make_white_bar(text, topic=""):
     total_text_h = sum(line_heights) + (len(lines) - 1) * 8
     y_start = (total_h - total_text_h) // 2
     
-    # Render each line
     current_y = y_start
     for i, line in enumerate(lines[:3]):
         bbox = draw.textbbox((0, 0), line, font=font)
         tw = bbox[2] - bbox[0]
         x = (WIDTH - tw) // 2
         
-        # Shadow (2 directions)
         for dx, dy in [(-2, -2), (2, 2)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(150, 150, 150))
         
-        # Outline
         for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(40, 40, 40))
         
-        # Main
         draw.text((x, current_y), line, font=font, fill=(5, 5, 5))
         
         current_y += line_heights[i] + 8
@@ -493,10 +466,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.new('RGB', (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # ============================================================
-    # 🎭 FETCH HUMAN EMOTION PHOTO
-    # ============================================================
-    
     emotion, query = detect_emotion_from_text(topic or white_bar_text)
     logger.info(f"   🎭 Emotion: {emotion} | Query: '{query}'")
     
@@ -505,7 +474,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     if emotion_img:
         img = emotion_img.copy()
         
-        # Dark overlay for text readability
         overlay = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 160))
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, overlay).convert('RGB')
@@ -513,7 +481,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         
         logger.info(f"   ✅ Human emotion visual loaded from Pexels PHOTOS")
     else:
-        # Fallback gradient
         for y in range(HEIGHT):
             ratio = y / HEIGHT
             r = int(10 + ratio * 30)
@@ -522,7 +489,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
             draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
         logger.warning(f"   ⚠️ Using gradient fallback (no human photo)")
     
-    # Red accent shape
     overlay_shape = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     shape_draw = ImageDraw.Draw(overlay_shape)
     shape_draw.polygon(
@@ -533,7 +499,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.alpha_composite(img, overlay_shape).convert('RGB')
     draw = ImageDraw.Draw(img)
     
-    # Emoji
     emoji_pattern = re.compile(
         "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
         flags=re.UNICODE
@@ -554,7 +519,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     
     full_text = text_only + " " + emojis[0]
     
-    # Font - italic
     italic_fonts = [FONT_BOLD_ITALIC, FONT_BOLD]
     
     def load_italic(paths, size):
@@ -565,7 +529,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
                 continue
         return ImageFont.load_default()
     
-    # Find best size (up to 3 lines)
     font = None
     lines = []
     max_w = WIDTH - 250
@@ -600,7 +563,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         font = load_italic(italic_fonts, 60)
         lines = [full_text]
     
-    # Render text
     line_height = int(font.size * 1.3) if hasattr(font, 'size') else 120
     total_text_h = len(lines) * line_height
     y_start = (HEIGHT - total_text_h) // 2
@@ -611,14 +573,12 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         x = (WIDTH - tw) // 2 + 80
         y = y_start + i * line_height
         
-        # Thick shadow
         for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5),
                        (0, -5), (0, 5), (-5, 0), (5, 0)]:
             draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
         
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
     
-    # Bottom red accent
     draw.rectangle([0, HEIGHT - 40, WIDTH, HEIGHT], fill=(220, 30, 30))
     
     path = os.path.join(PATHS['temp'], f"firstframe_{random.randint(1, 999999)}.png")
@@ -725,61 +685,143 @@ def create_gradient_visual(text="", index=0):
 
 
 # ============================================================
-# 16K UPSCALE
+# 8K UPSCALE (Memory-Optimized for GitHub Actions)
 # ============================================================
 
-def upscale_to_16k(input_path):
+def upscale_to_8k(input_path):
+    """
+    Upscale to 8K (4320x7680) vertical for Shorts
+    Memory-optimized for GitHub Actions (7GB RAM)
+    """
     try:
         logger.info("=" * 50)
-        logger.info("🎬 [16K UPSCALE] Starting...")
+        logger.info("🎬 [8K UPSCALE] Starting...")
         logger.info("=" * 50)
         
         if not os.path.exists(input_path):
+            logger.error(f"[8K] File not found: {input_path}")
             return input_path
         
         input_size = os.path.getsize(input_path) / (1024 * 1024)
         logger.info(f"   Input size: {input_size:.1f}MB")
         
-        output_16k = input_path.replace('.mp4', '_16k.mp4')
+        output_8k = input_path.replace('.mp4', '_8k.mp4')
+        
+        try:
+            probe = subprocess.run([
+                "ffprobe", "-v", "error", "-show_entries",
+                "format=duration", "-of",
+                "default=noprint_wrappers=1:nokey=1", input_path
+            ], capture_output=True, text=True, timeout=30)
+            duration = float(probe.stdout.strip()) if probe.stdout.strip() else 12
+            logger.info(f"   Duration: {duration:.1f}s")
+        except:
+            duration = 12
+        
         start_time = time.time()
         
+        # Memory-optimized 8K encoding
         cmd = [
             "ffmpeg", "-y",
             "-i", input_path,
-            "-vf", f"scale={UPSCALE_WIDTH}:{UPSCALE_HEIGHT}:flags=lanczos",
-            "-c:v", "libx264", "-preset", "ultrafast",
-            "-crf", "20", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k",
+            "-vf", f"scale={UPSCALE_WIDTH}:{UPSCALE_HEIGHT}:flags=lanczos:force_original_aspect_ratio=decrease",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "fastdecode",
+            "-crf", "25",
+            "-pix_fmt", "yuv420p",
+            "-threads", "2",
+            "-x264-params", "ref=1:bframes=0:me=dia:subme=0:trellis=0:weightp=0",
+            "-c:a", "aac",
+            "-b:a", "192k",
             "-movflags", "+faststart",
-            output_16k
+            output_8k
         ]
         
-        logger.info(f"   Running FFmpeg 16K upscale...")
+        logger.info(f"   Running FFmpeg 8K upscale (memory-optimized)...")
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=1500  # 25 min max
+        )
+        
         elapsed = time.time() - start_time
         
-        if result.returncode == 0 and os.path.exists(output_16k):
-            output_size = os.path.getsize(output_16k) / (1024 * 1024)
-            logger.info(f"✅ [16K UPSCALE] Done in {elapsed:.1f}s")
-            logger.info(f"   Output: {output_size:.1f}MB")
+        if result.returncode == 0 and os.path.exists(output_8k):
+            output_size = os.path.getsize(output_8k) / (1024 * 1024)
+            logger.info(f"✅ [8K UPSCALE] Done in {elapsed:.1f}s")
+            logger.info(f"   Output size: {output_size:.1f}MB")
             
             try:
                 os.remove(input_path)
             except:
                 pass
-            os.rename(output_16k, input_path)
+            os.rename(output_8k, input_path)
+            
             return input_path
         else:
-            logger.warning(f"❌ 16K failed")
-            if os.path.exists(output_16k):
+            err = result.stderr[-500:] if result.stderr else 'unknown'
+            logger.warning(f"❌ [8K UPSCALE] Failed")
+            logger.warning(f"   Error: {err}")
+            
+            if os.path.exists(output_8k):
                 try:
-                    os.remove(output_16k)
+                    os.remove(output_8k)
                 except:
                     pass
+            
+            logger.warning(f"⚠️ Falling back to 4K upscale...")
+            return upscale_to_4k_fallback(input_path)
+    
+    except subprocess.TimeoutExpired:
+        logger.error("❌ [8K UPSCALE] Timeout (25 min)")
+        logger.warning(f"⚠️ Falling back to 4K upscale...")
+        return upscale_to_4k_fallback(input_path)
+    except Exception as e:
+        logger.error(f"❌ [8K UPSCALE] Error: {e}")
+        return input_path
+
+
+def upscale_to_4k_fallback(input_path):
+    """Fallback: 4K upscale if 8K fails"""
+    try:
+        logger.info("🎬 [4K FALLBACK] Starting...")
+        
+        output_4k = input_path.replace('.mp4', '_4k.mp4')
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-vf", "scale=2160:3840:flags=lanczos",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "22",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            output_4k
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        
+        if result.returncode == 0 and os.path.exists(output_4k):
+            size_mb = os.path.getsize(output_4k) / (1024 * 1024)
+            logger.info(f"✅ [4K FALLBACK] Done | Size: {size_mb:.1f}MB")
+            
+            try:
+                os.remove(input_path)
+            except:
+                pass
+            os.rename(output_4k, input_path)
+            return input_path
+        else:
+            logger.warning(f"❌ 4K also failed")
             return input_path
     except Exception as e:
-        logger.error(f"❌ 16K error: {e}")
+        logger.error(f"❌ 4K fallback error: {e}")
         return input_path
 
 
@@ -1037,7 +1079,7 @@ def create_video(script_data, editor_data=None):
         if os.path.exists(temp_out):
             os.rename(temp_out, output_path)
     
-    # 8K
+    # 8K UPSCALE (before return)
     logger.info("🎬 8K upscale for upload...")
     output_path = upscale_to_8k(output_path)
     
@@ -1053,7 +1095,7 @@ def create_video(script_data, editor_data=None):
         pass
     
     logger.info("=" * 50)
-    logger.info(f"🎉 VIDEO READY (16K): {output_path}")
+    logger.info(f"🎉 VIDEO READY (8K): {output_path}")
     logger.info("=" * 50)
     
     return output_path

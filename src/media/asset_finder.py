@@ -1,6 +1,6 @@
 """
-src/media/asset_finder.py - SCRIPT-BASED visual finder
-Har script sentence se specific query nikalti hai
+src/media/asset_finder.py - STRONG SCRIPT-BASED VISUAL FINDER
+Multiple strategies for max relevance
 """
 
 import os
@@ -12,141 +12,157 @@ from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Stop words to filter
-STOP_WORDS = {
-    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to',
-    'for', 'of', 'and', 'or', 'but', 'with', 'from', 'by', 'as', 'says',
-    'said', 'will', 'has', 'have', 'had', 'be', 'been', 'being', 'this',
-    'that', 'these', 'those', 'new', 'breaking', 'news', 'just', 'in',
-    'according', 'reports', 'officials', 'confirmed', 'situation', 'developing',
-    'what', 'happens', 'next', 'still', 'more', 'information', 'available',
-    'here', 'know', 'so', 'far', 'we', 'you', 'they', 'it', 'he', 'she'
-}
-
-# Visual keyword mapping (topic → visual search)
+# Comprehensive visual mapping
 VISUAL_MAP = {
     # Politics
-    'trump': 'trump rally podium',
-    'biden': 'white house exterior',
+    'trump': 'trump rally',
+    'biden': 'white house',
     'congress': 'capitol building',
     'senate': 'senate chamber',
     'supreme court': 'supreme court building',
     'white house': 'white house exterior',
-    'election': 'voting ballot box',
+    'election': 'voting ballot',
     'vote': 'voting hands',
     'president': 'presidential podium',
+    'democrat': 'capitol building',
+    'republican': 'capitol building',
     
     # Military/Conflict
-    'russia': 'russian military',
-    'ukraine': 'ukraine city',
+    'russia': 'russian military parade',
+    'russian': 'russian military',
+    'ukraine': 'ukraine city street',
     'missile': 'missile launch',
     'strike': 'explosion smoke',
     'war': 'soldiers marching',
     'military': 'military tanks',
     'attack': 'emergency response',
-    'poland': 'poland border',
+    'poland': 'poland city',
     'nato': 'nato flag',
+    'army': 'army soldiers',
+    'troops': 'soldiers',
+    'weapons': 'weapons military',
+    'kyiv': 'kyiv city',
     
     # Economy
-    'tariff': 'shipping containers',
-    'trade': 'cargo ship port',
+    'tariff': 'shipping containers port',
+    'trade': 'cargo ship',
     'economy': 'stock market chart',
     'market': 'trading floor',
-    'inflation': 'grocery prices',
-    'jobs': 'workers factory',
-    'federal reserve': 'federal reserve building',
+    'inflation': 'grocery store',
+    'jobs': 'factory workers',
+    'federal reserve': 'federal reserve',
+    'dollar': 'dollar bills',
+    'money': 'money cash',
+    'cost': 'expensive price tag',
+    'price': 'shopping prices',
+    'stocks': 'stock market screen',
+    'million': 'wealth money',
+    'billion': 'city skyline',
     
     # General news
-    'fire': 'fire emergency',
+    'fire': 'fire flames emergency',
     'crash': 'car accident',
-    'police': 'police lights',
-    'court': 'courtroom justice',
+    'police': 'police lights night',
+    'court': 'courtroom gavel',
     'protest': 'protest crowd',
     'rally': 'political rally',
     'breaking': 'breaking news studio',
     'urgent': 'emergency alert',
     'crisis': 'emergency response',
     'leak': 'classified documents',
-    'secret': 'hidden files',
+    'leaked': 'documents papers',
+    'secret': 'hidden mystery',
     'scandal': 'press conference',
+    'warning': 'warning sign',
+    'danger': 'danger alert',
+    'alert': 'emergency alert',
+    'disaster': 'natural disaster',
+    'flood': 'flood water',
+    'storm': 'storm clouds',
+    'earthquake': 'earthquake damage',
     
     # Tech
     'ai': 'artificial intelligence',
-    'tech': 'technology data',
-    'apple': 'apple store',
+    'artificial': 'AI robot',
+    'tech': 'technology computer',
+    'apple': 'apple store iphone',
     'google': 'google office',
     'tesla': 'electric car',
     'spacex': 'rocket launch',
+    'space': 'space rocket',
+    'nasa': 'nasa rocket',
+    'launch': 'rocket launch',
+    'satellite': 'satellite space',
+    'robot': 'robot technology',
+    'cyber': 'cyber security',
+    'hack': 'hacker computer',
     
     # Health
     'covid': 'hospital medical',
     'vaccine': 'vaccine injection',
     'health': 'hospital corridor',
     'disease': 'medical research',
+    'doctor': 'doctor hospital',
+    'hospital': 'hospital building',
     
     # Climate
-    'climate': 'climate change',
+    'climate': 'climate change glacier',
     'warming': 'melting ice',
-    'storm': 'storm clouds',
     'hurricane': 'hurricane damage',
-    'flood': 'flood water'
+    'wildfire': 'forest fire',
+    
+    # Society
+    'family': 'family walking',
+    'children': 'children playing',
+    'school': 'school classroom',
+    'student': 'students studying',
+    'workers': 'construction workers',
+    'immigration': 'airport travelers',
+    'border': 'border fence',
+    
+    # Person emotions
+    'shock': 'shocked person',
+    'angry': 'angry man',
+    'sad': 'sad person',
+    'happy': 'happy person',
+    'fear': 'scared person',
+    'panic': 'panic crowd',
+    'cry': 'crying person',
+    'worried': 'worried person',
+}
+
+# Stop words
+STOP_WORDS = {
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to',
+    'for', 'of', 'and', 'or', 'but', 'with', 'from', 'by', 'as', 'says',
+    'said', 'will', 'has', 'have', 'had', 'be', 'been', 'being', 'this',
+    'that', 'these', 'those', 'new', 'breaking', 'news', 'just',
+    'according', 'reports', 'officials', 'confirmed', 'situation', 'developing',
+    'what', 'happens', 'next', 'still', 'more', 'information', 'available',
+    'here', 'know', 'so', 'far', 'we', 'you', 'they', 'it', 'he', 'she',
+    'than', 'then', 'their', 'there', 'these', 'about', 'after', 'also'
 }
 
 
-def extract_visual_keywords(text):
-    """
-    Extract visual keywords from a script sentence
-    Returns list of search queries
-    """
+def extract_key_entities(text):
+    """Extract key entities from text - 3 words MAX per query"""
     text_lower = text.lower()
     
-    # 1. Check for mapped keywords (most specific)
-    matched_queries = []
-    for key, visual in VISUAL_MAP.items():
+    # 1. Find mapped queries (MOST SPECIFIC)
+    mapped = []
+    for key, query in VISUAL_MAP.items():
         if key in text_lower:
-            matched_queries.append(visual)
+            mapped.append(query)
     
-    if matched_queries:
-        return matched_queries[:2]  # Max 2 per sentence
-    
-    # 2. Extract regular keywords
+    # 2. Extract top keywords
     words = re.findall(r'\b[a-z]{4,}\b', text_lower)
     keywords = [w for w in words if w not in STOP_WORDS]
     
-    if not keywords:
-        return []
-    
-    # Return top 2 keywords as combined query
-    return [" ".join(keywords[:2])]
-
-
-def segment_script(script_text, num_segments=8):
-    """
-    Split script into segments for visual mapping
-    """
-    # Split by sentences
-    sentences = re.split(r'[.!?]+', script_text)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-    
-    if not sentences:
-        return [script_text]
-    
-    # If too few sentences, split by words
-    if len(sentences) < num_segments:
-        words = script_text.split()
-        chunk_size = max(3, len(words) // num_segments)
-        
-        sentences = []
-        for i in range(0, len(words), chunk_size):
-            chunk = " ".join(words[i:i + chunk_size])
-            if chunk.strip():
-                sentences.append(chunk)
-    
-    return sentences[:num_segments]
+    return mapped, keywords
 
 
 def download_clip(video_url, timeout=30):
-    """Download single clip"""
+    """Download clip"""
     try:
         r = requests.get(video_url, timeout=timeout, stream=True)
         if r.status_code != 200:
@@ -166,29 +182,25 @@ def download_clip(video_url, timeout=30):
             return None
         
         return tmp_path
-    
-    except Exception as e:
-        logger.debug(f"Download failed: {e}")
+    except:
         return None
 
 
-def search_pexels(query, key, num=2):
-    """Search Pexels for a specific query"""
+def search_pexels_videos(query, key, num=3):
+    """Search Pexels videos"""
     try:
         url = (
             f"https://api.pexels.com/videos/search"
             f"?query={requests.utils.quote(query)}"
-            f"&per_page={num * 2}"
-            f"&orientation=portrait&size=medium"
+            f"&per_page={num * 3}"
+            f"&orientation=portrait"
+            f"&size=medium"
         )
         
-        resp = requests.get(
-            url,
-            headers={"Authorization": key},
-            timeout=20
-        )
+        resp = requests.get(url, headers={"Authorization": key}, timeout=20)
         
         if resp.status_code != 200:
+            logger.warning(f"   Pexels videos status {resp.status_code}")
             return []
         
         videos = resp.json().get('videos', [])
@@ -197,8 +209,8 @@ def search_pexels(query, key, num=2):
             return []
         
         random.shuffle(videos)
-        
         downloaded = []
+        
         for v in videos:
             if len(downloaded) >= num:
                 break
@@ -216,26 +228,21 @@ def search_pexels(query, key, num=2):
                 path = download_clip(link)
                 if path:
                     downloaded.append(path)
-            
-            except Exception as e:
+            except:
                 continue
         
         return downloaded
-    
     except Exception as e:
-        logger.debug(f"Search failed: {e}")
+        logger.warning(f"   Pexels video failed: {e}")
         return []
 
 
 def find_assets_for_script(script_text, num_clips=16):
     """
-    MAIN FUNCTION - Script-based visual finder
-    
-    Strategy:
-    1. Split script into segments
-    2. Extract visual keywords per segment
-    3. Search Pexels for each keyword
-    4. Guarantee minimum clips with fallbacks
+    STRONG script-based visual finder
+    - Splits script into sentences
+    - Extracts keywords per sentence
+    - 3 search strategies
     """
     key = os.getenv("PEXELS_API_KEY", "").strip()
     
@@ -245,32 +252,64 @@ def find_assets_for_script(script_text, num_clips=16):
     
     logger.info(f"🎬 Script-based visual finder (need {num_clips} clips)")
     
-    # 1. Segment script
-    segments = segment_script(script_text, num_segments=num_clips)
-    logger.info(f"📝 Script segmented into {len(segments)} parts")
+    # ============================================================
+    # SPLIT SCRIPT INTO SENTENCES
+    # ============================================================
     
-    # 2. Extract keywords per segment
-    segment_queries = []
-    for seg in segments:
-        queries = extract_visual_keywords(seg)
-        if queries:
-            segment_queries.append(queries[0])  # Top query per segment
-        else:
-            segment_queries.append("breaking news studio")  # Default
+    sentences = re.split(r'[.!?]+', script_text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 8]
     
-    logger.info(f"🔍 Queries: {segment_queries[:5]}...")
+    if not sentences:
+        sentences = [script_text]
     
-    # 3. Search Pexels for each query
+    logger.info(f"📝 Script split into {len(sentences)} sentences")
+    
+    # ============================================================
+    # BUILD QUERIES PER SENTENCE
+    # ============================================================
+    
+    all_queries = []
+    
+    for sent in sentences:
+        # Get mapped queries + keywords
+        mapped, keywords = extract_key_entities(sent)
+        
+        # Priority 1: Mapped queries (most specific)
+        if mapped:
+            all_queries.append(mapped[0])
+        
+        # Priority 2: Top 2 keywords combined
+        if len(keywords) >= 2:
+            all_queries.append(" ".join(keywords[:2]))
+        elif keywords:
+            all_queries.append(keywords[0])
+    
+    # Deduplicate while keeping order
+    seen = set()
+    unique_queries = []
+    for q in all_queries:
+        if q not in seen:
+            seen.add(q)
+            unique_queries.append(q)
+    
+    logger.info(f"🔍 {len(unique_queries)} unique queries")
+    logger.info(f"   Sample: {unique_queries[:5]}")
+    
+    # ============================================================
+    # SEARCH PEXELS FOR EACH QUERY
+    # ============================================================
+    
     all_clips = []
     seen_paths = set()
     
-    for i, query in enumerate(segment_queries):
+    for i, query in enumerate(unique_queries):
         if len(all_clips) >= num_clips:
             break
         
-        logger.info(f"🔍 [{i+1}/{len(segment_queries)}] Query: '{query}'")
+        logger.info(f"🔍 [{i+1}/{len(unique_queries)}] '{query}'")
         
-        clips = search_pexels(query, key, num=2)
+        # Get 2-3 clips per query
+        clips = search_pexels_videos(query, key, num=2)
         
         for clip in clips:
             if clip not in seen_paths:
@@ -279,9 +318,12 @@ def find_assets_for_script(script_text, num_clips=16):
         
         logger.info(f"   → {len(clips)} clips (total: {len(all_clips)})")
     
-    # 4. Fallback - if not enough, use generic queries
+    # ============================================================
+    # FALLBACK: generic news queries
+    # ============================================================
+    
     if len(all_clips) < num_clips:
-        logger.warning(f"⚠️ Only {len(all_clips)} clips - using fallback queries")
+        logger.warning(f"⚠️ Only {len(all_clips)}/{num_clips} - using fallbacks")
         
         fallback_queries = [
             "breaking news studio",
@@ -289,26 +331,24 @@ def find_assets_for_script(script_text, num_clips=16):
             "city skyline night",
             "government building",
             "flag waving",
-            "data screen",
-            "newspaper printing",
-            "camera crew",
             "news anchor desk",
-            "emergency lights"
+            "camera crew filming",
+            "newspaper printing",
+            "emergency lights",
+            "data screen"
         ]
         
         random.shuffle(fallback_queries)
         
-        for query in fallback_queries:
+        for fq in fallback_queries:
             if len(all_clips) >= num_clips:
                 break
             
-            clips = search_pexels(query, key, num=3)
+            clips = search_pexels_videos(fq, key, num=2)
             for clip in clips:
                 if clip not in seen_paths:
                     all_clips.append(clip)
                     seen_paths.add(clip)
-            
-            logger.info(f"Fallback '{query}': {len(clips)} (total: {len(all_clips)})")
     
     logger.info(f"🎯 FINAL: {len(all_clips)} clips for {num_clips} needed")
     
@@ -325,25 +365,14 @@ def find_assets_for_script(script_text, num_clips=16):
     return assets
 
 
-# ============================================================
-# LEGACY COMPATIBILITY (for existing code)
-# ============================================================
-
 def find_assets_for_segments(segments, story):
-    """
-    Legacy wrapper - redirects to script-based finder
-    """
-    # Get script from story
+    """Legacy wrapper"""
     script = (
         story.get('short_script', '') or
         story.get('full_script', '') or
         story.get('title', '')
     )
-    
-    if not script:
-        return []
-    
-    return find_assets_for_script(script, num_clips=16)
+    return find_assets_for_script(script, num_clips=16) if script else []
 
 
 def find_background_music(mood='news'):

@@ -3,7 +3,7 @@ src/media/video_builder.py - FINAL PRODUCTION
 - White bar text NO CUT (up to 3 lines)
 - First frame HUMAN EMOTION (Pexels photos API)
 - Human emotion from title/text
-- 16K upscale
+- 8K upscale
 """
 
 import os
@@ -53,8 +53,8 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
-UPSCALE_WIDTH = 8640
-UPSCALE_HEIGHT = 15360
+UPSCALE_WIDTH = 4320
+UPSCALE_HEIGHT = 7680
 
 
 def load_font(path, size):
@@ -1037,9 +1037,9 @@ def create_video(script_data, editor_data=None):
         if os.path.exists(temp_out):
             os.rename(temp_out, output_path)
     
-    # 16K
-    logger.info("🎬 16K upscale for upload...")
-    output_path = upscale_to_16k(output_path)
+    # 8K
+    logger.info("🎬 8K upscale for upload...")
+    output_path = upscale_to_8k(output_path)
     
     # Cleanup
     try:

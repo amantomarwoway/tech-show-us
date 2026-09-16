@@ -1,11 +1,11 @@
 """
-src/media/video_builder.py - ULTIMATE ENGAGEMENT EDITION + 8K UPSCALE
+src/media/video_builder.py - ULTIMATE ENGAGEMENT EDITION + 16K UPSCALE
 - AI-based best frame selection (entire video analysis)
 - Bold white bar with auto emoji (no cut text)
 - Top black strip with branding
 - Bottom black strip with CTA
 - Text-based first frame (0.3s) matching white bar
-- 8K upscale before upload
+- 16K upscale before upload
 """
 
 import os

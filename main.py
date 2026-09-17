@@ -1,11 +1,10 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT v3
-Question-hook based system
-- Title: Question + 1 hashtag
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v4
+Question-hook ONLY system
+- Title: ONLY QUESTION + 1 hashtag (no publisher names EVER)
 - White bar: 4-5 word question (no emoji)
 - Script: Answers the question
-- Clean topics (no publisher prefix)
-- Skip duplicates
+- Duplicate stories skipped
 """
 
 import os
@@ -29,41 +28,66 @@ logger = setup_logger(__name__)
 
 
 # ============================================================
-# 🧹 TOPIC CLEANING (Remove publisher prefix)
+# 🧹 AGGRESSIVE TOPIC CLEANING
 # ============================================================
 
 def clean_topic(title):
-    """Remove publisher prefix like 'MINNEAPOLIMEDIA BREAKING NEWS |' """
+    """Remove ALL publisher prefixes/suffixes"""
     if not title:
         return ""
     
     cleaned = title.strip()
     
-    # Remove ALL-CAPS prefix with pipe: "MINNEAPOLIMEDIA BREAKING NEWS |"
-    cleaned = re.sub(r'^[A-Z][A-Z\s]+\|\s*', '', cleaned)
+    # If pipe exists, take longest part after pipe
+    if '|' in cleaned:
+        parts = cleaned.split('|')
+        cleaned = max(parts, key=len).strip()
     
-    # Remove "Something BREAKING NEWS |"
-    cleaned = re.sub(r'^[A-Za-z\s]+BREAKING NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    # Remove publisher patterns
+    publisher_patterns = [
+        r'^(?:[A-Z][A-Za-z]+\s*){1,4}(?:NEWS|MEDIA|TIMES|POST|TODAY|NOW|TV|PRESS|JOURNAL|REPORT)\s*[-:]\s*',
+        r'^(?:MINNEAPOLI|CNN|BBC|ABC|NBC|CBS|FOX|MSNBC|NYT|WSJ|AP|REUTERS)[A-Za-z]*\s*[-:]\s*',
+    ]
     
-    # Remove "BREAKING NEWS |"
-    cleaned = re.sub(r'^BREAKING NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    for pattern in publisher_patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
     
-    # Remove "Something NEWS |"
-    cleaned = re.sub(r'^[A-Za-z\s]+NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    # Remove publisher keywords
+    cleaned = re.sub(r'\b[A-Z]{4,}[A-Za-z]*MEDIA\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\b[A-Z]{4,}[A-Za-z]*NEWS\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bBREAKING\s+NEWS\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bBREAKING\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bLIVE\s+UPDATE\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bLIVE\b', '', cleaned, flags=re.IGNORECASE)
     
-    # Remove "Something MEDIA |"
-    cleaned = re.sub(r'^[A-Za-z\s]+MEDIA\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    # Remove end attributions
+    cleaned = re.sub(r'\s*-\s*[A-Z][a-zA-Z\s]{2,30}$', '', cleaned)
+    cleaned = re.sub(r'\s*\([A-Za-z\s]{2,30}\)\s*$', '', cleaned)
     
-    # Remove "Something LIVE |"
-    cleaned = re.sub(r'^[A-Za-z\s]+LIVE\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
-    
-    # Remove " - Source Name" at end (2-25 chars)
-    cleaned = re.sub(r'\s+-\s+[A-Za-z\s]{2,25}$', '', cleaned)
-    
-    # Remove leading pipe or dash
-    cleaned = re.sub(r'^[\|\-\s]+', '', cleaned)
+    # Remove extra punctuation
+    cleaned = re.sub(r'^[\|\-\s:]+', '', cleaned)
+    cleaned = re.sub(r'[\|\-\s:]+$', '', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned)
     
     return cleaned.strip()
+
+
+def has_publisher_name(text):
+    """Check if text contains publisher name"""
+    if not text:
+        return False
+    
+    bad_words = [
+        'MINNEAPOLI', 'BREAKING NEWS', 'CNN', 'BBC', 'ABC', 'NBC', 'CBS',
+        'FOX', 'MSNBC', 'NYT', 'WSJ', 'APNEWS', 'REUTERS', 'DAILY',
+        'TIMES', 'POST', 'JOURNAL', 'PRESS', 'MEDIA'
+    ]
+    
+    text_upper = text.upper()
+    for bad in bad_words:
+        if bad in text_upper:
+            return True
+    return False
 
 
 # ============================================================
@@ -133,7 +157,7 @@ def research_god_main():
         logger.warning("All collectors failed - fallback")
         all_stories = get_guaranteed_stories()
     
-    # Clean titles
+    # Clean all titles
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
     
@@ -391,21 +415,19 @@ def self_evolution_main():
 
 
 # ============================================================
-# SCRIPT GENERATION - QUESTION-BASED
+# SCRIPT GENERATION - QUESTION ONLY
 # ============================================================
 
 def generate_script_god(story):
     """
-    Generate QUESTION-based script:
-    - Title: Question + 1 hashtag (30-50 chars)
-    - White bar: 4-5 word question (NO emoji)
-    - Script: Answers the question
+    Generate ONLY QUESTION-based title + hook
+    NEVER contains publisher names
     """
     # CLEAN TOPIC
     raw_topic = story.get('title', '')
     topic = clean_topic(raw_topic)
     
-    if len(topic) < 10:
+    if len(topic) < 15:
         topic = raw_topic
     
     seo_title = story.get('seo_youtube_title', '') or topic
@@ -420,71 +442,76 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert. Create a question-based viral short.
+            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert.
 
-TOPIC: {topic}
+NEWS TOPIC: {topic}
 
-🚨 TITLE RULES (VERY STRICT):
+🚨 YOUR TASK:
+1. Create a QUESTION title (only question + 1 hashtag)
+2. Write a 40-word script that ANSWERS that question
+
+🚨 TITLE RULES (SUPER STRICT - FAIL IF BROKEN):
 - MUST be a QUESTION (ends with "?")
-- MUST be 30-50 characters (including hashtag)
-- MUST have EXACTLY 1 hashtag at the END
-- NO more than 1 hashtag
-- Question should create curiosity
-- Example: "Why Did He Stay Silent? #Breaking"
-- Example: "Who Really Pays Tariffs? #Economy"
-- Example: "What's Hidden In The Bill? #Politics"
+- MUST start with: Why / What / Who / How / Is / Will / Can / Are / Does
+- MUST be 30-50 characters INCLUDING hashtag
+- MUST have EXACTLY 1 hashtag at END
+- MUST NOT contain ANY publisher name
+- FORBIDDEN WORDS IN TITLE (never use these):
+  * BREAKING NEWS
+  * MINNEAPOLIMEDIA or any ALL-CAPS 4+ letter word
+  * CNN, BBC, ABC, NBC, CBS, FOX, MSNBC, NYT, WSJ, AP, REUTERS
+  * Any newspaper/media name
+  * Any country code like MINNEAPOLI
 
-✅ GOOD TITLES (Question + 1 hashtag):
-- "Why Did Biden Stay Silent? #Breaking"
-- "Who Really Pays The Tariffs? #Economy"
-- "What's In The Secret Bill? #Politics"
-- "Is This The End For NATO? #WorldNews"
+✅ GOOD TITLE EXAMPLES (follow these patterns):
+- "Why Did Biden Stay Silent? #Politics"
+- "Who Really Pays Tariffs? #Economy"
+- "What's Hiding In The Bill? #Politics"
 - "Why Are Markets Crashing? #Market"
+- "Is This The End For NATO? #World"
 - "Who Controls The AI Race? #Tech"
+- "Why Did Costs Jump So High? #Space"
+- "What Really Happened Today? #News"
 
-❌ BAD TITLES:
+❌ NEVER PRODUCE TITLES LIKE:
+- "MINNEAPOLIMEDIA BREAKING NEWS | Biden Cancer" (publisher name)
 - "Russia Warns NATO" (not a question)
+- "Hunter Biden Breaks Silence" (not a question)
 - "Why This Changes Everything" (no hashtag)
-- "Hunter Biden News #Breaking #Politics" (2 hashtags)
-- "Why Did This Happen? #Breaking #News #Viral" (3 hashtags)
+- "What Happened? #Breaking #News #Viral" (3 hashtags)
+- "BREAKING: Biden News Today" (has BREAKING)
+- "MINNEAPOLIMEDIA Breaking News" (has publisher)
 
-🚨 WHITE BAR HOOK RULES (VERY STRICT):
+🚨 WHITE BAR HOOK RULES:
 - MUST be a QUESTION (ends with "?")
-- MUST be exactly 4-5 WORDS
+- MUST be 4-5 WORDS (count carefully)
 - NO EMOJI
 - ALL CAPS
-- Question related to topic
-- Example: "WHY DID HE STAY SILENT?" (5 words)
-- Example: "WHO REALLY PAYS TARIFFS?" (4 words)
-- Example: "WHAT IS HE HIDING?" (4 words)
+- Same question as title
 
-✅ GOOD HOOKS (4-5 words, question):
-- "WHY DID HE STAY SILENT?"  (5)
-- "WHO REALLY PAYS TARIFFS?"  (4)
-- "WHAT IS HE HIDING?"  (4)
-- "IS THIS THE REAL END?"  (5)
-- "WHO WINS THIS WAR?"  (4)
-- "WHY NOW, WHY HIM?"  (5)
+✅ GOOD HOOKS:
+- "WHY DID HE STAY SILENT?"
+- "WHO PAYS THE TARIFFS?"
+- "WHAT ARE THEY HIDING?"
+- "IS THIS THE REAL END?"
+- "WHO WINS THIS WAR?"
 
-❌ BAD HOOKS:
-- "THEY KNEW ALL ALONG"  (not a question)
-- "THIS CHANGES EVERYTHING?"  (not 4-5 words)
-- "WHY DID HE STAY SILENT? 🚨"  (has emoji)
+🚨 SCRIPT RULES (40 words - ANSWERS the question):
+- First sentence = DIRECT ANSWER
+- Then 2-3 supporting facts
+- End with "what happens next"
+- Use "reports say" for unverified claims
 
-🚨 SCRIPT RULES (40 words):
-- MUST ANSWER the question asked in white bar
-- Start with strong hook (answer first line)
-- Provide clear answer with context
-- "reports say" for unverified claims
-- End with what happens next
+EXAMPLE for "WHY DID HE STAY SILENT?":
+"Sources say he refused comment due to legal counsel. Reports indicate the investigation is ongoing. Officials confirm a statement will come later. The silence is strategic."
 
 🚨 TAGS (15 max):
 - Mix of short + specific
-- Include: breaking news, world news, viral
+- Include: breaking news, world news
 
-OUTPUT JSON ONLY (NO EXTRA TEXT):
+OUTPUT JSON ONLY:
 {{
-    "short_script": "40-word script that ANSWERS the question",
+    "short_script": "40-word script that ANSWERS the title question",
     "seo_youtube_title": "Question? #OneHashtag",
     "description": "SEO description with subscribe CTA",
     "hashtags": ["#Breaking"],
@@ -508,10 +535,8 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             data = json.loads(match.group())
                             
                             # ============================================
-                            # HARD LIMITS & FIXES
+                            # FIX HOOK (4-5 words, question, no emoji)
                             # ============================================
-                            
-                            # --- Fix viral_hook ---
                             hook = data.get('viral_hook', '')
                             
                             emoji_pat = re.compile(
@@ -529,7 +554,7 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             hook = " ".join(hook_words).upper() + "?"
                             
                             if len(hook_words) < 4:
-                                if 'WHAT' not in hook.upper() and 'WHO' not in hook.upper() and 'WHY' not in hook.upper() and 'HOW' not in hook.upper():
+                                if not any(hook.upper().startswith(w) for w in ['WHY', 'WHAT', 'WHO', 'HOW', 'IS', 'WILL', 'CAN', 'ARE', 'DOES']):
                                     hook = "WHY " + hook.upper()
                                     hook_words = hook.rstrip('?').split()
                                     if len(hook_words) > 5:
@@ -538,26 +563,62 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             
                             data['viral_hook'] = hook
                             
-                            # --- Fix seo_youtube_title ---
+                            # ============================================
+                            # FIX TITLE - Question only, no publisher
+                            # ============================================
                             title = data.get('seo_youtube_title', '')
+                            
+                            # Clean topic style
+                            title = clean_topic(title)
+                            
+                            # Remove hashtags first
                             title_clean = re.sub(r'#\w+', '', title).strip()
                             
+                            # Remove any ALL CAPS words (publisher names)
+                            title_clean = re.sub(r'\b[A-Z]{4,}\b', '', title_clean)
+                            
+                            # Remove any publisher keywords
+                            for bad in ['MINNEAPOLI', 'BREAKING', 'NEWS', 'MEDIA', 'LIVE', 'CNN', 'BBC', 'ABC', 'NBC']:
+                                title_clean = re.sub(rf'\b{bad}\b', '', title_clean, flags=re.IGNORECASE)
+                            
+                            # Remove extra spaces
+                            title_clean = re.sub(r'\s+', ' ', title_clean).strip()
+                            title_clean = re.sub(r'^[\-:\|]+', '', title_clean).strip()
+                            
+                            # Ensure question mark
                             if title_clean and not title_clean.endswith('?'):
                                 title_clean = title_clean.rstrip('.!,') + '?'
                             
+                            # Ensure starts with question word
+                            if title_clean and not any(title_clean.upper().startswith(w) for w in ['WHY', 'WHAT', 'WHO', 'HOW', 'IS', 'WILL', 'CAN', 'ARE', 'DOES']):
+                                title_clean = "Why " + title_clean
+                            
+                            # Validate - reject if publisher name present
+                            if has_publisher_name(title_clean):
+                                logger.warning(f"   ⚠️ Publisher name detected in title - skipping")
+                                continue
+                            
+                            # Add ONE hashtag
                             hashtag = data.get('hashtags', ['#Breaking'])[0] if data.get('hashtags') else '#Breaking'
                             if not hashtag.startswith('#'):
                                 hashtag = '#' + hashtag
                             hashtag = hashtag.split()[0]
                             
+                            # Combine
                             title_full = f"{title_clean} {hashtag}"
                             
+                            # Limit 50 chars
                             if len(title_full) > 50:
-                                max_title_len = 50 - len(hashtag) - 1
+                                max_title_len = 50 - len(hashtag) - 2
                                 title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
                                 if not title_clean.endswith('?'):
                                     title_clean = title_clean.rstrip('.!,') + '?'
                                 title_full = f"{title_clean} {hashtag}"
+                            
+                            # Final validation
+                            if has_publisher_name(title_full):
+                                logger.warning(f"   ⚠️ Final title has publisher - using fallback")
+                                continue
                             
                             data['seo_youtube_title'] = title_full
                             data['hashtags'] = [hashtag]
@@ -578,53 +639,64 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
 
 
 def get_template_script(topic, seo_title):
-    """Fallback - Question-based title + hook"""
+    """Fallback - Pure question title + hook (NO publisher)"""
     
+    # Extract keywords
     words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
-             ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 'said']]
+             ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 
+              'said', 'breaking', 'news', 'media', 'live', 'update', 'today']]
     
     key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "News")
     
-    title_templates = [
-        f"Why Did {key[:20]} Happen?",
-        f"Who Really Wins From {key[:15]}?",
-        f"What's The Truth About {key[:15]}?",
-        f"Is {key[:20]} The Real Problem?",
-        f"How Did This Change {key[:15]}?",
-    ]
-    
-    title_q = random.choice(title_templates)
-    
     t_low = topic.lower()
-    if any(w in t_low for w in ['war', 'military', 'strike', 'missile']):
+    
+    if any(w in t_low for w in ['war', 'military', 'strike', 'missile', 'attack']):
         hashtag = "#Breaking"
+        title_q = "Who Wins This Conflict?"
         hook = "WHO WINS THIS WAR?"
-    elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money']):
+    elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money', 'cost', 'price']):
         hashtag = "#Economy"
+        title_q = "Who Really Pays For This?"
         hook = "WHO PAYS FOR THIS?"
-    elif any(w in t_low for w in ['trump', 'biden', 'congress', 'white house']):
+    elif any(w in t_low for w in ['trump', 'biden', 'congress', 'senate', 'white house']):
         hashtag = "#Politics"
+        title_q = "Why Did He Stay Silent?"
         hook = "WHY DID HE STAY SILENT?"
-    elif any(w in t_low for w in ['ai', 'tech', 'robot']):
+    elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial']):
         hashtag = "#Tech"
+        title_q = "Who Controls The AI Race?"
         hook = "WHO CONTROLS THE AI?"
-    elif any(w in t_low for w in ['secret', 'leaked', 'classified']):
+    elif any(w in t_low for w in ['secret', 'leaked', 'classified', 'hidden']):
         hashtag = "#Breaking"
+        title_q = "What Are They Hiding?"
         hook = "WHAT ARE THEY HIDING?"
-    elif any(w in t_low for w in ['crash', 'drop', 'fall']):
+    elif any(w in t_low for w in ['crash', 'drop', 'fall', 'plunge']):
         hashtag = "#Market"
+        title_q = "Why Are Markets Crashing?"
         hook = "WHY ARE MARKETS CRASHING?"
-    elif any(w in t_low for w in ['court', 'law', 'justice']):
+    elif any(w in t_low for w in ['court', 'law', 'justice', 'supreme']):
         hashtag = "#Justice"
+        title_q = "Who Wins In Court?"
         hook = "WHO WINS IN COURT?"
-    elif any(w in t_low for w in ['warning', 'danger']):
+    elif any(w in t_low for w in ['space', 'launch', 'nasa', 'rocket']):
+        hashtag = "#Space"
+        title_q = "Why Do Launches Cost So Much?"
+        hook = "WHY SO EXPENSIVE?"
+    elif any(w in t_low for w in ['health', 'cancer', 'medical', 'hospital']):
+        hashtag = "#Health"
+        title_q = "What's The Real Truth?"
+        hook = "WHAT IS THE TRUTH?"
+    elif any(w in t_low for w in ['warning', 'danger', 'risk', 'threat']):
         hashtag = "#Breaking"
+        title_q = "Why Was This Ignored?"
         hook = "WHY WAS THIS IGNORED?"
     else:
         hashtag = "#Breaking"
-        hook = "WHY NOW, WHY HIM?"
+        title_q = "What Really Happened?"
+        hook = "WHAT REALLY HAPPENED?"
     
-    title_full = f"{title_q[:45]} {hashtag}"
+    # Combine title + hashtag
+    title_full = f"{title_q} {hashtag}"
     if len(title_full) > 50:
         max_title = 50 - len(hashtag) - 1
         title_q = title_q[:max_title].rsplit(' ', 1)[0]
@@ -633,9 +705,9 @@ def get_template_script(topic, seo_title):
         title_full = f"{title_q} {hashtag}"
     
     return {
-        "short_script": f"Reports say the answer is more complicated than it looks. Officials confirm the basic facts. Legal experts say this could backfire. The situation is still developing. Here's what we know so far.",
+        "short_script": f"Sources say the answer lies in official documents. Reports indicate key details were confirmed today. Experts say this changes the timeline. The situation continues to develop.",
         "seo_youtube_title": title_full,
-        "description": f"{topic} - answer to your question. Subscribe for more.",
+        "description": f"Answer to: {title_q} Subscribe for more breaking news.",
         "hashtags": [hashtag],
         "tags": [
             "breaking news", "world news", "politics", "usa",
@@ -715,17 +787,15 @@ def create_thumbnail(candidate, script_data):
 # ============================================================
 
 def is_duplicate(title):
-    """Check if similar story already processed in last 3 days"""
+    """Check if similar story already processed"""
     if not title:
         return False
     
     try:
         from src.database import get_connection
         
-        # Clean title for comparison
         clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
-        # Get first 4 significant words
-        words = [w for w in clean.split() if len(w) > 3][:4]
+        words = [w for w in clean.split() if len(w) > 3][:5]
         search_key = ' '.join(words)
         
         if not search_key:
@@ -744,16 +814,15 @@ def is_duplicate(title):
         
         for row in rows:
             existing = re.sub(r'[^\w\s]', '', row[0].lower()).strip()
-            existing_words = [w for w in existing.split() if len(w) > 3][:4]
+            existing_words = [w for w in existing.split() if len(w) > 3][:5]
             existing_key = ' '.join(existing_words)
             
             if search_key and existing_key:
-                # Check overlap
                 search_set = set(search_key.split())
                 existing_set = set(existing_key.split())
                 overlap = len(search_set & existing_set)
                 
-                if overlap >= 3:  # 3+ word overlap = duplicate
+                if overlap >= 3:
                     return True
         
         return False
@@ -794,13 +863,24 @@ def main():
         logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
         logger.info(f"{'='*60}")
         
-        # 🚫 SKIP DUPLICATES
+        # Skip duplicates
         if is_duplicate(candidate.get('title', '')):
-            logger.warning(f"⏭️ SKIPPED - Duplicate story (processed in last 3 days)")
+            logger.warning(f"⏭️ SKIPPED - Duplicate story")
             skipped_count += 1
             continue
         
         script_data = generate_script_god(candidate)
+        
+        # Final title validation - MUST be question, NO publisher
+        final_title = script_data.get('seo_youtube_title', '')
+        
+        if has_publisher_name(final_title):
+            logger.warning(f"⏭️ SKIPPED - Publisher name in title: {final_title}")
+            continue
+        
+        if '?' not in final_title:
+            logger.warning(f"⏭️ SKIPPED - No question mark in title")
+            continue
         
         if script_data.get('confidence_score', 0) < 60:
             logger.warning(f"Low confidence: {script_data.get('confidence_score')}")

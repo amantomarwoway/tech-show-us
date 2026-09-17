@@ -1,11 +1,11 @@
 """
-src/media/video_builder.py - FINAL PRODUCTION v2
-- White bar text NO CUT (up to 3 lines, normal size)
-- Question-based hook (no emoji)
-- Green accents (not red)
-- Clean top strip (no LIVE/UNCOVERED USA)
-- First frame: HUMAN EMOTION + ZOOM IN effect (1 second)
-- 8K upscale ONLY (no 4K fallback)
+src/media/video_builder.py - FINAL PRODUCTION v3
+- White bar text NO CUT
+- Question-based hook
+- Green accents
+- First frame: HUMAN EMOTION + ZOOM IN (1 second)
+- 8K upscale ONLY
+- ✅ FIX: visual_queries passed to asset_finder
 """
 
 import os
@@ -55,11 +55,9 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
 FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 
-# Colors
-GREEN_ACCENT = (34, 139, 34)     # Forest green
-DARK_GREEN = (0, 100, 0)         # Dark green
+GREEN_ACCENT = (34, 139, 34)
+DARK_GREEN = (0, 100, 0)
 
-# 8K Resolution (Vertical 9:16 for Shorts)
 UPSCALE_WIDTH = 4320
 UPSCALE_HEIGHT = 7680
 
@@ -79,7 +77,6 @@ def load_font(path, size):
 # ============================================================
 
 def detect_emotion_from_text(text):
-    """Detect emotion → return (emotion, query) for human expression"""
     if not text:
         return ('neutral', 'serious man portrait')
     
@@ -109,14 +106,11 @@ def detect_emotion_from_text(text):
         return ('surprise', 'surprised man portrait')
     if any(w in t for w in ['court', 'law', 'justice', 'supreme']):
         return ('serious', 'serious lawyer portrait')
-    if any(w in t for w in ['biden', 'hunter', 'silence', 'breaks']):
-        return ('serious', 'serious man face')
     
     return ('neutral', 'serious man portrait')
 
 
 def fetch_human_emotion_image(query):
-    """Fetch human emotion photo from Pexels PHOTOS API"""
     import requests
     
     key = os.getenv("PEXELS_API_KEY", "").strip()
@@ -329,7 +323,7 @@ def find_best_moment(video_path, num_samples=20):
 
 
 # ============================================================
-# 🎯 WHITE BAR - QUESTION + SMALLER FONT + NO EMOJI
+# 🎯 WHITE BAR
 # ============================================================
 
 def wrap_text_to_width(text, font, max_width, draw):
@@ -352,7 +346,6 @@ def wrap_text_to_width(text, font, max_width, draw):
 
 
 def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=62):
-    """Auto-fit text - start size 62 (normal)"""
     temp_img = Image.new('RGB', (10, 10))
     draw = ImageDraw.Draw(temp_img)
     
@@ -382,25 +375,20 @@ def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=62)
 
 
 def make_white_bar(text, topic=""):
-    """White bar with QUESTION text - no emoji, green accents"""
     total_h = WHITE_BAR_HEIGHT
     img = Image.new('RGB', (WIDTH, total_h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
     
-    # Gradient
     for y in range(total_h):
         ratio = y / total_h
         shade = int(255 - ratio * 12)
         draw.line([(0, y), (WIDTH, y)], fill=(shade, shade, shade))
     
-    # GREEN accents (not red)
     draw.rectangle([0, 0, 18, total_h], fill=GREEN_ACCENT)
     draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=GREEN_ACCENT)
     
-    # Text only - no emoji
     text_only = text.strip().upper()
     
-    # Ensure question mark
     if text_only and '?' not in text_only:
         text_only = text_only.rstrip('.!') + '?'
     
@@ -427,15 +415,12 @@ def make_white_bar(text, topic=""):
         tw = bbox[2] - bbox[0]
         x = (WIDTH - tw) // 2
         
-        # Shadow
         for dx, dy in [(-2, -2), (2, 2)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(150, 150, 150))
         
-        # Outline
         for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
             draw.text((x + dx, current_y + dy), line, font=font, fill=(40, 40, 40))
         
-        # Main
         draw.text((x, current_y), line, font=font, fill=(5, 5, 5))
         
         current_y += line_heights[i] + 8
@@ -446,15 +431,13 @@ def make_white_bar(text, topic=""):
 
 
 # ============================================================
-# 🎯 FIRST FRAME - HUMAN EMOTION + ZOOM IN (1 second)
+# 🎯 FIRST FRAME
 # ============================================================
 
 def create_text_based_first_frame(white_bar_text, topic=""):
-    """First frame - HUMAN EMOTION photo + question text + green accent"""
     img = Image.new('RGB', (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Emotion detection
     emotion, query = detect_emotion_from_text(topic or white_bar_text)
     logger.info(f"   🎭 Emotion: {emotion} | Query: '{query}'")
     
@@ -462,16 +445,12 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     
     if emotion_img:
         img = emotion_img.copy()
-        
-        # Dark overlay for text readability
         overlay = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 160))
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
-        
-        logger.info(f"   ✅ Human emotion visual loaded from Pexels PHOTOS")
+        logger.info(f"   ✅ Human emotion visual loaded")
     else:
-        # Gradient fallback
         for y in range(HEIGHT):
             ratio = y / HEIGHT
             r = int(10 + ratio * 30)
@@ -480,7 +459,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
             draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
         logger.warning(f"   ⚠️ Using gradient fallback")
     
-    # GREEN accent shape (left side)
     overlay_shape = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     shape_draw = ImageDraw.Draw(overlay_shape)
     shape_draw.polygon(
@@ -491,12 +469,10 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.alpha_composite(img, overlay_shape).convert('RGB')
     draw = ImageDraw.Draw(img)
     
-    # Question text (no emoji)
     text_only = white_bar_text.strip().upper()
     if text_only and '?' not in text_only:
         text_only = text_only.rstrip('.!') + '?'
     
-    # Auto-fit question text
     italic_fonts = [FONT_BOLD_ITALIC, FONT_BOLD]
     
     def load_italic(paths, size):
@@ -551,15 +527,12 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         x = (WIDTH - tw) // 2 + 80
         y = y_start + i * line_height
         
-        # Strong shadow
         for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5),
                        (0, -5), (0, 5), (-5, 0), (5, 0)]:
             draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0))
         
-        # Main text
         draw.text((x, y), line, font=font, fill=(255, 255, 255))
     
-    # GREEN bottom accent
     draw.rectangle([0, HEIGHT - 40, WIDTH, HEIGHT], fill=GREEN_ACCENT)
     
     path = os.path.join(PATHS['temp'], f"firstframe_{random.randint(1, 999999)}.png")
@@ -573,26 +546,17 @@ def create_text_based_first_frame(white_bar_text, topic=""):
 # ============================================================
 
 def make_top_black_strip():
-    """Top strip - CLEAN (no LIVE, no UNCOVERED USA), green line"""
     img = Image.new('RGB', (WIDTH, TOP_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
-    # GREEN line at bottom
     draw.rectangle([0, TOP_BLACK_STRIP - 5, WIDTH, TOP_BLACK_STRIP], fill=GREEN_ACCENT)
-    
-    # Empty black top strip - no text
-    
     path = os.path.join(PATHS['temp'], f"top_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
     return path
 
 
 def make_bottom_black_strip():
-    """Bottom strip with green line and CTA"""
     img = Image.new('RGB', (WIDTH, BOTTOM_BLACK_STRIP), (0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
-    # GREEN line at top
     draw.rectangle([0, 0, WIDTH, 5], fill=GREEN_ACCENT)
     
     font_cta = load_font(FONT_BOLD, 44)
@@ -660,14 +624,10 @@ def create_gradient_visual(text="", index=0):
 
 
 # ============================================================
-# 8K UPSCALE (NO FALLBACK - 8K ONLY)
+# 8K UPSCALE
 # ============================================================
 
 def upscale_to_8k(input_path):
-    """
-    Upscale to 8K (4320x7680) vertical for Shorts
-    No fallback - if fails, returns original
-    """
     try:
         logger.info("=" * 50)
         logger.info("🎬 [8K UPSCALE] Starting...")
@@ -695,7 +655,6 @@ def upscale_to_8k(input_path):
         
         start_time = time.time()
         
-        # Memory-optimized 8K encoding
         cmd = [
             "ffmpeg", "-y",
             "-i", input_path,
@@ -715,12 +674,7 @@ def upscale_to_8k(input_path):
         
         logger.info(f"   Running FFmpeg 8K upscale (memory-optimized)...")
         
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=1500
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
         
         elapsed = time.time() - start_time
         
@@ -747,7 +701,6 @@ def upscale_to_8k(input_path):
                 except:
                     pass
             
-            logger.warning(f"⚠️ Returning original video (no fallback)")
             return input_path
     
     except subprocess.TimeoutExpired:
@@ -773,13 +726,19 @@ def create_video(script_data, editor_data=None):
     output_path = os.path.join(PATHS['output_videos'],
                                f"short_{random.randint(1000, 9999)}.mp4")
     
-    # SCRIPT
     script_text = (script_data.get('full_script', '') or
                    script_data.get('short_script', '') or
                    "Breaking news update.")
     words = script_text.split()[:VIDEO_CONFIG['WORDS_TARGET']]
     script_text = " ".join(words)
     logger.info(f"📝 Script: {len(words)} words")
+    
+    # ============================================================
+    # ✅ FIX 1: Extract visual_queries from script_data
+    # ============================================================
+    visual_queries = script_data.get('visual_queries', [])
+    if visual_queries:
+        logger.info(f"🎨 AI visual queries: {visual_queries}")
     
     # TTS
     voice = get_tts_voice()
@@ -812,7 +771,12 @@ def create_video(script_data, editor_data=None):
     if len(visual_paths) < clips_needed:
         try:
             from src.media.asset_finder import find_assets_for_script
-            new = find_assets_for_script(script_text, num_clips=clips_needed)
+            # ✅ FIX 2: Pass visual_queries to asset_finder
+            new = find_assets_for_script(
+                script_text,
+                num_clips=clips_needed,
+                visual_queries=visual_queries
+            )
             for a in new:
                 p = a.get('path') if isinstance(a, dict) else None
                 if p and os.path.exists(p) and p not in visual_paths:
@@ -927,10 +891,8 @@ def create_video(script_data, editor_data=None):
     # OVERLAYS
     overlays = []
     
-    # 1. Top strip (clean, no LIVE/UNCOVERED USA)
     overlays.append(ImageClip(make_top_black_strip()).set_duration(total_duration).set_position((0, 0)))
     
-    # 2. White bar (question)
     viral_hook = (script_data.get('viral_hook', '') or
                   script_data.get('title', '')[:60] or
                   "WHAT JUST HAPPENED?")
@@ -943,10 +905,9 @@ def create_video(script_data, editor_data=None):
     except Exception as e:
         logger.warning(f"White bar failed: {e}")
     
-    # 3. Bottom strip
     overlays.append(ImageClip(make_bottom_black_strip()).set_duration(total_duration).set_position((0, HEIGHT - BOTTOM_BLACK_STRIP)))
     
-    # 4. Captions
+    # Captions
     words = script_text.split()
     word_dur = total_duration / max(len(words), 1)
     red_kw = ['BREAKING','SHOCKING','TRUMP','BIDEN','WAR','DEAD','KILLED','LEAKED',
@@ -970,16 +931,14 @@ def create_video(script_data, editor_data=None):
         except:
             continue
     
-    # 5. FIRST FRAME (1 second) - HUMAN EMOTION + ZOOM IN - ON TOP
+    # FIRST FRAME (1 second)
     try:
         first_frame_img = create_text_based_first_frame(viral_hook, topic)
-        
-        # ZOOM IN effect: 1.0 → 1.15 over 1 second
         first_frame_clip = (
             ImageClip(first_frame_img)
             .set_duration(1.0)
             .set_start(0)
-            .resize(lambda t: 1.0 + 0.15 * t)  # ZOOM IN 15%
+            .resize(lambda t: 1.0 + 0.15 * t)
             .set_position('center')
         )
         overlays.append(first_frame_clip)
@@ -1018,7 +977,7 @@ def create_video(script_data, editor_data=None):
         if os.path.exists(temp_out):
             os.rename(temp_out, output_path)
     
-    # 8K UPSCALE (only, no fallback)
+    # 8K UPSCALE
     logger.info("🎬 8K upscale for upload...")
     output_path = upscale_to_8k(output_path)
     

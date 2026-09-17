@@ -1,11 +1,12 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT v4
-Question-hook ONLY system
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v5
+Question-hook ONLY system + AI Visual Queries
 - Title: ONLY QUESTION + 1 hashtag (no publisher names EVER)
 - White bar: 4-5 word question (no emoji)
 - Script: Answers the question
+- AI provides 6 visual search queries
 - Duplicate stories skipped
-- Any TRENDING topic (not restricted to news/politics)
+- Any TRENDING topic
 """
 
 import os
@@ -39,12 +40,10 @@ def clean_topic(title):
     
     cleaned = title.strip()
     
-    # If pipe exists, take longest part after pipe
     if '|' in cleaned:
         parts = cleaned.split('|')
         cleaned = max(parts, key=len).strip()
     
-    # Remove publisher patterns
     publisher_patterns = [
         r'^(?:[A-Z][A-Za-z]+\s*){1,4}(?:NEWS|MEDIA|TIMES|POST|TODAY|NOW|TV|PRESS|JOURNAL|REPORT)\s*[-:]\s*',
         r'^(?:MINNEAPOLI|CNN|BBC|ABC|NBC|CBS|FOX|MSNBC|NYT|WSJ|AP|REUTERS)[A-Za-z]*\s*[-:]\s*',
@@ -53,7 +52,6 @@ def clean_topic(title):
     for pattern in publisher_patterns:
         cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
     
-    # Remove publisher keywords
     cleaned = re.sub(r'\b[A-Z]{4,}[A-Za-z]*MEDIA\b', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\b[A-Z]{4,}[A-Za-z]*NEWS\b', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\bBREAKING\s+NEWS\b', '', cleaned, flags=re.IGNORECASE)
@@ -61,11 +59,9 @@ def clean_topic(title):
     cleaned = re.sub(r'\bLIVE\s+UPDATE\b', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\bLIVE\b', '', cleaned, flags=re.IGNORECASE)
     
-    # Remove end attributions
     cleaned = re.sub(r'\s*-\s*[A-Z][a-zA-Z\s]{2,30}$', '', cleaned)
     cleaned = re.sub(r'\s*\([A-Za-z\s]{2,30}\)\s*$', '', cleaned)
     
-    # Remove extra punctuation
     cleaned = re.sub(r'^[\|\-\s:]+', '', cleaned)
     cleaned = re.sub(r'[\|\-\s:]+$', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned)
@@ -108,30 +104,17 @@ def safe_import(module_path, function_name=None):
 
 
 # ============================================================
-# 🔥 LEG 1: RESEARCH GOD - ALL TRENDING TOPICS
+# 🔥 LEG 1: RESEARCH GOD
 # ============================================================
 
 def research_god_main():
-    """
-    Collect TRENDING topics from ALL sources.
-    Any topic that is trending - entertainment, sports, viral, tech, music,
-    movies, gaming, memes, politics, news - NO restriction.
-    
-    Priority order:
-    1. Google Trends (PRIMARY - real trending searches)
-    2. Reddit r/all + r/popular (real-time trending)
-    3. Google News (trending queries)
-    4. RSS (broad - entertainment, sports, tech, music)
-    """
+    """Collect TRENDING topics from ALL sources"""
     logger.info("=" * 60)
     logger.info("LEG 1: RESEARCH GOD - ALL TRENDING TOPICS")
     logger.info("=" * 60)
     
     all_stories = []
     
-    # ============================================================
-    # 1. GOOGLE TRENDS - PRIMARY SOURCE (best trending signal)
-    # ============================================================
     trends_collector = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends_collector:
         try:
@@ -141,9 +124,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Trends failed: {e}")
     
-    # ============================================================
-    # 2. REDDIT r/all + r/popular - real-time trending
-    # ============================================================
     reddit_collector = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit_collector:
         try:
@@ -153,9 +133,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Reddit failed: {e}")
     
-    # ============================================================
-    # 3. GOOGLE NEWS - trending queries
-    # ============================================================
     google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
     if google_collector:
         try:
@@ -165,9 +142,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Google News failed: {e}")
     
-    # ============================================================
-    # 4. RSS - broad sources (entertainment, sports, tech, music)
-    # ============================================================
     rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
     if rss_collector:
         try:
@@ -177,33 +151,22 @@ def research_god_main():
         except Exception as e:
             logger.error(f"RSS failed: {e}")
     
-    # ============================================================
-    # FALLBACK
-    # ============================================================
     if not all_stories:
         logger.warning("All collectors failed - using fallback")
         all_stories = get_guaranteed_stories()
     
-    # ============================================================
-    # CLEAN TITLES
-    # ============================================================
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
         if not story['title'] or len(story['title']) < 5:
             story['title'] = 'Trending Topic'
     
-    # Remove empty/too-short stories
     all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 5]
     
-    # ============================================================
-    # DEDUP + RANK
-    # ============================================================
     all_stories = deduplicate_stories(all_stories)
     ranked = score_and_rank_stories(all_stories)
     
     logger.info(f"LEG 1 COMPLETE: {len(ranked)} trending stories (ALL TOPICS)")
     
-    # Log top 5 with type
     for i, story in enumerate(ranked[:5]):
         logger.info(f"  #{i+1}: {story.get('title', '')[:60]} | Type: {story.get('story_type', 'trending')}")
     
@@ -211,7 +174,6 @@ def research_god_main():
 
 
 def get_guaranteed_stories():
-    """Fallback with VARIED topics (not just politics)"""
     return [
         {
             "title": "Why Is Everyone Talking About This?",
@@ -271,7 +233,7 @@ def score_and_rank_stories(stories):
 
 
 # ============================================================
-# LEG 2: EDITOR GOD
+# LEG 2: EDITOR GOD (WITH VISUAL QUERIES)
 # ============================================================
 
 def editor_god_main(script_data, candidate):
@@ -304,9 +266,18 @@ def editor_god_main(script_data, candidate):
     
     logger.info(f"📝 Script: {script_text[:100]}...")
     
+    # Get visual queries from AI
+    visual_queries = script_data.get('visual_queries', [])
+    if visual_queries:
+        logger.info(f"🎨 AI visual queries: {visual_queries}")
+    
     try:
         from src.media.asset_finder import find_assets_for_script
-        visuals = find_assets_for_script(script_text, num_clips=16)
+        visuals = find_assets_for_script(
+            script_text,
+            num_clips=16,
+            visual_queries=visual_queries
+        )
         editor_data['visuals'] = visuals
         logger.info(f"✅ Editor: {len(visuals)} visual assets")
     except Exception as e:
@@ -406,7 +377,7 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
             title=metadata['title'],
             description=metadata['description'],
             tags=metadata['tags'],
-            category_id="24"  # Entertainment (broader)
+            category_id="24"
         )
         
         if video_id:
@@ -458,13 +429,12 @@ def self_evolution_main():
 
 
 # ============================================================
-# SCRIPT GENERATION - QUESTION ONLY
+# SCRIPT GENERATION - QUESTION + VISUAL QUERIES
 # ============================================================
 
 def generate_script_god(story):
     """
-    Generate ONLY QUESTION-based title + hook
-    NEVER contains publisher names
+    Generate QUESTION title + hook + 6 SPECIFIC visual queries
     """
     raw_topic = story.get('title', '')
     topic = clean_topic(raw_topic)
@@ -484,37 +454,33 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert. Work with ANY trending topic.
+            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert + VISUAL DIRECTOR.
 
 TRENDING TOPIC: {topic}
 
 🚨 YOUR TASK:
 1. Create a QUESTION title (only question + 1 hashtag)
 2. Write a 40-word script that ANSWERS that question
+3. **CRITICAL:** Provide 6 SPECIFIC visual search queries for stock footage
 
-🚨 TITLE RULES (SUPER STRICT - FAIL IF BROKEN):
+🚨 TITLE RULES (VERY STRICT):
 - MUST be a QUESTION (ends with "?")
 - MUST start with: Why / What / Who / How / Is / Will / Can / Are / Does
 - MUST be 30-50 characters INCLUDING hashtag
 - MUST have EXACTLY 1 hashtag at END
 - MUST NOT contain ANY publisher name
-- FORBIDDEN WORDS IN TITLE (never use these):
-  * BREAKING NEWS
-  * MINNEAPOLIMEDIA or any ALL-CAPS 4+ letter word
-  * CNN, BBC, ABC, NBC, CBS, FOX, MSNBC, NYT, WSJ, AP, REUTERS
-  * Any newspaper/media name
+- FORBIDDEN WORDS: BREAKING NEWS, MINNEAPOLIMEDIA, CNN, BBC, ABC, NBC, CBS, FOX, MSNBC, NYT, WSJ, AP, REUTERS
 
-✅ GOOD TITLE EXAMPLES (any topic):
+✅ GOOD TITLE EXAMPLES:
 - "Why Did Everyone Miss This? #Viral"
 - "What Made This Go Viral? #Trending"
 - "Who Is Behind This Trend? #Trending"
 - "Why Is Everyone Talking? #Viral"
-- "What Really Happened Here? #Trending"
 - "How Did This Break Records? #Sports"
 - "Why Did Fans React This Way? #Music"
 - "What's The Real Story? #News"
 
-❌ NEVER PRODUCE TITLES LIKE:
+❌ NEVER PRODUCE:
 - "MINNEAPOLIMEDIA BREAKING NEWS | Biden Cancer"
 - "Russia Warns NATO" (not a question)
 - "Travis Kelce News" (not a question)
@@ -522,30 +488,80 @@ TRENDING TOPIC: {topic}
 
 🚨 WHITE BAR HOOK RULES:
 - MUST be a QUESTION (ends with "?")
-- MUST be 4-5 WORDS (count carefully)
+- MUST be 4-5 WORDS
 - NO EMOJI
 - ALL CAPS
-- Same question as title
 
 ✅ GOOD HOOKS:
 - "WHY DID THIS GO VIRAL?"
 - "WHAT ARE THEY HIDING?"
 - "WHO IS BEHIND THIS?"
-- "IS THIS THE REAL END?"
 - "WHY IS EVERYONE TALKING?"
 
-🚨 SCRIPT RULES (40 words - ANSWERS the question):
+🚨 SCRIPT RULES (40 words):
 - First sentence = DIRECT ANSWER
 - Then 2-3 supporting facts
 - End with "what happens next"
-- Use "reports say" for unverified claims
-- Works for ANY topic (sports, entertainment, news, viral, etc.)
+
+🚨 VISUAL QUERIES (VERY IMPORTANT):
+
+Provide 6 SPECIFIC visual search queries that match the script.
+Each query must be 2-4 WORDS and DESCRIBE A REAL VISUAL.
+
+❌ BAD QUERIES (too generic - Pexels returns nothing):
+- "song went"
+- "indicate recently"
+- "story continues"
+- "experts changes"
+- "sources answer"
+- "the topic"
+- "trending"
+
+✅ GOOD QUERIES (specific, visual, actionable):
+
+For "GG EZ viral AI song" topic:
+- "gaming keyboard rgb"
+- "kpop dance studio"
+- "smartphone streaming music"
+- "young people phone"
+- "viral social media"
+- "AI robot face"
+
+For "Trump tariff" topic:
+- "government building"
+- "shipping containers port"
+- "stock market chart"
+- "businessman serious"
+- "dollar bills money"
+- "factory workers"
+
+For "SpaceX launch" topic:
+- "rocket launch smoke"
+- "space control room"
+- "astronaut helmet"
+- "launch pad night"
+- "stars night sky"
+- "mission control screen"
+
+For "Travis Kelce Taylor Swift" topic:
+- "football stadium crowd"
+- "concert lights crowd"
+- "celebrity red carpet"
+- "young woman smiling"
+- "sports tv broadcast"
+
+RULES FOR VISUAL QUERIES:
+1. Each query = 2-4 WORDS (specific)
+2. Must be VISUAL (things you can film)
+3. Must be RELATED to topic
+4. NO abstract words (indicate, sources, story, continue, answer)
+5. Use ACTION words or OBJECTS
+6. Different query for each part of script
 
 🚨 TAGS (15 max):
 - Mix of short + specific
-- Include: trending, viral, 2026
 
-OUTPUT JSON ONLY:
+OUTPUT JSON ONLY (NO EXTRA TEXT):
 {{
     "short_script": "40-word script that ANSWERS the title question",
     "seo_youtube_title": "Question? #OneHashtag",
@@ -553,6 +569,7 @@ OUTPUT JSON ONLY:
     "hashtags": ["#Trending"],
     "tags": ["tag1", "tag2", "tag3"],
     "viral_hook": "4-5 WORD QUESTION?",
+    "visual_queries": ["query 1", "query 2", "query 3", "query 4", "query 5", "query 6"],
     "mood": "engaging curious",
     "confidence_score": 85
 }}
@@ -570,7 +587,29 @@ OUTPUT JSON ONLY:
                         if match:
                             data = json.loads(match.group())
                             
+                            # ============================================
+                            # EXTRACT VISUAL QUERIES
+                            # ============================================
+                            visual_queries = data.get('visual_queries', [])
+                            if not isinstance(visual_queries, list):
+                                visual_queries = []
+                            
+                            # Clean queries
+                            clean_vq = []
+                            for q in visual_queries:
+                                if isinstance(q, str):
+                                    q = q.strip()
+                                    if 3 <= len(q) <= 50:
+                                        clean_vq.append(q)
+                            
+                            data['visual_queries'] = clean_vq[:6]
+                            
+                            if clean_vq:
+                                logger.info(f"   🎨 Visual queries ({len(clean_vq)}): {clean_vq}")
+                            
+                            # ============================================
                             # FIX HOOK
+                            # ============================================
                             hook = data.get('viral_hook', '')
                             
                             emoji_pat = re.compile(
@@ -597,7 +636,9 @@ OUTPUT JSON ONLY:
                             
                             data['viral_hook'] = hook
                             
+                            # ============================================
                             # FIX TITLE
+                            # ============================================
                             title = data.get('seo_youtube_title', '')
                             title = clean_topic(title)
                             title_clean = re.sub(r'#\w+', '', title).strip()
@@ -656,7 +697,7 @@ OUTPUT JSON ONLY:
 
 
 def get_template_script(topic, seo_title):
-    """Fallback - Pure question title + hook (NO publisher)"""
+    """Fallback - Pure question title + hook + visual queries"""
     
     words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
              ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 
@@ -670,50 +711,67 @@ def get_template_script(topic, seo_title):
         hashtag = "#Breaking"
         title_q = "Who Wins This Conflict?"
         hook = "WHO WINS THIS WAR?"
+        vq = ["military tanks", "soldiers marching", "explosion smoke", "war planes", "army trucks", "war zone"]
     elif any(w in t_low for w in ['tariff', 'trade', 'economy', 'money', 'cost', 'price']):
         hashtag = "#Economy"
         title_q = "Who Really Pays For This?"
         hook = "WHO PAYS FOR THIS?"
+        vq = ["shipping containers", "stock market chart", "businessman serious", "dollar bills", "factory workers", "port cargo"]
     elif any(w in t_low for w in ['trump', 'biden', 'congress', 'senate', 'white house']):
         hashtag = "#Politics"
         title_q = "Why Did He Stay Silent?"
         hook = "WHY DID HE STAY SILENT?"
+        vq = ["government building", "press conference", "politician podium", "capitol building", "man serious", "microphone interview"]
     elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial', 'iphone', 'apple']):
         hashtag = "#Tech"
         title_q = "Who Controls The AI Race?"
         hook = "WHO CONTROLS THE AI?"
+        vq = ["artificial intelligence", "AI robot face", "computer code", "smartphone screen", "tech office", "server room"]
     elif any(w in t_low for w in ['movie', 'film', 'netflix', 'series', 'actor', 'actress']):
         hashtag = "#Entertainment"
         title_q = "Why Is Everyone Watching?"
         hook = "WHY IS EVERYONE WATCHING?"
+        vq = ["cinema screen", "movie theater", "film camera", "actor on stage", "tv remote", "streaming laptop"]
     elif any(w in t_low for w in ['song', 'music', 'album', 'concert', 'tour']):
         hashtag = "#Music"
         title_q = "Why Is This Song Everywhere?"
         hook = "WHY IS THIS EVERYWHERE?"
+        vq = ["concert stage lights", "music studio", "singer microphone", "dance crowd", "headphones listening", "spotify phone"]
     elif any(w in t_low for w in ['game', 'gaming', 'playstation', 'xbox', 'nintendo']):
         hashtag = "#Gaming"
         title_q = "What Changed In Gaming?"
         hook = "WHAT CHANGED IN GAMING?"
-    elif any(w in t_low for w in ['sport', 'game', 'match', 'goal', 'team', 'player', 'nba', 'nfl']):
+        vq = ["gaming keyboard rgb", "console controller", "gamer playing", "computer gaming setup", "esports crowd", "video game screen"]
+    elif any(w in t_low for w in ['sport', 'game', 'match', 'goal', 'team', 'player', 'nba', 'nfl', 'football']):
         hashtag = "#Sports"
         title_q = "Who Wins This Match?"
         hook = "WHO WINS THIS MATCH?"
+        vq = ["football stadium", "basketball court", "soccer goal", "crowd cheering", "athlete running", "sports trophy"]
     elif any(w in t_low for w in ['viral', 'trending', 'tiktok', 'meme']):
         hashtag = "#Viral"
         title_q = "Why Did This Go Viral?"
         hook = "WHY DID THIS GO VIRAL?"
+        vq = ["young people phone", "social media icons", "viral video", "smartphone close", "trending hashtag", "internet crowd"]
     elif any(w in t_low for w in ['crash', 'drop', 'fall', 'plunge']):
         hashtag = "#Market"
         title_q = "Why Are Markets Crashing?"
         hook = "WHY ARE MARKETS CRASHING?"
-    elif any(w in t_low for w in ['space', 'launch', 'nasa', 'rocket']):
+        vq = ["stock market chart", "trading floor", "crypto screen", "businessman worried", "red arrow down", "wall street"]
+    elif any(w in t_low for w in ['space', 'launch', 'nasa', 'rocket', 'spacex']):
         hashtag = "#Space"
         title_q = "Why Do Launches Cost So Much?"
         hook = "WHY SO EXPENSIVE?"
+        vq = ["rocket launch smoke", "space control room", "astronaut helmet", "launch pad night", "stars night sky", "space satellite"]
+    elif any(w in t_low for w in ['climate', 'weather', 'storm', 'rain', 'flood']):
+        hashtag = "#Weather"
+        title_q = "What's The Real Impact?"
+        hook = "WHAT IS THE IMPACT?"
+        vq = ["storm clouds", "heavy rain", "flood water", "climate change glacier", "city rain night", "dark clouds sky"]
     else:
         hashtag = "#Trending"
         title_q = "Why Is This Trending?"
         hook = "WHY IS THIS TRENDING?"
+        vq = ["trending viral video", "young people phone", "social media", "city skyline", "crowd of people", "news studio"]
     
     title_full = f"{title_q} {hashtag}"
     if len(title_full) > 50:
@@ -724,7 +782,7 @@ def get_template_script(topic, seo_title):
         title_full = f"{title_q} {hashtag}"
     
     return {
-        "short_script": f"Sources say the answer is more interesting than expected. Reports indicate this has been developing recently. Experts say this changes how people see it. The story continues.",
+        "short_script": f"Reports say the reason is simpler than expected. Experts point to recent developments. The story is still unfolding. Here's what we know.",
         "seo_youtube_title": title_full,
         "description": f"Answer to: {title_q} Subscribe for more trending content.",
         "hashtags": [hashtag],
@@ -736,13 +794,14 @@ def get_template_script(topic, seo_title):
             "why trending", "what happened"
         ],
         "viral_hook": hook,
+        "visual_queries": vq,
         "mood": "engaging curious",
         "confidence_score": 80
     }
 
 
 # ============================================================
-# VIDEO CREATION
+# VIDEO CREATION (WITH VISUAL QUERIES)
 # ============================================================
 
 def create_video_god(script_data, editor_data):
@@ -755,6 +814,12 @@ def create_video_god(script_data, editor_data):
         merged = {**script_data, **editor_data}
         merged['full_script'] = script_data.get('short_script', '')
         merged['title'] = script_data.get('seo_youtube_title', '')
+        
+        # Pass visual_queries
+        vq = script_data.get('visual_queries', [])
+        merged['visual_queries'] = vq
+        if vq:
+            logger.info(f"🎨 Passing visual queries: {vq}")
         
         video_path = create_video(merged, editor_data)
         logger.info(f"Video: {video_path}")
@@ -807,7 +872,6 @@ def create_thumbnail(candidate, script_data):
 # ============================================================
 
 def is_duplicate(title):
-    """Check if similar story already processed"""
     if not title:
         return False
     

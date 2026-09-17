@@ -1,5 +1,5 @@
 """
-src/youtube/uploader.py - YouTube upload with API v3
+src/youtube/uploader.py - YouTube upload with API v3 (FIXED SCOPES)
 """
 
 import os
@@ -10,7 +10,41 @@ from src.config import YOUTUBE_CONFIG
 
 logger = setup_logger(__name__)
 
-def upload_video(video_path, thumbnail_path=None, title="", description="", tags=None, category_id="25"):
+# ============================================================
+# 🎯 CORRECT SCOPES (must match token)
+# ============================================================
+
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl"
+]
+
+
+def get_youtube_credentials():
+    """Get YouTube credentials with correct scopes"""
+    from google.oauth2.credentials import Credentials
+    
+    client_id = os.getenv("YT_CLIENT_ID", "")
+    client_secret = os.getenv("YT_CLIENT_SECRET", "")
+    refresh_token = os.getenv("YT_REFRESH_TOKEN", "")
+    
+    if not all([client_id, client_secret, refresh_token]):
+        return None
+    
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=YOUTUBE_SCOPES
+    )
+    
+    return creds
+
+
+def upload_video(video_path, thumbnail_path=None, title="", description="", tags=None, category_id="24"):
     """
     Upload video to YouTube
     
@@ -20,32 +54,17 @@ def upload_video(video_path, thumbnail_path=None, title="", description="", tags
         logger.error(f"Video file not found: {video_path}")
         return None
     
-    # Check credentials
-    client_id = os.getenv("YT_CLIENT_ID", "")
-    client_secret = os.getenv("YT_CLIENT_SECRET", "")
-    refresh_token = os.getenv("YT_REFRESH_TOKEN", "")
+    creds = get_youtube_credentials()
     
-    if not all([client_id, client_secret, refresh_token]):
+    if not creds:
         logger.warning("YouTube credentials missing - simulating upload")
         return simulate_upload(video_path, title)
     
     try:
-        from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
         
-        # Create credentials
-        creds = Credentials(
-            token=None,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=["https://www.googleapis.com/auth/youtube.upload",
-                   "https://www.googleapis.com/auth/youtube"]
-        )
-        
-        # Build YouTube client
+        # Build YouTube client with correct scopes
         youtube = build('youtube', 'v3', credentials=creds)
         
         # Prepare video body
@@ -77,6 +96,7 @@ def upload_video(video_path, thumbnail_path=None, title="", description="", tags
         
         response = None
         retries = 0
+        max_retries = 3
         
         while response is None:
             try:
@@ -85,13 +105,13 @@ def upload_video(video_path, thumbnail_path=None, title="", description="", tags
                     logger.info(f"Upload progress: {int(status.progress() * 100)}%")
             except Exception as e:
                 retries += 1
-                if retries > 3:
+                if retries > max_retries:
                     raise
-                logger.warning(f"Upload retry {retries}: {e}")
+                logger.warning(f"Upload retry {retries}: {str(e)[:100]}")
                 time.sleep(2 ** retries)
         
         video_id = response['id']
-        logger.info(f"Upload successful: {video_id}")
+        logger.info(f"✅ Upload successful: {video_id}")
         
         # Upload thumbnail
         if thumbnail_path and os.path.exists(thumbnail_path):
@@ -107,39 +127,40 @@ def upload_video(video_path, thumbnail_path=None, title="", description="", tags
         return video_id
     
     except Exception as e:
-        logger.error(f"YouTube upload failed: {e}")
-        return simulate_upload(video_path, title)
+        error_msg = str(e)
+        logger.error(f"YouTube upload failed: {error_msg[:200]}")
+        
+        # Don't simulate on error - return None so caller knows it failed
+        if "invalid_scope" in error_msg.lower():
+            logger.error("=" * 60)
+            logger.error("❌ SCOPE MISMATCH ERROR")
+            logger.error("=" * 60)
+            logger.error("Token scopes and code scopes don't match!")
+            logger.error("Fix:")
+            logger.error("1. Regenerate refresh token with 3 scopes")
+            logger.error("2. Update YT_REFRESH_TOKEN in GitHub secrets")
+            logger.error("=" * 60)
+        
+        return None
 
 
 def simulate_upload(video_path, title):
-    """Simulate upload for testing"""
+    """Simulate upload only for testing (no credentials)"""
     import hashlib
     fake_id = hashlib.md5(f"{title}{time.time()}".encode()).hexdigest()[:11]
-    logger.info(f"[SIMULATED] Uploaded: https://youtu.be/{fake_id}")
+    logger.info(f"[SIMULATED] Would upload: https://youtu.be/{fake_id}")
     return fake_id
 
 
 def get_video_analytics(video_id):
     """Get analytics for a video"""
+    creds = get_youtube_credentials()
+    
+    if not creds:
+        return None
+    
     try:
-        from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
-        
-        client_id = os.getenv("YT_CLIENT_ID", "")
-        client_secret = os.getenv("YT_CLIENT_SECRET", "")
-        refresh_token = os.getenv("YT_REFRESH_TOKEN", "")
-        
-        if not all([client_id, client_secret, refresh_token]):
-            return None
-        
-        creds = Credentials(
-            token=None,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=client_id,
-            client_secret=client_secret,
-            scopes=["https://www.googleapis.com/auth/youtube.readonly"]
-        )
         
         youtube = build('youtube', 'v3', credentials=creds)
         
@@ -152,6 +173,6 @@ def get_video_analytics(video_id):
             return response['items'][0].get('statistics', {})
     
     except Exception as e:
-        logger.error(f"Analytics fetch failed: {e}")
+        logger.error(f"Analytics fetch failed: {str(e)[:100]}")
     
     return None

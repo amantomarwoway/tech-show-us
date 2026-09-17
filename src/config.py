@@ -1,178 +1,93 @@
 """
-src/config.py - GOD LEVEL CONFIG
-All settings for the bot
+src/config.py - BROAD TRENDING CONFIG
+Niche: Any trending topic (not restricted to news/politics)
 """
 
 import os
-
-"""
-src/config.py - GOD LEVEL CONFIG
-"""
-
-import os
-
-# ============================================================
-# VIDEO LAYOUT CONSTANTS
-# ============================================================
-
-TOP_BLACK_STRIP_HEIGHT = 200      # Top black strip (was 150)
-WHITE_BAR_HEIGHT = 210             # White bar below top strip
-BOTTOM_BLACK_STRIP_HEIGHT = 200   # NEW: Bottom black strip
-VIDEO_CONTENT_AREA = 1920 - TOP_BLACK_STRIP_HEIGHT - WHITE_BAR_HEIGHT - BOTTOM_BLACK_STRIP_HEIGHT
-# = 1310px for main video content
-
-# Video layout:
-# [0-200]       : Top black strip
-# [200-410]     : White bar (viral hook)
-# [410-1720]    : Main video content (1310px)
-# [1720-1920]   : Bottom black strip
-
-# ============================================================
-# 🚨 CRITICAL FIX: Pillow 10+ compatibility for MoviePy 1.0.3
-# ============================================================
-from PIL import Image
-if not hasattr(Image, 'ANTIALIAS'):
-    Image.ANTIALIAS = Image.LANCZOS
-if not hasattr(Image, 'BICUBIC'):
-    Image.BICUBIC = Image.Resampling.BICUBIC
-if not hasattr(Image, 'BILINEAR'):
-    Image.BILINEAR = Image.Resampling.BILINEAR
-if not hasattr(Image, 'NEAREST'):
-    Image.NEAREST = Image.Resampling.NEAREST
-# ============================================================
-
-# ... rest of config
-
-# ============================================================
-# GOD LEVEL INSTRUCTION
-# ============================================================
 
 GOD_INSTRUCTION = """
-GOD LEVEL YOUTUBE SHORTS BOT - Zero Cost, Maximum Automation
+TRENDING CONTENT BOT - Any Topic, Only Trending
 
-MISSION: Create high-quality, fact-checked, globally relevant YouTube Shorts
-that maximize viewer satisfaction and session watch time.
+MISSION: Create viral shorts on ANY trending topic.
+- Entertainment, sports, music, movies, gaming, memes, viral moments
+- Politics, news (only if trending)
+- Tech, AI, science
+- Whatever is trending #1 anywhere
 
-CORE PRINCIPLES:
-1. TRUTH FIRST - Never publish unverified claims
-2. GLOBAL AUDIENCE - English-first, not US-only
-3. ZERO COST - Use free tiers and open source
-4. FAIL SAFE - Every component has fallback
-5. LEARN & IMPROVE - Use analytics to get better
-
-PIPELINE (5 LEGS):
-Leg 1 - Research God: Multi-source news collection + trend detection
-Leg 2 - Editor God: Best visual assets from free sources
-Leg 3 - Boss Approval: Quality gate + final approval
-Leg 4 - Uploader God: YouTube upload + metadata optimization
-Leg 5 - Self Evolution: Learn from performance data
-
-QUALITY GATES (HARD):
-- Truth confidence must be >= 85
-- Policy safety must be >= 90
-- Final score must be >= 70
-
-Never compromise truth for virality.
+CORE RULE: Only TRENDING topics. If it's not trending, skip it.
 """
 
 # ============================================================
-# TARGET COUNTRIES
+# TARGET COUNTRIES (for trending detection)
 # ============================================================
 
-# Primary English-speaking countries
 ENGLISH_COUNTRIES = ["US", "GB", "CA", "AU", "NZ", "IE"]
-
-# English + significant English understanding
 ENGLISH_COUNTRIES_HALF = ["US", "GB", "CA", "AU", "NZ", "IE", "IN", "PH", "SG", "ZA"]
-
-# All target countries for global relevance
 TARGET_COUNTRIES = ENGLISH_COUNTRIES + ["IN", "PH", "SG", "ZA", "NG", "KE"]
 
 # ============================================================
-# PUBLISH THRESHOLDS
+# PUBLISH THRESHOLDS (trending-focused)
 # ============================================================
 
 PUBLISH_THRESHOLDS = {
-    "publish": 75,          # Publish immediately
-    "high_priority": 65,   # High priority
-    "medium": 55,          # Publish if resources available
-    "monitor": 45,         # Monitor for later
-    "reject": 0            # Reject
+    "publish": 70,
+    "high_priority": 65,
+    "medium": 55,
+    "monitor": 45,
+    "reject": 0
 }
 
-# Hard gates (cannot be overridden by high viral score)
 HARD_GATES = {
-    "truth_confidence": 85,
-    "policy_safety": 90,
-    "source_credibility": 70
+    "truth_confidence": 70,
+    "policy_safety": 85,
+    "source_credibility": 60
 }
 
 # ============================================================
-# STORY SCORING WEIGHTS
+# STORY SCORING WEIGHTS (trending dominant)
 # ============================================================
 
 STORY_SCORE_WEIGHTS = {
-    "trend_momentum": 0.25,
-    "audience_relevance": 0.20,
-    "news_importance": 0.15,
-    "curiosity": 0.15,
+    "trend_momentum": 0.40,      # HIGHEST - trending is everything
+    "audience_relevance": 0.15,
+    "news_importance": 0.05,     # LOW - not news-focused
+    "curiosity": 0.20,
     "novelty": 0.10,
     "visual_potential": 0.05,
-    "search_potential": 0.05,
-    "competition_opportunity": 0.05
+    "search_potential": 0.03,
+    "competition_opportunity": 0.02
 }
 
-# Dynamic weight adjustments by story type
 STORY_TYPE_WEIGHTS = {
-    "breaking": {
-        "trend_momentum": 0.35,
-        "audience_relevance": 0.20,
-        "news_importance": 0.20,
-        "curiosity": 0.10,
-        "novelty": 0.05,
-        "visual_potential": 0.05,
-        "search_potential": 0.05,
-        "competition_opportunity": 0.00
-    },
-    "evergreen": {
-        "trend_momentum": 0.10,
-        "audience_relevance": 0.25,
-        "news_importance": 0.10,
+    "trending": {
+        "trend_momentum": 0.50,
+        "audience_relevance": 0.15,
+        "news_importance": 0.00,
         "curiosity": 0.20,
         "novelty": 0.10,
-        "visual_potential": 0.10,
-        "search_potential": 0.10,
-        "competition_opportunity": 0.05
+        "visual_potential": 0.05,
+        "search_potential": 0.00,
+        "competition_opportunity": 0.00
     },
-    "political": {
-        "trend_momentum": 0.20,
-        "audience_relevance": 0.25,
-        "news_importance": 0.20,
+    "viral": {
+        "trend_momentum": 0.45,
+        "audience_relevance": 0.15,
+        "news_importance": 0.00,
+        "curiosity": 0.25,
+        "novelty": 0.10,
+        "visual_potential": 0.05,
+        "search_potential": 0.00,
+        "competition_opportunity": 0.00
+    },
+    "news": {
+        "trend_momentum": 0.35,
+        "audience_relevance": 0.20,
+        "news_importance": 0.15,
         "curiosity": 0.15,
         "novelty": 0.05,
         "visual_potential": 0.05,
         "search_potential": 0.05,
-        "competition_opportunity": 0.05
-    },
-    "geopolitical": {
-        "trend_momentum": 0.25,
-        "audience_relevance": 0.25,
-        "news_importance": 0.20,
-        "curiosity": 0.10,
-        "novelty": 0.10,
-        "visual_potential": 0.05,
-        "search_potential": 0.05,
         "competition_opportunity": 0.00
-    },
-    "tech": {
-        "trend_momentum": 0.20,
-        "audience_relevance": 0.20,
-        "news_importance": 0.10,
-        "curiosity": 0.20,
-        "novelty": 0.15,
-        "visual_potential": 0.05,
-        "search_potential": 0.05,
-        "competition_opportunity": 0.05
     }
 }
 
@@ -184,19 +99,19 @@ VIDEO_CONFIG = {
     "WIDTH": 1080,
     "HEIGHT": 1920,
     "WHITE_BAR_HEIGHT": 210,
-    "BLACK_TOP_STRIP": 150,
+    "BLACK_TOP_STRIP": 180,
     "BLACK_BOTTOM_STRIP": 200,
     "BLACK_BORDER": 16,
     "CORNER_RADIUS": 38,
-    "CLIP_DENSITY": 0.8,        # 0.8s per clip for retention
+    "CLIP_DENSITY": 0.8,
     "DURATION_MIN": 11,
     "DURATION_MAX": 15,
-    "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],  # NTSC standard
-    "FIRST_WORDS_PUNCH": 1.4,   # First 5 words 1.4x longer
+    "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],
+    "FIRST_WORDS_PUNCH": 1.4,
     "KEYWORD_PUNCH": 1.2,
     "OVERLAP": 0.92,
-    "TTS_SPEED": 1.15,          # 1.15X for retention
-    "WORDS_TARGET": 40          # 40 words = 11-13 sec
+    "TTS_SPEED": 1.15,
+    "WORDS_TARGET": 40
 }
 
 # ============================================================
@@ -220,96 +135,74 @@ TTS_CONFIG = {
 # ============================================================
 
 YOUTUBE_CONFIG = {
-    "category_id": "25",  # News & Politics
+    "category_id": "24",  # Entertainment (broader than News)
     "privacy": "public",
-    "comment_bait": "🚨 Do you think this is fair? Comment below - Subscribe before this gets deleted! 🔔",
+    "comment_bait": "🚨 What do you think? Comment below - Subscribe for more! 🔔",
     "description_hooks": [
-        "🚨 Wait till end - last part will shock you!",
-        "💥 This affects you directly!",
-        "👇 Do you think this is fair? Comment below 👇",
-        "🔔 Subscribe for more breaking news!"
+        "Wait till end - last part will shock you!",
+        "This is what everyone is talking about!",
+        "Comment your thoughts below!",
+        "Subscribe for more trending content!"
     ],
     "max_tags": 15,
-    "max_hashtags": 5
+    "max_hashtags": 1
 }
 
 # ============================================================
-# FACT CHECKER CONFIG
+# FACT CHECKER CONFIG (relaxed for trending)
 # ============================================================
 
 FACT_CHECKER_CONFIG = {
-    "min_score": 4000,
-    "high_score": 5000,
-    "guaranteed_score": 5500,
-    "min_volume": 70,
-    "high_volume": 80,
-    "pass_count_required": 2,  # 2 of 3 pass = video made
-    "lenient_boost_keywords": ["white house", "shocking", "brutal", "leaked", "supreme court"]
+    "min_score": 2500,
+    "high_score": 4000,
+    "guaranteed_score": 4500,
+    "min_volume": 50,
+    "high_volume": 70,
+    "pass_count_required": 2,
+    "lenient_boost_keywords": ["viral", "trending", "shocking", "breaking"]
 }
 
 # ============================================================
-# SOURCE CONFIG
+# RSS FEEDS (broadened - not just news)
 # ============================================================
 
-# Tier 1: Most authoritative
-TIER1_SOURCES = [
-    "whitehouse.gov",
-    "supremecourt.gov",
-    "congress.gov",
-    "senate.gov",
-    "house.gov",
-    "state.gov",
-    "defense.gov",
-    "justice.gov",
-    "treasury.gov",
-    "un.org",
-    "who.int",
-    "worldbank.org",
-    "imf.org"
-]
-
-# Tier 2: Major news agencies
-TIER2_SOURCES = [
-    "reuters.com",
-    "apnews.com",
-    "bbc.com",
-    "bbc.co.uk",
-    "afp.com",
-    "npr.org",
-    "pbs.org",
-    "cnn.com",
-    "nytimes.com",
-    "washingtonpost.com",
-    "theguardian.com",
-    "aljazeera.com"
-]
-
-# Tier 3: Specialized/industry
-TIER3_SOURCES = [
-    "bloomberg.com",
-    "wsj.com",
-    "ft.com",
-    "economist.com",
-    "nature.com",
-    "science.org",
-    "techcrunch.com",
-    "theverge.com",
-    "politico.com",
-    "thehill.com"
-]
-
-# RSS Feeds (free)
 RSS_FEEDS = [
+    # Google News (all categories)
     "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=white+house+breaking&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=world+news+breaking&hl=en-US&gl=US&ceid=US:en",
-    "http://rss.cnn.com/rss/cnn_topstories.rss",
-    "https://feeds.bbci.co.uk/news/world/rss.xml",
-    "https://feeds.bbci.co.uk/news/politics/rss.xml",
-    "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
-    "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+    "https://news.google.com/rss/search?q=trending&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=viral&hl=en-US&gl=US&ceid=US:en",
+    
+    # Entertainment
+    "https://variety.com/feed/",
+    "https://www.hollywoodreporter.com/feed/",
+    "https://deadline.com/feed/",
+    
+    # Sports
+    "https://www.espn.com/espn/rss/news",
+    "https://sports.yahoo.com/rss/",
+    
+    # Tech
+    "https://techcrunch.com/feed/",
+    "https://www.theverge.com/rss/index.xml",
+    "https://www.wired.com/feed/rss",
+    
+    # Music
+    "https://pitchfork.com/feed/feed-news/rss",
+    "https://www.rollingstone.com/feed/",
+    
+    # Gaming
+    "https://www.ign.com/rss/articles",
+    "https://www.polygon.com/rss/index.xml",
+    
+    # General
+    "https://feeds.bbci.co.uk/news/rss.xml",
+    "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+    "https://moxie.foxnews.com/google-publisher/latest.xml",
     "https://feeds.npr.org/1001/rss.xml",
-    "https://moxie.foxnews.com/google-publisher/latest.xml"
+    
+    # Viral/Social
+    "https://www.buzzfeed.com/index.xml",
+    "https://knowyourmeme.com/news/feed"
 ]
 
 # ============================================================
@@ -319,68 +212,52 @@ RSS_FEEDS = [
 TREND_CONFIG = {
     "geo": "US",
     "timeframe": "now 4-H",
-    "min_interest": 40,
-    "breakout_threshold": 5000,
-    "momentum_window": 2  # Compare last 2 data points
+    "min_interest": 30,          # LOWERED - accept more trends
+    "breakout_threshold": 3000,   # LOWERED
+    "momentum_window": 2,
+    "trending_topics_count": 20   # Get more trends
 }
 
 # ============================================================
-# GLOBAL RELEVANCE CONFIG
+# REDDIT TRENDING SUBREDDITS
 # ============================================================
 
-GLOBAL_RELEVANCE_WEIGHTS = {
-    "population_affected": 0.25,
-    "economic_impact": 0.20,
-    "geopolitical_importance": 0.20,
-    "cultural_interest": 0.15,
-    "international_consequences": 0.10,
-    "english_search_demand": 0.10
-}
+REDDIT_SUBREDDITS = [
+    "all",           # r/all - everything trending
+    "popular",       # r/popular - top trending
+    "trending",
+    "entertainment",
+    "movies",
+    "music",
+    "gaming",
+    "sports",
+    "technology",
+    "memes",
+    "viral",
+    "interestingasfuck",
+    "nextfuckinglevel",
+    "Damnthatsinteresting"
+]
 
 # ============================================================
-# VISUAL CONFIG
+# GOOGLE NEWS SEARCH QUERIES (broadened)
 # ============================================================
 
-VISUAL_CONFIG = {
-    "pexels_api_key": os.getenv("PEXELS_API_KEY", ""),
-    "pixabay_api_key": os.getenv("PIXABAY_API_KEY", ""),
-    "unsplash_api_key": os.getenv("UNSPLASH_API_KEY", ""),
-    "giphy_api_key": os.getenv("GIPHY_API_KEY", ""),
-    "preferred_orientation": "portrait",
-    "preferred_size": "medium",
-    "min_duration": 0.5,
-    "max_duration": 2.0,
-    "license_check_enabled": True
-}
+GOOGLE_NEWS_QUERIES = [
+    "trending",
+    "viral",
+    "breaking",
+    "shocking",
+    "everyone talking about",
+    "why trending",
+    "went viral"
+]
 
 # ============================================================
-# LOGGING CONFIG
-# ============================================================
-
-LOGGING_CONFIG = {
-    "level": os.getenv("LOG_LEVEL", "INFO"),
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "file": "logs/bot.log",
-    "max_bytes": 10 * 1024 * 1024,  # 10 MB
-    "backup_count": 5
-}
-
-# ============================================================
-# DATABASE CONFIG
-# ============================================================
-
-DATABASE_CONFIG = {
-    "path": "data/news_bot.db",
-    "timeout": 30,
-    "check_same_thread": False
-}
-
-# ============================================================
-# API KEYS (from environment)
+# API KEYS
 # ============================================================
 
 def get_api_keys():
-    """Get all API keys from environment"""
     return {
         "gemini": os.getenv("GEMINI_API_KEY", ""),
         "openai": os.getenv("OPENAI_API_KEY", ""),
@@ -409,9 +286,7 @@ PATHS = {
 }
 
 def ensure_directories():
-    """Create all required directories"""
     for path in PATHS.values():
         os.makedirs(path, exist_ok=True)
 
-# Auto-create directories on import
 ensure_directories()

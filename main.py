@@ -1,9 +1,11 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT v2
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v3
 Question-hook based system
 - Title: Question + 1 hashtag
 - White bar: 4-5 word question (no emoji)
 - Script: Answers the question
+- Clean topics (no publisher prefix)
+- Skip duplicates
 """
 
 import os
@@ -24,6 +26,44 @@ from src.utils.logger import setup_logger
 from src.database import init_db, save_story, mark_uploaded, get_performance_stats
 
 logger = setup_logger(__name__)
+
+
+# ============================================================
+# 🧹 TOPIC CLEANING (Remove publisher prefix)
+# ============================================================
+
+def clean_topic(title):
+    """Remove publisher prefix like 'MINNEAPOLIMEDIA BREAKING NEWS |' """
+    if not title:
+        return ""
+    
+    cleaned = title.strip()
+    
+    # Remove ALL-CAPS prefix with pipe: "MINNEAPOLIMEDIA BREAKING NEWS |"
+    cleaned = re.sub(r'^[A-Z][A-Z\s]+\|\s*', '', cleaned)
+    
+    # Remove "Something BREAKING NEWS |"
+    cleaned = re.sub(r'^[A-Za-z\s]+BREAKING NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove "BREAKING NEWS |"
+    cleaned = re.sub(r'^BREAKING NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove "Something NEWS |"
+    cleaned = re.sub(r'^[A-Za-z\s]+NEWS\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove "Something MEDIA |"
+    cleaned = re.sub(r'^[A-Za-z\s]+MEDIA\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove "Something LIVE |"
+    cleaned = re.sub(r'^[A-Za-z\s]+LIVE\s*\|\s*', '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove " - Source Name" at end (2-25 chars)
+    cleaned = re.sub(r'\s+-\s+[A-Za-z\s]{2,25}$', '', cleaned)
+    
+    # Remove leading pipe or dash
+    cleaned = re.sub(r'^[\|\-\s]+', '', cleaned)
+    
+    return cleaned.strip()
 
 
 # ============================================================
@@ -92,6 +132,10 @@ def research_god_main():
     if not all_stories:
         logger.warning("All collectors failed - fallback")
         all_stories = get_guaranteed_stories()
+    
+    # Clean titles
+    for story in all_stories:
+        story['title'] = clean_topic(story.get('title', ''))
     
     all_stories = deduplicate_stories(all_stories)
     ranked = score_and_rank_stories(all_stories)
@@ -357,8 +401,17 @@ def generate_script_god(story):
     - White bar: 4-5 word question (NO emoji)
     - Script: Answers the question
     """
-    topic = story.get('title', '')
+    # CLEAN TOPIC
+    raw_topic = story.get('title', '')
+    topic = clean_topic(raw_topic)
+    
+    if len(topic) < 10:
+        topic = raw_topic
+    
     seo_title = story.get('seo_youtube_title', '') or topic
+    
+    logger.info(f"   Raw: {raw_topic[:70]}")
+    logger.info(f"   Clean: {topic[:70]}")
     
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     
@@ -404,8 +457,6 @@ TOPIC: {topic}
 - Example: "WHY DID HE STAY SILENT?" (5 words)
 - Example: "WHO REALLY PAYS TARIFFS?" (4 words)
 - Example: "WHAT IS HE HIDING?" (4 words)
-- Example: "IS THIS THE END?" (4 words)
-- Example: "WHO CONTROLS THE AI?" (4 words)
 
 ✅ GOOD HOOKS (4-5 words, question):
 - "WHY DID HE STAY SILENT?"  (5)
@@ -426,9 +477,6 @@ TOPIC: {topic}
 - Provide clear answer with context
 - "reports say" for unverified claims
 - End with what happens next
-
-EXAMPLE SCRIPT for "WHY DID HE STAY SILENT?":
-"Reports say he refused comment because of ongoing investigation. Officials confirm he was advised to stay quiet. Legal experts say this could backfire. What happens next is unclear."
 
 🚨 TAGS (15 max):
 - Mix of short + specific
@@ -463,29 +511,24 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             # HARD LIMITS & FIXES
                             # ============================================
                             
-                            # --- Fix viral_hook (question, 4-5 words, no emoji) ---
+                            # --- Fix viral_hook ---
                             hook = data.get('viral_hook', '')
                             
-                            # Remove any emoji
                             emoji_pat = re.compile(
                                 "[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+",
                                 flags=re.UNICODE
                             )
                             hook = emoji_pat.sub('', hook).strip()
                             
-                            # Ensure question mark
                             if hook and not hook.endswith('?'):
                                 hook = hook.rstrip('.!') + '?'
                             
-                            # Limit to 5 words
                             hook_words = hook.rstrip('?').split()
                             if len(hook_words) > 5:
                                 hook_words = hook_words[:5]
                             hook = " ".join(hook_words).upper() + "?"
                             
-                            # Ensure 4-5 words
                             if len(hook_words) < 4:
-                                # Add question word
                                 if 'WHAT' not in hook.upper() and 'WHO' not in hook.upper() and 'WHY' not in hook.upper() and 'HOW' not in hook.upper():
                                     hook = "WHY " + hook.upper()
                                     hook_words = hook.rstrip('?').split()
@@ -495,28 +538,21 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
                             
                             data['viral_hook'] = hook
                             
-                            # --- Fix seo_youtube_title (question + 1 hashtag) ---
+                            # --- Fix seo_youtube_title ---
                             title = data.get('seo_youtube_title', '')
-                            
-                            # Remove all hashtags
                             title_clean = re.sub(r'#\w+', '', title).strip()
                             
-                            # Ensure question mark
                             if title_clean and not title_clean.endswith('?'):
                                 title_clean = title_clean.rstrip('.!,') + '?'
                             
-                            # Add ONE hashtag
                             hashtag = data.get('hashtags', ['#Breaking'])[0] if data.get('hashtags') else '#Breaking'
                             if not hashtag.startswith('#'):
                                 hashtag = '#' + hashtag
-                            hashtag = hashtag.split()[0]  # Only first hashtag
+                            hashtag = hashtag.split()[0]
                             
-                            # Combine
                             title_full = f"{title_clean} {hashtag}"
                             
-                            # Limit length to 50 chars
                             if len(title_full) > 50:
-                                # Truncate title portion
                                 max_title_len = 50 - len(hashtag) - 1
                                 title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
                                 if not title_clean.endswith('?'):
@@ -544,13 +580,11 @@ OUTPUT JSON ONLY (NO EXTRA TEXT):
 def get_template_script(topic, seo_title):
     """Fallback - Question-based title + hook"""
     
-    # Extract key words
     words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
              ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 'said']]
     
     key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "News")
     
-    # Question title templates
     title_templates = [
         f"Why Did {key[:20]} Happen?",
         f"Who Really Wins From {key[:15]}?",
@@ -561,7 +595,6 @@ def get_template_script(topic, seo_title):
     
     title_q = random.choice(title_templates)
     
-    # Determine hashtag based on topic
     t_low = topic.lower()
     if any(w in t_low for w in ['war', 'military', 'strike', 'missile']):
         hashtag = "#Breaking"
@@ -591,7 +624,6 @@ def get_template_script(topic, seo_title):
         hashtag = "#Breaking"
         hook = "WHY NOW, WHY HIM?"
     
-    # Combine title + hashtag
     title_full = f"{title_q[:45]} {hashtag}"
     if len(title_full) > 50:
         max_title = 50 - len(hashtag) - 1
@@ -679,6 +711,58 @@ def create_thumbnail(candidate, script_data):
 
 
 # ============================================================
+# 🚫 DUPLICATE CHECK
+# ============================================================
+
+def is_duplicate(title):
+    """Check if similar story already processed in last 3 days"""
+    if not title:
+        return False
+    
+    try:
+        from src.database import get_connection
+        
+        # Clean title for comparison
+        clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
+        # Get first 4 significant words
+        words = [w for w in clean.split() if len(w) > 3][:4]
+        search_key = ' '.join(words)
+        
+        if not search_key:
+            return False
+        
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT title FROM stories 
+            WHERE created_at > datetime('now', '-3 days')
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        for row in rows:
+            existing = re.sub(r'[^\w\s]', '', row[0].lower()).strip()
+            existing_words = [w for w in existing.split() if len(w) > 3][:4]
+            existing_key = ' '.join(existing_words)
+            
+            if search_key and existing_key:
+                # Check overlap
+                search_set = set(search_key.split())
+                existing_set = set(existing_key.split())
+                overlap = len(search_set & existing_set)
+                
+                if overlap >= 3:  # 3+ word overlap = duplicate
+                    return True
+        
+        return False
+    except Exception as e:
+        logger.warning(f"Duplicate check failed: {e}")
+        return False
+
+
+# ============================================================
 # MAIN ORCHESTRATOR
 # ============================================================
 
@@ -703,11 +787,18 @@ def main():
     
     approved = None
     best_rejected = None
+    skipped_count = 0
     
     for i, candidate in enumerate(stories[:5]):
         logger.info(f"\n{'='*60}")
         logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
         logger.info(f"{'='*60}")
+        
+        # 🚫 SKIP DUPLICATES
+        if is_duplicate(candidate.get('title', '')):
+            logger.warning(f"⏭️ SKIPPED - Duplicate story (processed in last 3 days)")
+            skipped_count += 1
+            continue
         
         script_data = generate_script_god(candidate)
         
@@ -743,6 +834,9 @@ def main():
         logger.info(f"APPROVED: {boss_data.get('reason')}")
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
+    
+    if skipped_count > 0:
+        logger.info(f"⏭️ Skipped {skipped_count} duplicate stories")
     
     if not approved and best_rejected:
         score = best_rejected[3].get('score', 0)

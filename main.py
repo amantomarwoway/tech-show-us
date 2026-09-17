@@ -5,6 +5,7 @@ Question-hook ONLY system
 - White bar: 4-5 word question (no emoji)
 - Script: Answers the question
 - Duplicate stories skipped
+- Any TRENDING topic (not restricted to news/politics)
 """
 
 import os
@@ -107,95 +108,137 @@ def safe_import(module_path, function_name=None):
 
 
 # ============================================================
-# LEG 1: RESEARCH GOD
+# 🔥 LEG 1: RESEARCH GOD - ALL TRENDING TOPICS
 # ============================================================
 
 def research_god_main():
+    """
+    Collect TRENDING topics from ALL sources.
+    Any topic that is trending - entertainment, sports, viral, tech, music,
+    movies, gaming, memes, politics, news - NO restriction.
+    
+    Priority order:
+    1. Google Trends (PRIMARY - real trending searches)
+    2. Reddit r/all + r/popular (real-time trending)
+    3. Google News (trending queries)
+    4. RSS (broad - entertainment, sports, tech, music)
+    """
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH GOD")
+    logger.info("LEG 1: RESEARCH GOD - ALL TRENDING TOPICS")
     logger.info("=" * 60)
     
     all_stories = []
     
-    rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
-    if rss_collector:
-        try:
-            s = rss_collector()
-            logger.info(f"RSS: {len(s)} stories")
-            all_stories.extend(s)
-        except Exception as e:
-            logger.error(f"RSS failed: {e}")
-    
-    google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
-    if google_collector:
-        try:
-            s = google_collector()
-            logger.info(f"Google News: {len(s)} stories")
-            all_stories.extend(s)
-        except Exception as e:
-            logger.error(f"Google News failed: {e}")
-    
+    # ============================================================
+    # 1. GOOGLE TRENDS - PRIMARY SOURCE (best trending signal)
+    # ============================================================
     trends_collector = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends_collector:
         try:
             s = trends_collector()
-            logger.info(f"Trends: {len(s)} stories")
+            logger.info(f"🔥 Google Trends: {len(s)} trending topics")
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Trends failed: {e}")
     
+    # ============================================================
+    # 2. REDDIT r/all + r/popular - real-time trending
+    # ============================================================
     reddit_collector = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit_collector:
         try:
             s = reddit_collector()
-            logger.info(f"Reddit: {len(s)} stories")
+            logger.info(f"🔥 Reddit (r/all, r/popular): {len(s)} trending stories")
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Reddit failed: {e}")
     
+    # ============================================================
+    # 3. GOOGLE NEWS - trending queries
+    # ============================================================
+    google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
+    if google_collector:
+        try:
+            s = google_collector()
+            logger.info(f"🔥 Google News: {len(s)} stories")
+            all_stories.extend(s)
+        except Exception as e:
+            logger.error(f"Google News failed: {e}")
+    
+    # ============================================================
+    # 4. RSS - broad sources (entertainment, sports, tech, music)
+    # ============================================================
+    rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
+    if rss_collector:
+        try:
+            s = rss_collector()
+            logger.info(f"🔥 RSS (all categories): {len(s)} stories")
+            all_stories.extend(s)
+        except Exception as e:
+            logger.error(f"RSS failed: {e}")
+    
+    # ============================================================
+    # FALLBACK
+    # ============================================================
     if not all_stories:
-        logger.warning("All collectors failed - fallback")
+        logger.warning("All collectors failed - using fallback")
         all_stories = get_guaranteed_stories()
     
-    # Clean all titles
+    # ============================================================
+    # CLEAN TITLES
+    # ============================================================
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
+        if not story['title'] or len(story['title']) < 5:
+            story['title'] = 'Trending Topic'
     
+    # Remove empty/too-short stories
+    all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 5]
+    
+    # ============================================================
+    # DEDUP + RANK
+    # ============================================================
     all_stories = deduplicate_stories(all_stories)
     ranked = score_and_rank_stories(all_stories)
     
-    logger.info(f"LEG 1 COMPLETE: {len(ranked)} stories")
+    logger.info(f"LEG 1 COMPLETE: {len(ranked)} trending stories (ALL TOPICS)")
+    
+    # Log top 5 with type
+    for i, story in enumerate(ranked[:5]):
+        logger.info(f"  #{i+1}: {story.get('title', '')[:60]} | Type: {story.get('story_type', 'trending')}")
+    
     return ranked[:10]
 
 
 def get_guaranteed_stories():
+    """Fallback with VARIED topics (not just politics)"""
     return [
         {
-            "title": "White House Shocker Shatters Families Tonight",
-            "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-            "source": "guaranteed_google_news",
+            "title": "Why Is Everyone Talking About This?",
+            "url": "https://trends.google.com",
+            "source": "guaranteed_trends",
             "breakout_score": 6000,
             "is_breakout": True,
             "search_volume": 90,
-            "seo_youtube_title": "What Did White House Just Do?"
+            "seo_youtube_title": "Why Is Everyone Talking About This?"
         },
         {
-            "title": "Supreme Court Brutal Order Panic Millions",
-            "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-            "source": "guaranteed_google_news",
+            "title": "This Viral Moment Just Broke The Internet",
+            "url": "https://trends.google.com",
+            "source": "guaranteed_trends",
             "breakout_score": 5800,
             "is_breakout": True,
             "search_volume": 88,
-            "seo_youtube_title": "Who Will Supreme Court Target?"
+            "seo_youtube_title": "What Made This Go Viral?"
         },
         {
-            "title": "Brutal Tariffs Panic Millions of Families",
-            "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-            "source": "guaranteed_google_news",
+            "title": "New Trend Everyone Is Following Today",
+            "url": "https://trends.google.com",
+            "source": "guaranteed_trends",
             "breakout_score": 5700,
             "is_breakout": True,
             "search_volume": 85,
-            "seo_youtube_title": "Who Pays The New Tariffs?"
+            "seo_youtube_title": "What Is This New Trend?"
         },
     ]
 
@@ -310,10 +353,10 @@ def boss_approval_main(video_path, script_data, full_story):
             score = story_ranker(full_story)
             result['score'] = score
             
-            if score >= 72:
+            if score >= 65:
                 result['approved'] = True
                 result['reason'] = f"High score: {score:.1f}"
-            elif score >= 65:
+            elif score >= 55:
                 result['approved'] = True
                 result['reason'] = f"Acceptable: {score:.1f}"
             else:
@@ -352,9 +395,9 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
             metadata = metadata_gen(script_data, candidate)
         else:
             metadata = {
-                "title": script_data.get('seo_youtube_title', candidate.get('title', 'Breaking News'))[:100],
-                "description": script_data.get('description', 'Breaking news update.'),
-                "tags": script_data.get('tags', ['breaking news', 'world news'])
+                "title": script_data.get('seo_youtube_title', candidate.get('title', 'Trending'))[:100],
+                "description": script_data.get('description', 'Trending now.'),
+                "tags": script_data.get('tags', ['trending', 'viral'])
             }
         
         video_id = uploader(
@@ -363,7 +406,7 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
             title=metadata['title'],
             description=metadata['description'],
             tags=metadata['tags'],
-            category_id="25"
+            category_id="24"  # Entertainment (broader)
         )
         
         if video_id:
@@ -423,7 +466,6 @@ def generate_script_god(story):
     Generate ONLY QUESTION-based title + hook
     NEVER contains publisher names
     """
-    # CLEAN TOPIC
     raw_topic = story.get('title', '')
     topic = clean_topic(raw_topic)
     
@@ -442,9 +484,9 @@ def generate_script_god(story):
             from google import genai
             client = genai.Client(api_key=gemini_key)
             
-            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert.
+            prompt = f"""You are a YouTube Shorts QUESTION-HOOK expert. Work with ANY trending topic.
 
-NEWS TOPIC: {topic}
+TRENDING TOPIC: {topic}
 
 🚨 YOUR TASK:
 1. Create a QUESTION title (only question + 1 hashtag)
@@ -461,26 +503,22 @@ NEWS TOPIC: {topic}
   * MINNEAPOLIMEDIA or any ALL-CAPS 4+ letter word
   * CNN, BBC, ABC, NBC, CBS, FOX, MSNBC, NYT, WSJ, AP, REUTERS
   * Any newspaper/media name
-  * Any country code like MINNEAPOLI
 
-✅ GOOD TITLE EXAMPLES (follow these patterns):
-- "Why Did Biden Stay Silent? #Politics"
-- "Who Really Pays Tariffs? #Economy"
-- "What's Hiding In The Bill? #Politics"
-- "Why Are Markets Crashing? #Market"
-- "Is This The End For NATO? #World"
-- "Who Controls The AI Race? #Tech"
-- "Why Did Costs Jump So High? #Space"
-- "What Really Happened Today? #News"
+✅ GOOD TITLE EXAMPLES (any topic):
+- "Why Did Everyone Miss This? #Viral"
+- "What Made This Go Viral? #Trending"
+- "Who Is Behind This Trend? #Trending"
+- "Why Is Everyone Talking? #Viral"
+- "What Really Happened Here? #Trending"
+- "How Did This Break Records? #Sports"
+- "Why Did Fans React This Way? #Music"
+- "What's The Real Story? #News"
 
 ❌ NEVER PRODUCE TITLES LIKE:
-- "MINNEAPOLIMEDIA BREAKING NEWS | Biden Cancer" (publisher name)
+- "MINNEAPOLIMEDIA BREAKING NEWS | Biden Cancer"
 - "Russia Warns NATO" (not a question)
-- "Hunter Biden Breaks Silence" (not a question)
+- "Travis Kelce News" (not a question)
 - "Why This Changes Everything" (no hashtag)
-- "What Happened? #Breaking #News #Viral" (3 hashtags)
-- "BREAKING: Biden News Today" (has BREAKING)
-- "MINNEAPOLIMEDIA Breaking News" (has publisher)
 
 🚨 WHITE BAR HOOK RULES:
 - MUST be a QUESTION (ends with "?")
@@ -490,34 +528,32 @@ NEWS TOPIC: {topic}
 - Same question as title
 
 ✅ GOOD HOOKS:
-- "WHY DID HE STAY SILENT?"
-- "WHO PAYS THE TARIFFS?"
+- "WHY DID THIS GO VIRAL?"
 - "WHAT ARE THEY HIDING?"
+- "WHO IS BEHIND THIS?"
 - "IS THIS THE REAL END?"
-- "WHO WINS THIS WAR?"
+- "WHY IS EVERYONE TALKING?"
 
 🚨 SCRIPT RULES (40 words - ANSWERS the question):
 - First sentence = DIRECT ANSWER
 - Then 2-3 supporting facts
 - End with "what happens next"
 - Use "reports say" for unverified claims
-
-EXAMPLE for "WHY DID HE STAY SILENT?":
-"Sources say he refused comment due to legal counsel. Reports indicate the investigation is ongoing. Officials confirm a statement will come later. The silence is strategic."
+- Works for ANY topic (sports, entertainment, news, viral, etc.)
 
 🚨 TAGS (15 max):
 - Mix of short + specific
-- Include: breaking news, world news
+- Include: trending, viral, 2026
 
 OUTPUT JSON ONLY:
 {{
     "short_script": "40-word script that ANSWERS the title question",
     "seo_youtube_title": "Question? #OneHashtag",
     "description": "SEO description with subscribe CTA",
-    "hashtags": ["#Breaking"],
+    "hashtags": ["#Trending"],
     "tags": ["tag1", "tag2", "tag3"],
     "viral_hook": "4-5 WORD QUESTION?",
-    "mood": "tense dramatic",
+    "mood": "engaging curious",
     "confidence_score": 85
 }}
 """
@@ -534,9 +570,7 @@ OUTPUT JSON ONLY:
                         if match:
                             data = json.loads(match.group())
                             
-                            # ============================================
-                            # FIX HOOK (4-5 words, question, no emoji)
-                            # ============================================
+                            # FIX HOOK
                             hook = data.get('viral_hook', '')
                             
                             emoji_pat = re.compile(
@@ -563,51 +597,35 @@ OUTPUT JSON ONLY:
                             
                             data['viral_hook'] = hook
                             
-                            # ============================================
-                            # FIX TITLE - Question only, no publisher
-                            # ============================================
+                            # FIX TITLE
                             title = data.get('seo_youtube_title', '')
-                            
-                            # Clean topic style
                             title = clean_topic(title)
-                            
-                            # Remove hashtags first
                             title_clean = re.sub(r'#\w+', '', title).strip()
-                            
-                            # Remove any ALL CAPS words (publisher names)
                             title_clean = re.sub(r'\b[A-Z]{4,}\b', '', title_clean)
                             
-                            # Remove any publisher keywords
                             for bad in ['MINNEAPOLI', 'BREAKING', 'NEWS', 'MEDIA', 'LIVE', 'CNN', 'BBC', 'ABC', 'NBC']:
                                 title_clean = re.sub(rf'\b{bad}\b', '', title_clean, flags=re.IGNORECASE)
                             
-                            # Remove extra spaces
                             title_clean = re.sub(r'\s+', ' ', title_clean).strip()
                             title_clean = re.sub(r'^[\-:\|]+', '', title_clean).strip()
                             
-                            # Ensure question mark
                             if title_clean and not title_clean.endswith('?'):
                                 title_clean = title_clean.rstrip('.!,') + '?'
                             
-                            # Ensure starts with question word
                             if title_clean and not any(title_clean.upper().startswith(w) for w in ['WHY', 'WHAT', 'WHO', 'HOW', 'IS', 'WILL', 'CAN', 'ARE', 'DOES']):
                                 title_clean = "Why " + title_clean
                             
-                            # Validate - reject if publisher name present
                             if has_publisher_name(title_clean):
-                                logger.warning(f"   ⚠️ Publisher name detected in title - skipping")
+                                logger.warning(f"   ⚠️ Publisher name detected - skipping")
                                 continue
                             
-                            # Add ONE hashtag
-                            hashtag = data.get('hashtags', ['#Breaking'])[0] if data.get('hashtags') else '#Breaking'
+                            hashtag = data.get('hashtags', ['#Trending'])[0] if data.get('hashtags') else '#Trending'
                             if not hashtag.startswith('#'):
                                 hashtag = '#' + hashtag
                             hashtag = hashtag.split()[0]
                             
-                            # Combine
                             title_full = f"{title_clean} {hashtag}"
                             
-                            # Limit 50 chars
                             if len(title_full) > 50:
                                 max_title_len = 50 - len(hashtag) - 2
                                 title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
@@ -615,7 +633,6 @@ OUTPUT JSON ONLY:
                                     title_clean = title_clean.rstrip('.!,') + '?'
                                 title_full = f"{title_clean} {hashtag}"
                             
-                            # Final validation
                             if has_publisher_name(title_full):
                                 logger.warning(f"   ⚠️ Final title has publisher - using fallback")
                                 continue
@@ -641,12 +658,11 @@ OUTPUT JSON ONLY:
 def get_template_script(topic, seo_title):
     """Fallback - Pure question title + hook (NO publisher)"""
     
-    # Extract keywords
     words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
              ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 
               'said', 'breaking', 'news', 'media', 'live', 'update', 'today']]
     
-    key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "News")
+    key = " ".join(words[:2]) if len(words) >= 2 else (words[0] if words else "This")
     
     t_low = topic.lower()
     
@@ -662,40 +678,43 @@ def get_template_script(topic, seo_title):
         hashtag = "#Politics"
         title_q = "Why Did He Stay Silent?"
         hook = "WHY DID HE STAY SILENT?"
-    elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial']):
+    elif any(w in t_low for w in ['ai', 'tech', 'robot', 'artificial', 'iphone', 'apple']):
         hashtag = "#Tech"
         title_q = "Who Controls The AI Race?"
         hook = "WHO CONTROLS THE AI?"
-    elif any(w in t_low for w in ['secret', 'leaked', 'classified', 'hidden']):
-        hashtag = "#Breaking"
-        title_q = "What Are They Hiding?"
-        hook = "WHAT ARE THEY HIDING?"
+    elif any(w in t_low for w in ['movie', 'film', 'netflix', 'series', 'actor', 'actress']):
+        hashtag = "#Entertainment"
+        title_q = "Why Is Everyone Watching?"
+        hook = "WHY IS EVERYONE WATCHING?"
+    elif any(w in t_low for w in ['song', 'music', 'album', 'concert', 'tour']):
+        hashtag = "#Music"
+        title_q = "Why Is This Song Everywhere?"
+        hook = "WHY IS THIS EVERYWHERE?"
+    elif any(w in t_low for w in ['game', 'gaming', 'playstation', 'xbox', 'nintendo']):
+        hashtag = "#Gaming"
+        title_q = "What Changed In Gaming?"
+        hook = "WHAT CHANGED IN GAMING?"
+    elif any(w in t_low for w in ['sport', 'game', 'match', 'goal', 'team', 'player', 'nba', 'nfl']):
+        hashtag = "#Sports"
+        title_q = "Who Wins This Match?"
+        hook = "WHO WINS THIS MATCH?"
+    elif any(w in t_low for w in ['viral', 'trending', 'tiktok', 'meme']):
+        hashtag = "#Viral"
+        title_q = "Why Did This Go Viral?"
+        hook = "WHY DID THIS GO VIRAL?"
     elif any(w in t_low for w in ['crash', 'drop', 'fall', 'plunge']):
         hashtag = "#Market"
         title_q = "Why Are Markets Crashing?"
         hook = "WHY ARE MARKETS CRASHING?"
-    elif any(w in t_low for w in ['court', 'law', 'justice', 'supreme']):
-        hashtag = "#Justice"
-        title_q = "Who Wins In Court?"
-        hook = "WHO WINS IN COURT?"
     elif any(w in t_low for w in ['space', 'launch', 'nasa', 'rocket']):
         hashtag = "#Space"
         title_q = "Why Do Launches Cost So Much?"
         hook = "WHY SO EXPENSIVE?"
-    elif any(w in t_low for w in ['health', 'cancer', 'medical', 'hospital']):
-        hashtag = "#Health"
-        title_q = "What's The Real Truth?"
-        hook = "WHAT IS THE TRUTH?"
-    elif any(w in t_low for w in ['warning', 'danger', 'risk', 'threat']):
-        hashtag = "#Breaking"
-        title_q = "Why Was This Ignored?"
-        hook = "WHY WAS THIS IGNORED?"
     else:
-        hashtag = "#Breaking"
-        title_q = "What Really Happened?"
-        hook = "WHAT REALLY HAPPENED?"
+        hashtag = "#Trending"
+        title_q = "Why Is This Trending?"
+        hook = "WHY IS THIS TRENDING?"
     
-    # Combine title + hashtag
     title_full = f"{title_q} {hashtag}"
     if len(title_full) > 50:
         max_title = 50 - len(hashtag) - 1
@@ -705,18 +724,19 @@ def get_template_script(topic, seo_title):
         title_full = f"{title_q} {hashtag}"
     
     return {
-        "short_script": f"Sources say the answer lies in official documents. Reports indicate key details were confirmed today. Experts say this changes the timeline. The situation continues to develop.",
+        "short_script": f"Sources say the answer is more interesting than expected. Reports indicate this has been developing recently. Experts say this changes how people see it. The story continues.",
         "seo_youtube_title": title_full,
-        "description": f"Answer to: {title_q} Subscribe for more breaking news.",
+        "description": f"Answer to: {title_q} Subscribe for more trending content.",
         "hashtags": [hashtag],
         "tags": [
-            "breaking news", "world news", "politics", "usa",
-            "viral", "shocking", "2026", "government",
-            "international", "headlines", "leaked", "revealed",
-            "exposed", "crisis", "developing"
+            "trending", "viral", "2026", "shorts",
+            "entertainment", "news", "viral video",
+            "trending now", "must watch", "shocking",
+            "interesting", "story", "explained",
+            "why trending", "what happened"
         ],
         "viral_hook": hook,
-        "mood": "tense dramatic news",
+        "mood": "engaging curious",
         "confidence_score": 80
     }
 
@@ -759,7 +779,7 @@ def create_thumbnail(candidate, script_data):
         img = Image.new('RGB', (1280, 720), (15, 15, 40))
         draw = ImageDraw.Draw(img)
         
-        title = script_data.get('seo_youtube_title', candidate.get('title', 'Breaking'))
+        title = script_data.get('seo_youtube_title', candidate.get('title', 'Trending'))
         
         try:
             font = ImageFont.truetype(
@@ -863,7 +883,6 @@ def main():
         logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
         logger.info(f"{'='*60}")
         
-        # Skip duplicates
         if is_duplicate(candidate.get('title', '')):
             logger.warning(f"⏭️ SKIPPED - Duplicate story")
             skipped_count += 1
@@ -871,11 +890,10 @@ def main():
         
         script_data = generate_script_god(candidate)
         
-        # Final title validation - MUST be question, NO publisher
         final_title = script_data.get('seo_youtube_title', '')
         
         if has_publisher_name(final_title):
-            logger.warning(f"⏭️ SKIPPED - Publisher name in title: {final_title}")
+            logger.warning(f"⏭️ SKIPPED - Publisher name in title")
             continue
         
         if '?' not in final_title:
@@ -920,7 +938,7 @@ def main():
     
     if not approved and best_rejected:
         score = best_rejected[3].get('score', 0)
-        if score >= 65:
+        if score >= 55:
             logger.warning(f"⚠️ Using best rejected (score {score:.1f})")
             approved = best_rejected
     

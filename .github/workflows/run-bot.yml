@@ -2,14 +2,17 @@ name: GOD LEVEL BOT - 5 LEGS
 
 on:
   schedule:
-    # 5 runs at peak hours (UTC = EST + 5)
-    # 9 AM EST | 1 PM EST | 4 PM EST | 7 PM EST | 10 PM EST
     - cron: '0 13 * * *'
     - cron: '0 17 * * *'
     - cron: '0 20 * * *'
     - cron: '0 23 * * *'
     - cron: '0 2 * * *'
   workflow_dispatch:
+
+# Required for GitHub Models access
+permissions:
+  contents: read
+  models: read
 
 jobs:
   run-bot:
@@ -45,8 +48,6 @@ jobs:
           fc-cache -f -v
           echo "=== EMOJI FONTS CHECK ==="
           fc-list | grep -i emoji || echo "No emoji fonts found"
-          echo "=== DEJAVU FONTS ==="
-          fc-list | grep -i dejavu | head -5
           echo "=== TOTAL FONTS ==="
           fc-list | wc -l
 
@@ -73,7 +74,7 @@ jobs:
       - name: Run GOD BOT
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}

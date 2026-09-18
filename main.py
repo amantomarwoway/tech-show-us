@@ -1,6 +1,9 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT v7
-Statement hooks + Statement titles + Audience Activity Filter
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v8
+- Statement hooks + Statement titles
+- Audience Activity Filter (threshold 45)
+- Gemini 3.6-flash + OpenAI ChatGPT fallback
+- Fixed fallback template (no broken grammar)
 """
 
 import os
@@ -128,7 +131,7 @@ def safe_import(module_path, function_name=None):
 
 
 # ============================================================
-# 🔥 AUDIENCE ACTIVITY CHECK (INLINE - no separate file)
+# 🔥 AUDIENCE ACTIVITY CHECK
 # ============================================================
 
 def is_audience_active(story):
@@ -143,13 +146,10 @@ def is_audience_active(story):
     
     signals = []
     
-    # ============================================================
-    # SIGNAL 1: Reddit freshness (score-based)
-    # ============================================================
-    reddit_score = 40  # Neutral
+    # SIGNAL 1: Reddit freshness
+    reddit_score = 40
     if 'reddit' in source:
         reddit_upvotes = story.get('reddit_score', 0)
-        reddit_comments = story.get('reddit_comments', 0)
         
         if reddit_upvotes >= 5000:
             reddit_score = 100
@@ -165,12 +165,9 @@ def is_audience_active(story):
     signals.append(('reddit', reddit_score))
     logger.info(f"   🔥 Reddit freshness: {reddit_score}/100")
     
-    # ============================================================
     # SIGNAL 2: Google Trends/News freshness
-    # ============================================================
-    trends_score = 40  # Neutral
+    trends_score = 40
     if 'trends' in source or 'trending' in source or 'breakout' in source:
-        # Trending sources = fresh
         trends_score = 85
     elif 'google_news' in source:
         trends_score = 60
@@ -178,45 +175,34 @@ def is_audience_active(story):
     signals.append(('trends', trends_score))
     logger.info(f"   📊 Trends freshness: {trends_score}/100")
     
-    # ============================================================
-    # SIGNAL 3: Google Trends real-time spike (if possible)
-    # ============================================================
+    # SIGNAL 3: Real-time spike
     spike_score = check_trends_spike(title)
     signals.append(('spike', spike_score))
     logger.info(f"   ⚡ Real-time spike: {spike_score}/100")
     
-    # ============================================================
     # AGGREGATE
-    # ============================================================
-    
-    # Weights: reddit 35%, trends 30%, spike 35%
     weighted_score = (
         reddit_score * 0.35 +
         trends_score * 0.30 +
         spike_score * 0.35
     )
     
-    # Count active signals (>= 50)
     active_signals = sum(1 for _, score in signals if score >= 50)
     
     logger.info(f"   🎯 Weighted: {weighted_score:.1f}/100 ({active_signals}/3 active)")
     
-    # Rule: 2+ active signals OR weighted >= 60
-    if active_signals >= 2 or weighted_score >= 60:
+    # ✅ FIX 2: Threshold lowered 60 → 45
+    if active_signals >= 1 or weighted_score >= 45:
         return True, weighted_score, f"Active ({active_signals}/3)"
     else:
         return False, weighted_score, f"Low ({active_signals}/3)"
 
 
 def check_trends_spike(title):
-    """
-    Check real-time Google Trends spike
-    Returns: 0-100 score
-    """
+    """Check real-time Google Trends spike"""
     try:
         from pytrends.request import TrendReq
         
-        # Extract 2-3 keywords
         words = [w for w in title.split() if len(w) > 4][:3]
         if not words:
             return 40
@@ -256,7 +242,7 @@ def check_trends_spike(title):
     
     except Exception as e:
         logger.debug(f"   Trends spike failed: {str(e)[:60]}")
-        return 45  # Slight neutral-positive
+        return 45
 
 
 # ============================================================
@@ -544,30 +530,11 @@ def self_evolution_main():
 
 
 # ============================================================
-# SCRIPT GENERATION - STATEMENT TITLES + HOOKS + VISUALS
+# PROMPT BUILDER
 # ============================================================
 
-def generate_script_god(story):
-    """Generate STATEMENT-based title + hook + visual queries"""
-    raw_topic = story.get('title', '')
-    topic = clean_topic(raw_topic)
-    
-    if len(topic) < 15:
-        topic = raw_topic
-    
-    seo_title = story.get('seo_youtube_title', '') or topic
-    
-    logger.info(f"   Raw: {raw_topic[:70]}")
-    logger.info(f"   Clean: {topic[:70]}")
-    
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
-    
-    if gemini_key:
-        try:
-            from google import genai
-            client = genai.Client(api_key=gemini_key)
-            
-            prompt = f"""You are a YouTube Shorts VIRAL expert + VISUAL DIRECTOR.
+def build_prompt(topic):
+    return f"""You are a YouTube Shorts VIRAL expert + VISUAL DIRECTOR.
 
 TRENDING TOPIC: {topic}
 
@@ -594,13 +561,10 @@ PATTERN 6: "This [X] Changes Everything #Trending"
 - "This Just Broke The Internet #Trending"
 - "Nobody Expected This To Happen #News"
 - "The Truth About This Trend #Viral"
-- "This Is Bigger Than Anyone Thought #Viral"
 
 ❌ BAD TITLES (questions - LOW CTR):
 - "Why Did This Happen? #Viral"
 - "What Is This Trend? #Trending"
-- "Is This Real? #News"
-- "Who Is Behind This? #News"
 
 FORBIDDEN WORDS: BREAKING NEWS, MINNEAPOLIMEDIA, CNN, BBC, ABC, NBC, CBS, FOX, MSNBC, NYT, WSJ, AP, REUTERS
 
@@ -608,39 +572,28 @@ FORBIDDEN WORDS: BREAKING NEWS, MINNEAPOLIMEDIA, CNN, BBC, ABC, NBC, CBS, FOX, M
 - MUST be 4-5 WORDS
 - NO question mark
 - ALL CAPS
-- Match the title theme
 
 ✅ GOOD HOOKS:
 - "NOBODY SAW THIS COMING"
 - "THIS CHANGES EVERYTHING"
 - "THE TRUTH REVEALED"
-- "EVERYONE IS WRONG"
 - "THIS BROKE THE INTERNET"
 - "MILLIONS ARE WATCHING"
-- "THE REASON IS SHOCKING"
-
-❌ BAD HOOKS (questions):
-- "WHY DID THIS HAPPEN?"
-- "WHAT IS THIS TREND?"
-- "IS THIS REAL?"
 
 🚨 SCRIPT RULES (40 words):
 - First sentence = HOOK (statement, not question)
 - Then 2-3 surprising facts
-- End with "what happens next" or mystery
-- Use "reports say" for unverified
+- End with mystery
 
 🚨 VISUAL QUERIES (6 queries, 2-4 words each):
 - MUST be SPECIFIC and VISUAL
-- NO abstract words (sources, indicate, story, continue)
 - Use ACTION words or OBJECTS
-- Example for "JLo lookalike mugshot": "police mugshot camera", "glamorous woman red carpet", "smartphone screen scrolling", "paparazzi camera flash", "photo comparison side by side", "woman serious portrait"
 
 OUTPUT JSON ONLY:
 {{
     "short_script": "40-word script",
     "seo_youtube_title": "Statement title #OneHashtag",
-    "description": "SEO description with subscribe CTA",
+    "description": "SEO description",
     "hashtags": ["#Viral"],
     "tags": ["tag1", "tag2"],
     "viral_hook": "4-5 WORD STATEMENT",
@@ -649,138 +602,285 @@ OUTPUT JSON ONLY:
     "confidence_score": 85
 }}
 """
+
+
+# ============================================================
+# PROCESS AI RESPONSE (shared)
+# ============================================================
+
+def process_ai_response(text, model_name):
+    """Parse and clean AI response"""
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if not match:
+        return None
+    
+    try:
+        data = json.loads(match.group())
+    except:
+        return None
+    
+    # Extract visual queries
+    vq = data.get('visual_queries', [])
+    if not isinstance(vq, list):
+        vq = []
+    clean_vq = [q.strip() for q in vq if isinstance(q, str) and 3 <= len(q.strip()) <= 50]
+    data['visual_queries'] = clean_vq[:6]
+    
+    if clean_vq:
+        logger.info(f"   🎨 Visual queries ({len(clean_vq)}): {clean_vq}")
+    
+    # Fix hook (statement)
+    hook = data.get('viral_hook', '')
+    emoji_pat = re.compile("[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+", flags=re.UNICODE)
+    hook = emoji_pat.sub('', hook).strip()
+    hook = hook.rstrip('?').strip()
+    
+    hook_words = hook.split()
+    if len(hook_words) > 5:
+        hook_words = hook_words[:5]
+    elif len(hook_words) < 4:
+        if not any(w in hook.upper() for w in ['THIS', 'NOBODY', 'THE', 'EVERY', 'MILLIONS']):
+            hook = "THIS CHANGES " + hook.upper()
+            hook_words = hook.split()[:5]
+    hook = " ".join(hook_words).upper()
+    data['viral_hook'] = hook
+    
+    # Fix title (statement)
+    title = data.get('seo_youtube_title', '')
+    title = clean_topic(title)
+    title_clean = re.sub(r'#\w+', '', title).strip()
+    title_clean = re.sub(r'\b[A-Z]{4,}\b', '', title_clean)
+    
+    for bad in ['MINNEAPOLI', 'BREAKING', 'NEWS', 'MEDIA', 'LIVE']:
+        title_clean = re.sub(rf'\b{bad}\b', '', title_clean, flags=re.IGNORECASE)
+    
+    title_clean = re.sub(r'\s+', ' ', title_clean).strip()
+    title_clean = re.sub(r'^[\-:\|?]+', '', title_clean).strip()
+    title_clean = title_clean.replace('?', '').strip()
+    
+    if has_publisher_name(title_clean):
+        logger.warning(f"   ⚠️ Publisher in title - skipping")
+        return None
+    
+    hashtag = data.get('hashtags', ['#Viral'])[0] if data.get('hashtags') else '#Viral'
+    if not hashtag.startswith('#'):
+        hashtag = '#' + hashtag
+    hashtag = hashtag.split()[0]
+    
+    title_full = f"{title_clean} {hashtag}"
+    
+    if len(title_full) > 50:
+        max_title_len = 50 - len(hashtag) - 1
+        title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
+        title_full = f"{title_clean} {hashtag}"
+    
+    if has_publisher_name(title_full):
+        logger.warning(f"   ⚠️ Final title has publisher")
+        return None
+    
+    data['seo_youtube_title'] = title_full
+    data['hashtags'] = [hashtag]
+    
+    logger.info(f"✅ Script by {model_name}")
+    logger.info(f"   Title ({len(title_full)}): {title_full}")
+    logger.info(f"   Hook: {data['viral_hook']}")
+    
+    return data
+
+
+# ============================================================
+# SCRIPT GENERATION - Gemini 3.6 + OpenAI Fallback
+# ============================================================
+
+def generate_script_god(story):
+    """
+    Generate script using:
+    1. Gemini 3.6-flash (primary)
+    2. Gemini other models (secondary)
+    3. OpenAI ChatGPT (fallback)
+    4. Template (last resort)
+    """
+    raw_topic = story.get('title', '')
+    topic = clean_topic(raw_topic)
+    
+    if len(topic) < 15:
+        topic = raw_topic
+    
+    seo_title = story.get('seo_youtube_title', '') or topic
+    
+    logger.info(f"   Raw: {raw_topic[:70]}")
+    logger.info(f"   Clean: {topic[:70]}")
+    
+    prompt = build_prompt(topic)
+    
+    # ============================================================
+    # ✅ FIX 4A: GEMINI (3.6-flash first)
+    # ============================================================
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    
+    if gemini_key:
+        try:
+            from google import genai
+            client = genai.Client(api_key=gemini_key)
             
-            models = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-flash-latest"]
+            # Gemini 3.6-flash first (as requested)
+            gemini_models = [
+                "gemini-3.6-flash",
+                "gemini-2.5-flash",
+                "gemini-flash-latest",
+                "gemini-2.0-flash-exp",
+                "gemini-1.5-flash-latest",
+            ]
             
-            for model in models:
+            for model in gemini_models:
                 try:
+                    logger.info(f"   🔷 Trying Gemini: {model}")
                     resp = client.models.generate_content(model=model, contents=prompt)
                     text = getattr(resp, 'text', '')
                     
                     if text:
-                        match = re.search(r'\{.*\}', text, re.DOTALL)
-                        if match:
-                            data = json.loads(match.group())
-                            
-                            # Extract visual queries
-                            vq = data.get('visual_queries', [])
-                            if not isinstance(vq, list):
-                                vq = []
-                            clean_vq = [q.strip() for q in vq if isinstance(q, str) and 3 <= len(q.strip()) <= 50]
-                            data['visual_queries'] = clean_vq[:6]
-                            
-                            if clean_vq:
-                                logger.info(f"   🎨 Visual queries ({len(clean_vq)}): {clean_vq}")
-                            
-                            # Fix hook (statement)
-                            hook = data.get('viral_hook', '')
-                            emoji_pat = re.compile("[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+", flags=re.UNICODE)
-                            hook = emoji_pat.sub('', hook).strip()
-                            
-                            # Remove question mark if present
-                            hook = hook.rstrip('?').strip()
-                            
-                            hook_words = hook.split()
-                            if len(hook_words) > 5:
-                                hook_words = hook_words[:5]
-                            elif len(hook_words) < 4:
-                                if not any(w in hook.upper() for w in ['THIS', 'NOBODY', 'THE', 'EVERY', 'MILLIONS']):
-                                    hook = "THIS CHANGES " + hook.upper()
-                                    hook_words = hook.split()[:5]
-                            hook = " ".join(hook_words).upper()
-                            data['viral_hook'] = hook
-                            
-                            # Fix title (statement)
-                            title = data.get('seo_youtube_title', '')
-                            title = clean_topic(title)
-                            title_clean = re.sub(r'#\w+', '', title).strip()
-                            title_clean = re.sub(r'\b[A-Z]{4,}\b', '', title_clean)
-                            
-                            for bad in ['MINNEAPOLI', 'BREAKING', 'NEWS', 'MEDIA', 'LIVE']:
-                                title_clean = re.sub(rf'\b{bad}\b', '', title_clean, flags=re.IGNORECASE)
-                            
-                            title_clean = re.sub(r'\s+', ' ', title_clean).strip()
-                            title_clean = re.sub(r'^[\-:\|?]+', '', title_clean).strip()
-                            
-                            # Remove question marks from title
-                            title_clean = title_clean.replace('?', '').strip()
-                            
-                            if has_publisher_name(title_clean):
-                                continue
-                            
-                            hashtag = data.get('hashtags', ['#Viral'])[0] if data.get('hashtags') else '#Viral'
-                            if not hashtag.startswith('#'):
-                                hashtag = '#' + hashtag
-                            hashtag = hashtag.split()[0]
-                            
-                            title_full = f"{title_clean} {hashtag}"
-                            
-                            if len(title_full) > 50:
-                                max_title_len = 50 - len(hashtag) - 1
-                                title_clean = title_clean[:max_title_len].rsplit(' ', 1)[0]
-                                title_full = f"{title_clean} {hashtag}"
-                            
-                            if has_publisher_name(title_full):
-                                continue
-                            
-                            data['seo_youtube_title'] = title_full
-                            data['hashtags'] = [hashtag]
-                            
-                            logger.info(f"✅ Script by {model}")
-                            logger.info(f"   Title ({len(title_full)}): {title_full}")
-                            logger.info(f"   Hook: {data['viral_hook']}")
+                        data = process_ai_response(text, f"Gemini-{model}")
+                        if data:
                             return data
                 except Exception as e:
-                    logger.warning(f"Model {model}: {str(e)[:80]}")
+                    logger.warning(f"   ❌ Gemini {model}: {str(e)[:80]}")
                     continue
         
         except Exception as e:
-            logger.warning(f"Gemini failed: {e}")
+            logger.warning(f"   Gemini client failed: {e}")
     
-    logger.info("Using fallback template")
+    # ============================================================
+    # ✅ FIX 4B: OPENAI CHATGPT FALLBACK (NEW)
+    # ============================================================
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    
+    if openai_key:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            
+            openai_models = [
+                "gpt-4o-mini",
+                "gpt-4o",
+                "gpt-3.5-turbo",
+            ]
+            
+            for model in openai_models:
+                try:
+                    logger.info(f"   🟢 Trying OpenAI: {model}")
+                    
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "You are a viral YouTube Shorts expert. Always respond with valid JSON only."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.9,
+                        max_tokens=1500,
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    text = response.choices[0].message.content
+                    
+                    if text:
+                        data = process_ai_response(text, f"OpenAI-{model}")
+                        if data:
+                            return data
+                except Exception as e:
+                    logger.warning(f"   ❌ OpenAI {model}: {str(e)[:80]}")
+                    continue
+        
+        except ImportError:
+            logger.warning("   OpenAI library not installed")
+        except Exception as e:
+            logger.warning(f"   OpenAI failed: {e}")
+    
+    # ============================================================
+    # FALLBACK TEMPLATE (Fixed)
+    # ============================================================
+    logger.info("⚠️ All AI failed - using fixed template")
     return get_template_script(topic, seo_title)
 
 
+# ============================================================
+# ✅ FIX 1: FIXED FALLBACK TEMPLATE (no broken grammar)
+# ============================================================
+
 def get_template_script(topic, seo_title):
-    """Fallback - Statement based"""
-    words = [w for w in topic.split() if len(w) > 3 and w.lower() not in 
-             ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'says', 
-              'said', 'breaking', 'news', 'media', 'live', 'update']]
-    
-    key = " ".join(words[:3]) if len(words) >= 3 else (words[0] if words else "This")
-    
-    title_templates = [
-        f"The Reason {key[:25]} Nobody Knows",
-        f"This {key[:25]} Just Went Viral",
-        f"Nobody Expected {key[:20]} Today",
-        f"The Truth About {key[:20]} Revealed",
-    ]
-    
-    title_q = random.choice(title_templates)
-    
+    """
+    Fallback template with PRE-DEFINED clean titles
+    No word concatenation (no broken grammar)
+    """
     t_low = topic.lower()
     
-    if any(w in t_low for w in ['mugshot', 'arrested', 'police']):
+    # Category-based clean titles (pre-defined)
+    if any(w in t_low for w in ['mugshot', 'arrested', 'police', 'crime', 'suspect', 'jail']):
         hashtag = "#Viral"
         hook = "NOBODY SAW THIS COMING"
+        title_q = "The Story Everyone Is Missing"
         vq = ["police mugshot", "woman portrait", "smartphone scrolling", "social media icons", "camera flash", "photo comparison"]
-    elif any(w in t_low for w in ['celebrity', 'actress', 'singer', 'star']):
+    
+    elif any(w in t_low for w in ['celebrity', 'actress', 'singer', 'star', 'taylor', 'kelce', 'swift']):
         hashtag = "#Entertainment"
         hook = "THIS CHANGED EVERYTHING"
+        title_q = "What Really Happened Here"
         vq = ["celebrity red carpet", "paparazzi camera", "glamorous woman", "fashion studio", "camera flash", "movie premiere"]
-    elif any(w in t_low for w in ['sport', 'match', 'goal', 'team']):
+    
+    elif any(w in t_low for w in ['sport', 'match', 'goal', 'team', 'nba', 'nfl', 'football', 'soccer']):
         hashtag = "#Sports"
         hook = "NOBODY EXPECTED THIS"
+        title_q = "The Moment Everyone Missed"
         vq = ["stadium crowd", "athlete action", "sports trophy", "football field", "basketball court", "crowd cheering"]
-    elif any(w in t_low for w in ['music', 'song', 'album']):
+    
+    elif any(w in t_low for w in ['music', 'song', 'album', 'concert', 'tour']):
         hashtag = "#Music"
         hook = "THIS BROKE THE INTERNET"
+        title_q = "The Reason This Blew Up"
         vq = ["concert stage", "singer microphone", "music studio", "crowd dancing", "headphones", "vinyl records"]
+    
+    elif any(w in t_low for w in ['ai', 'tech', 'robot', 'chatgpt', 'apple', 'google']):
+        hashtag = "#Tech"
+        hook = "THIS CHANGES EVERYTHING"
+        title_q = "What The Tech World Missed"
+        vq = ["artificial intelligence", "AI robot", "computer code", "smartphone screen", "tech office", "server room"]
+    
+    elif any(w in t_low for w in ['trend', 'viral', 'tiktok', 'challenge']):
+        hashtag = "#Viral"
+        hook = "THIS WENT CRAZY VIRAL"
+        title_q = "The Truth Behind This Trend"
+        vq = ["viral video screen", "young people phone", "social media", "city crowd", "smartphone scrolling", "trending icons"]
+    
+    elif any(w in t_low for w in ['crash', 'dead', 'died', 'killed', 'accident']):
+        hashtag = "#Breaking"
+        hook = "NOBODY SAW THIS COMING"
+        title_q = "The Reason This Happened"
+        vq = ["car accident", "emergency lights", "police scene", "ambulance", "road closed", "emergency response"]
+    
+    elif any(w in t_low for w in ['trump', 'biden', 'president', 'congress', 'white house']):
+        hashtag = "#Politics"
+        hook = "THIS CHANGES EVERYTHING"
+        title_q = "What They Don't Want You To See"
+        vq = ["government building", "press conference", "politician podium", "capitol building", "microphone interview", "protest crowd"]
+    
+    elif any(w in t_low for w in ['war', 'military', 'attack', 'missile']):
+        hashtag = "#Breaking"
+        hook = "NOBODY SAW THIS COMING"
+        title_q = "The Reality Behind This Conflict"
+        vq = ["military tanks", "soldiers marching", "explosion smoke", "war planes", "army trucks", "war zone"]
+    
+    elif any(w in t_low for w in ['movie', 'film', 'netflix', 'series']):
+        hashtag = "#Entertainment"
+        hook = "THIS BROKE THE INTERNET"
+        title_q = "What Everyone Is Talking About"
+        vq = ["cinema screen", "movie theater", "film camera", "actor on stage", "tv remote", "streaming laptop"]
+    
     else:
         hashtag = "#Viral"
         hook = "NOBODY SAW THIS COMING"
+        title_q = "The Story Behind This Moment"
         vq = ["viral video screen", "young people phone", "social media", "city crowd", "smartphone scrolling", "trending icons"]
     
+    # Ensure title length
     title_full = f"{title_q} {hashtag}"
     if len(title_full) > 50:
         max_title = 50 - len(hashtag) - 1
@@ -788,9 +888,9 @@ def get_template_script(topic, seo_title):
         title_full = f"{title_q} {hashtag}"
     
     return {
-        "short_script": f"This {key[:30]} went viral for one surprising reason. Sources confirm the details nobody expected. Reports suggest this trend will continue. Here's what happens next.",
+        "short_script": "This moment went viral for one surprising reason. Sources confirm the details nobody expected. Reports suggest this trend will continue. Here's what happens next.",
         "seo_youtube_title": title_full,
-        "description": f"The story behind this trend. Subscribe for more viral content.",
+        "description": "The story behind this trend. Subscribe for more viral content.",
         "hashtags": [hashtag],
         "tags": ["trending", "viral", "2026", "shorts", "viral video", "must watch"],
         "viral_hook": hook,
@@ -923,7 +1023,7 @@ def main():
     logger.info(f"Got {len(stories)} candidates")
     
     # ============================================================
-    # 🔥 AUDIENCE ACTIVITY FILTER (NEW)
+    # AUDIENCE ACTIVITY FILTER
     # ============================================================
     logger.info("=" * 60)
     logger.info("🔥 AUDIENCE ACTIVITY FILTER")
@@ -934,9 +1034,11 @@ def main():
     for story in stories[:8]:
         is_active, score, reason = is_audience_active(story)
         
+        # ✅ FIX 3: Always set activity_score (even for skipped)
+        story['activity_score'] = score
+        story['activity_reason'] = reason
+        
         if is_active:
-            story['activity_score'] = score
-            story['activity_reason'] = reason
             active_stories.append(story)
             logger.info(f"   ✅ ACTIVE ({score:.0f}): {story.get('title', '')[:50]}")
         else:

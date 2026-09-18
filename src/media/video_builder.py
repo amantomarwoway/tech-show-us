@@ -1,12 +1,14 @@
 """
-src/media/video_builder.py - FINAL PRODUCTION v4
+src/media/video_builder.py - FINAL PRODUCTION v5
+- First 5 sec: 0.5 sec clips (fast cuts)
+- After 5 sec: 0.8 sec clips (retention)
 - White bar text NO CUT
-- Statement-based hook (no question mark)
+- Statement-based hook
 - Green accents
 - First frame: HUMAN EMOTION + ZOOM IN (1 second)
 - Gender-aware emotion detection
 - 8K upscale ONLY
-- ✅ visual_queries passed to asset_finder
+- ✅ AUDIO CUT FIX
 """
 
 import os
@@ -62,6 +64,13 @@ DARK_GREEN = (0, 100, 0)
 UPSCALE_WIDTH = 4320
 UPSCALE_HEIGHT = 7680
 
+# ============================================================
+# ✅ NEW: Fast-cut config
+# ============================================================
+FAST_CUT_DURATION = 0.5      # First 5 seconds
+FAST_CUT_UNTIL = 5.0         # Until 5 sec
+NORMAL_CUT_DURATION = 0.8    # After 5 sec
+
 
 def load_font(path, size):
     try:
@@ -74,7 +83,7 @@ def load_font(path, size):
 
 
 # ============================================================
-# 🎭 GENDER-AWARE EMOTION DETECTION (UPDATED)
+# 🎭 GENDER-AWARE EMOTION DETECTION
 # ============================================================
 
 def detect_emotion_from_text(text):
@@ -83,10 +92,6 @@ def detect_emotion_from_text(text):
         return ('neutral', 'serious man portrait')
     
     t = text.lower()
-    
-    # ============================================================
-    # GENDER DETECTION FIRST
-    # ============================================================
     
     women_kw = [
         'woman', 'women', 'girl', 'she', 'her', 'wife', 'lady',
@@ -98,10 +103,6 @@ def detect_emotion_from_text(text):
     ]
     
     is_woman = any(kw in t for kw in women_kw)
-    
-    # ============================================================
-    # WOMEN EMOTIONS
-    # ============================================================
     
     if is_woman:
         if any(w in t for w in ['shock', 'shocking', 'stun', 'surprise', 'unbelievable']):
@@ -124,10 +125,6 @@ def detect_emotion_from_text(text):
             return ('serious', 'serious woman portrait')
         
         return ('neutral', 'woman portrait')
-    
-    # ============================================================
-    # MEN EMOTIONS (default)
-    # ============================================================
     
     if any(w in t for w in ['shock', 'shocking', 'stun', 'surprise', 'unbelievable']):
         return ('shock', 'shocked man face')
@@ -370,7 +367,7 @@ def find_best_moment(video_path, num_samples=20):
 
 
 # ============================================================
-# 🎯 WHITE BAR (STATEMENT - NO QUESTION MARK)
+# 🎯 WHITE BAR
 # ============================================================
 
 def wrap_text_to_width(text, font, max_width, draw):
@@ -435,11 +432,9 @@ def make_white_bar(text, topic=""):
     draw.rectangle([0, 0, 18, total_h], fill=GREEN_ACCENT)
     draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=GREEN_ACCENT)
     
-    # Remove question mark from text (statement style)
     text_only = text.strip().upper()
     text_only = text_only.rstrip('?').strip()
     
-    # If empty, use default statement
     if not text_only:
         text_only = "NOBODY SAW THIS COMING"
     
@@ -489,7 +484,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.new('RGB', (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Gender-aware emotion
     emotion, query = detect_emotion_from_text(topic or white_bar_text)
     logger.info(f"   🎭 Emotion: {emotion} | Query: '{query}'")
     
@@ -521,7 +515,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.alpha_composite(img, overlay_shape).convert('RGB')
     draw = ImageDraw.Draw(img)
     
-    # Remove question mark (statement style)
     text_only = white_bar_text.strip().upper()
     text_only = text_only.rstrip('?').strip()
     
@@ -788,30 +781,61 @@ def create_video(script_data, editor_data=None):
     script_text = " ".join(words)
     logger.info(f"📝 Script: {len(words)} words")
     
-    # Extract visual_queries
     visual_queries = script_data.get('visual_queries', [])
     if visual_queries:
         logger.info(f"🎨 AI visual queries: {visual_queries}")
     
+    # ============================================================
     # TTS
+    # ============================================================
     voice = get_tts_voice()
     audio_path = generate_audio(script_text, voice)
     if not audio_path or not os.path.exists(audio_path):
         audio_path = create_silent_audio(os.path.join(PATHS['temp'], 'silent.wav'), 12)
     
+    # ============================================================
+    # ✅ AUDIO PROCESSING (FIXED - audio won't cut)
+    # ============================================================
     audio = AudioFileClip(audio_path)
-    total_duration = audio.duration
+    audio_duration = audio.duration
+    logger.info(f"   Audio original: {audio_duration:.2f}s")
+    
     speed = VIDEO_CONFIG.get('TTS_SPEED', 1.0)
     if speed != 1.0:
         audio = audio.fx(vfx.speedx, speed)
-        total_duration = audio.duration
-    total_duration = max(VIDEO_CONFIG['DURATION_MIN'],
-                        min(VIDEO_CONFIG['DURATION_MAX'], total_duration))
-    logger.info(f"⏱️ Duration: {total_duration:.1f}s")
+        audio_duration = audio.duration
+        logger.info(f"   Audio after {speed}x speed: {audio_duration:.2f}s")
     
-    # VISUALS
-    clips_needed = int(total_duration / VIDEO_CONFIG['CLIP_DENSITY']) + 2
-    logger.info(f"📊 Clips needed: {clips_needed}")
+    duration_max = VIDEO_CONFIG['DURATION_MAX']  # 15
+    duration_min = VIDEO_CONFIG['DURATION_MIN']  # 11
+    
+    if audio_duration > duration_max:
+        # Clip audio explicitly (no cutting during render)
+        audio = audio.subclip(0, duration_max)
+        total_duration = duration_max
+        logger.info(f"   ⚠️ Audio clipped to {duration_max}s (was {audio_duration:.2f}s)")
+    elif audio_duration < duration_min:
+        total_duration = duration_min
+        logger.info(f"   ⚠️ Audio {audio_duration:.2f}s < {duration_min}s - padding")
+    else:
+        total_duration = audio_duration
+    
+    logger.info(f"   ⏱️ Final video duration: {total_duration:.2f}s")
+    
+    # ============================================================
+    # VISUALS (need MORE clips because of fast first 5 sec)
+    # ============================================================
+    # Calculate clips needed:
+    # First 5 sec at 0.5s = 10 clips
+    # Remaining (duration - 5) at 0.8s = X clips
+    # Total = 10 + X + buffer
+    
+    first_5_clips = 10  # 5 sec / 0.5 sec
+    remaining_duration = max(0, total_duration - FAST_CUT_UNTIL)
+    remaining_clips = int(remaining_duration / NORMAL_CUT_DURATION) + 2
+    clips_needed = first_5_clips + remaining_clips + 3  # buffer
+    
+    logger.info(f"📊 Clips needed: {clips_needed} (10 fast + {remaining_clips} normal)")
     
     visual_paths = []
     if editor_data and editor_data.get('visuals'):
@@ -852,7 +876,9 @@ def create_video(script_data, editor_data=None):
     
     logger.info(f"✅ FINAL: {len(visual_paths)} clips")
     
+    # ============================================================
     # AI BEST FRAME
+    # ============================================================
     logger.info("🎯 Finding best moment...")
     best_idx, best_ts, best_sc = 0, 0.0, -1
     for idx, vp in enumerate(visual_paths[:6]):
@@ -868,14 +894,27 @@ def create_video(script_data, editor_data=None):
         visual_paths.insert(0, visual_paths.pop(best_idx))
         logger.info(f"🔄 Winner moved to first")
     
-    # BUILD CLIPS
+    # ============================================================
+    # ✅ BUILD CLIPS - FAST FIRST 5 SEC (0.5s), THEN NORMAL (0.8s)
+    # ============================================================
+    logger.info(f"🎬 Building clips: first {FAST_CUT_UNTIL}s = {FAST_CUT_DURATION}s clips, then {NORMAL_CUT_DURATION}s")
+    
     video_clips = []
     current = 0
     idx = 0
-    density = VIDEO_CONFIG['CLIP_DENSITY']
     
     while current < total_duration:
-        dur = min(density, total_duration - current)
+        # Determine clip duration based on time
+        if current < FAST_CUT_UNTIL:
+            # Fast cut (first 5 sec)
+            dur = min(FAST_CUT_DURATION, FAST_CUT_UNTIL - current, total_duration - current)
+        else:
+            # Normal cut (after 5 sec)
+            dur = min(NORMAL_CUT_DURATION, total_duration - current)
+        
+        if dur <= 0:
+            break
+        
         asset = visual_paths[idx % len(visual_paths)]
         
         try:
@@ -919,7 +958,7 @@ def create_video(script_data, editor_data=None):
         current += dur
         idx += 1
     
-    logger.info(f"🎞️ Compositing {len(video_clips)} clips...")
+    logger.info(f"🎞️ Compositing {len(video_clips)} clips (fast cuts first 5s)")
     
     # LAYOUT
     video_top = TOP_BLACK_STRIP + WHITE_BAR_HEIGHT

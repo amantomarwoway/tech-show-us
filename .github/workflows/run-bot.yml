@@ -2,7 +2,13 @@ name: GOD LEVEL BOT - 5 LEGS
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    # 5 runs at peak hours (UTC = EST + 5)
+    # 9 AM EST | 1 PM EST | 4 PM EST | 7 PM EST | 10 PM EST
+    - cron: '0 13 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 20 * * *'
+    - cron: '0 23 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:

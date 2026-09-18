@@ -1,6 +1,6 @@
 """
-main.py - GOD LEVEL YOUTUBE SHORTS BOT v6
-Statement hooks + Statement titles + Better topic filter
+main.py - GOD LEVEL YOUTUBE SHORTS BOT v7
+Statement hooks + Statement titles + Audience Activity Filter
 """
 
 import os
@@ -88,7 +88,6 @@ def is_viral_topic(title):
     
     title_lower = title.lower()
     
-    # HARD REJECT
     reject_keywords = [
         'weather', 'temperature', 'forecast', 'muggy', 'humid',
         'recipe', 'cooking', 'diet', 'meal prep', 'workout',
@@ -106,7 +105,6 @@ def is_viral_topic(title):
         if kw in title_lower:
             return False
     
-    # Min 5 words
     if len(title.split()) < 5:
         return False
     
@@ -130,6 +128,138 @@ def safe_import(module_path, function_name=None):
 
 
 # ============================================================
+# 🔥 AUDIENCE ACTIVITY CHECK (INLINE - no separate file)
+# ============================================================
+
+def is_audience_active(story):
+    """
+    Check if topic's audience is active RIGHT NOW
+    Returns: (is_active: bool, activity_score: 0-100, reason: str)
+    """
+    title = story.get('title', '')
+    source = story.get('source', '').lower()
+    
+    logger.info(f"🔍 Activity check: {title[:55]}")
+    
+    signals = []
+    
+    # ============================================================
+    # SIGNAL 1: Reddit freshness (score-based)
+    # ============================================================
+    reddit_score = 40  # Neutral
+    if 'reddit' in source:
+        reddit_upvotes = story.get('reddit_score', 0)
+        reddit_comments = story.get('reddit_comments', 0)
+        
+        if reddit_upvotes >= 5000:
+            reddit_score = 100
+        elif reddit_upvotes >= 2000:
+            reddit_score = 80
+        elif reddit_upvotes >= 1000:
+            reddit_score = 60
+        elif reddit_upvotes >= 500:
+            reddit_score = 45
+        else:
+            reddit_score = 25
+    
+    signals.append(('reddit', reddit_score))
+    logger.info(f"   🔥 Reddit freshness: {reddit_score}/100")
+    
+    # ============================================================
+    # SIGNAL 2: Google Trends/News freshness
+    # ============================================================
+    trends_score = 40  # Neutral
+    if 'trends' in source or 'trending' in source or 'breakout' in source:
+        # Trending sources = fresh
+        trends_score = 85
+    elif 'google_news' in source:
+        trends_score = 60
+    
+    signals.append(('trends', trends_score))
+    logger.info(f"   📊 Trends freshness: {trends_score}/100")
+    
+    # ============================================================
+    # SIGNAL 3: Google Trends real-time spike (if possible)
+    # ============================================================
+    spike_score = check_trends_spike(title)
+    signals.append(('spike', spike_score))
+    logger.info(f"   ⚡ Real-time spike: {spike_score}/100")
+    
+    # ============================================================
+    # AGGREGATE
+    # ============================================================
+    
+    # Weights: reddit 35%, trends 30%, spike 35%
+    weighted_score = (
+        reddit_score * 0.35 +
+        trends_score * 0.30 +
+        spike_score * 0.35
+    )
+    
+    # Count active signals (>= 50)
+    active_signals = sum(1 for _, score in signals if score >= 50)
+    
+    logger.info(f"   🎯 Weighted: {weighted_score:.1f}/100 ({active_signals}/3 active)")
+    
+    # Rule: 2+ active signals OR weighted >= 60
+    if active_signals >= 2 or weighted_score >= 60:
+        return True, weighted_score, f"Active ({active_signals}/3)"
+    else:
+        return False, weighted_score, f"Low ({active_signals}/3)"
+
+
+def check_trends_spike(title):
+    """
+    Check real-time Google Trends spike
+    Returns: 0-100 score
+    """
+    try:
+        from pytrends.request import TrendReq
+        
+        # Extract 2-3 keywords
+        words = [w for w in title.split() if len(w) > 4][:3]
+        if not words:
+            return 40
+        
+        query = " ".join(words)
+        
+        try:
+            pytrends = TrendReq(hl='en-US', tz=360, timeout=10)
+        except TypeError:
+            pytrends = TrendReq(hl='en-US', tz=360)
+        
+        pytrends.build_payload([query], timeframe='now 1-H', geo='US')
+        time.sleep(1)
+        
+        data = pytrends.interest_over_time()
+        
+        if data.empty or query not in data.columns:
+            return 40
+        
+        values = data[query].tolist()
+        
+        if not values:
+            return 40
+        
+        current = values[-1]
+        
+        if current >= 80:
+            return 100
+        elif current >= 50:
+            return 80
+        elif current >= 20:
+            return 55
+        elif current >= 5:
+            return 35
+        else:
+            return 20
+    
+    except Exception as e:
+        logger.debug(f"   Trends spike failed: {str(e)[:60]}")
+        return 45  # Slight neutral-positive
+
+
+# ============================================================
 # LEG 1: RESEARCH GOD
 # ============================================================
 
@@ -140,7 +270,6 @@ def research_god_main():
     
     all_stories = []
     
-    # 1. Reddit RSS
     reddit_collector = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit_collector:
         try:
@@ -150,7 +279,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Reddit failed: {e}")
     
-    # 2. Google News Trending
     trends_collector = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends_collector:
         try:
@@ -160,7 +288,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Trends failed: {e}")
     
-    # 3. Google News standard
     google_collector = safe_import('src.collectors.google_news_collector', 'collect_google_news')
     if google_collector:
         try:
@@ -170,7 +297,6 @@ def research_god_main():
         except Exception as e:
             logger.error(f"Google News failed: {e}")
     
-    # 4. RSS feeds (only if needed)
     if len(all_stories) < 30:
         rss_collector = safe_import('src.collectors.rss_collector', 'collect_rss_news')
         if rss_collector:
@@ -184,7 +310,6 @@ def research_god_main():
     if not all_stories:
         all_stories = get_guaranteed_stories()
     
-    # Clean titles
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
         if not story['title'] or len(story['title']) < 10:
@@ -192,7 +317,6 @@ def research_god_main():
     
     all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 10]
     
-    # VIRAL FILTER
     before = len(all_stories)
     all_stories = [s for s in all_stories if is_viral_topic(s.get('title', ''))]
     logger.info(f"Viral filter: {before} -> {len(all_stories)}")
@@ -515,7 +639,7 @@ FORBIDDEN WORDS: BREAKING NEWS, MINNEAPOLIMEDIA, CNN, BBC, ABC, NBC, CBS, FOX, M
 OUTPUT JSON ONLY:
 {{
     "short_script": "40-word script",
-    "seo_youtube_title": "Statement title? #OneHashtag",
+    "seo_youtube_title": "Statement title #OneHashtag",
     "description": "SEO description with subscribe CTA",
     "hashtags": ["#Viral"],
     "tags": ["tag1", "tag2"],
@@ -798,6 +922,38 @@ def main():
     
     logger.info(f"Got {len(stories)} candidates")
     
+    # ============================================================
+    # 🔥 AUDIENCE ACTIVITY FILTER (NEW)
+    # ============================================================
+    logger.info("=" * 60)
+    logger.info("🔥 AUDIENCE ACTIVITY FILTER")
+    logger.info("=" * 60)
+    
+    active_stories = []
+    
+    for story in stories[:8]:
+        is_active, score, reason = is_audience_active(story)
+        
+        if is_active:
+            story['activity_score'] = score
+            story['activity_reason'] = reason
+            active_stories.append(story)
+            logger.info(f"   ✅ ACTIVE ({score:.0f}): {story.get('title', '')[:50]}")
+        else:
+            logger.info(f"   ❌ SKIP ({score:.0f}): {story.get('title', '')[:50]}")
+    
+    if not active_stories:
+        logger.warning("⚠️ No active topics - using top 5 anyway")
+        active_stories = stories[:5]
+    else:
+        logger.info(f"🔥 {len(active_stories)} ACTIVE topics found")
+    
+    stories = active_stories
+    
+    # ============================================================
+    # PROCESS CANDIDATES
+    # ============================================================
+    
     approved = None
     best_rejected = None
     skipped_count = 0
@@ -805,6 +961,7 @@ def main():
     for i, candidate in enumerate(stories[:5]):
         logger.info(f"\n{'='*60}")
         logger.info(f"CANDIDATE {i+1}/5: {candidate.get('title', '')[:60]}")
+        logger.info(f"   🔥 Activity Score: {candidate.get('activity_score', 0):.0f}/100")
         logger.info(f"{'='*60}")
         
         if is_duplicate(candidate.get('title', '')):

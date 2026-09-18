@@ -1,25 +1,26 @@
 """
-src/collectors/reddit_collector.py - Reddit RSS (NO API KEY NEEDED)
+src/collectors/reddit_collector.py - Reddit RSS (multiple subs + delay)
 """
 
 import feedparser
 import random
 import time
-import re
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Reddit RSS feeds - real trending
 REDDIT_RSS_FEEDS = [
     "https://www.reddit.com/r/all/hot/.rss",
-    "https://www.reddit.com/r/popular/hot/.rss",
-    "https://www.reddit.com/r/nextfuckinglevel/hot/.rss",
-    "https://www.reddit.com/r/interestingasfuck/hot/.rss",
-    "https://www.reddit.com/r/Damnthatsinteresting/hot/.rss",
+    "https://www.reddit.com/r/all/top/.rss?t=day",
+    "https://www.reddit.com/r/worldnews/hot/.rss",
+    "https://www.reddit.com/r/news/hot/.rss",
+    "https://www.reddit.com/r/entertainment/hot/.rss",
+    "https://www.reddit.com/r/movies/hot/.rss",
+    "https://www.reddit.com/r/sports/hot/.rss",
+    "https://www.reddit.com/r/music/hot/.rss",
+    "https://www.reddit.com/r/technology/hot/.rss",
 ]
 
-# Boring keywords to reject
 REJECT_KEYWORDS = [
     'weather', 'temperature', 'forecast', 'muggy',
     'recipe', 'cooking', 'diet', 'workout',
@@ -30,21 +31,26 @@ REJECT_KEYWORDS = [
 
 
 def collect_reddit_trends():
-    """Collect real trending via Reddit RSS (no API key)"""
+    """Collect real trending via Reddit RSS"""
     stories = []
     
     for feed_url in REDDIT_RSS_FEEDS:
         try:
-            # Delay between feeds to avoid rate limit
-            time.sleep(random.uniform(2, 4))
+            # Longer delay (Reddit RSS is rate-limited)
+            time.sleep(random.uniform(5, 8))
             
             feed = feedparser.parse(feed_url)
             
             if not feed.entries:
-                logger.warning(f"No entries from: {feed_url}")
+                logger.warning(f"No entries: {feed_url[:60]}")
                 continue
             
-            subreddit = feed_url.split('/r/')[1].split('/')[0]
+            # Extract subreddit name
+            try:
+                subreddit = feed_url.split('/r/')[1].split('/')[0]
+            except:
+                subreddit = "reddit"
+            
             logger.info(f"r/{subreddit}: {len(feed.entries)} entries")
             
             added = 0
@@ -54,21 +60,16 @@ def collect_reddit_trends():
                 if len(title) < 25:
                     continue
                 
-                # Reject boring topics
+                if not title[0].isalpha():
+                    continue
+                
                 title_lower = title.lower()
                 if any(r in title_lower for r in REJECT_KEYWORDS):
                     continue
                 
-                # Reject non-alpha start
-                if not title[0].isalpha():
-                    continue
-                
-                # Extract reddit link
-                link = entry.get('link', '')
-                
                 stories.append({
                     "title": title,
-                    "url": link,
+                    "url": entry.get('link', ''),
                     "source": "reddit_rss_trending",
                     "source_tier": 1,
                     "breakout_score": random.randint(6000, 7000),
@@ -80,10 +81,10 @@ def collect_reddit_trends():
                 })
                 added += 1
             
-            logger.info(f"r/{subreddit}: +{added} stories added")
+            logger.info(f"r/{subreddit}: +{added} stories")
         
         except Exception as e:
-            logger.warning(f"Feed failed {feed_url}: {str(e)[:80]}")
+            logger.warning(f"Feed failed: {str(e)[:80]}")
             continue
     
     logger.info(f"Reddit RSS total: {len(stories)} stories")

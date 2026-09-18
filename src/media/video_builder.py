@@ -1,11 +1,12 @@
 """
-src/media/video_builder.py - FINAL PRODUCTION v3
+src/media/video_builder.py - FINAL PRODUCTION v4
 - White bar text NO CUT
-- Question-based hook
+- Statement-based hook (no question mark)
 - Green accents
 - First frame: HUMAN EMOTION + ZOOM IN (1 second)
+- Gender-aware emotion detection
 - 8K upscale ONLY
-- ✅ FIX: visual_queries passed to asset_finder
+- ✅ visual_queries passed to asset_finder
 """
 
 import os
@@ -73,14 +74,60 @@ def load_font(path, size):
 
 
 # ============================================================
-# 🎭 EMOTION DETECTION
+# 🎭 GENDER-AWARE EMOTION DETECTION (UPDATED)
 # ============================================================
 
 def detect_emotion_from_text(text):
+    """Gender-aware emotion detection for human first frame"""
     if not text:
         return ('neutral', 'serious man portrait')
     
     t = text.lower()
+    
+    # ============================================================
+    # GENDER DETECTION FIRST
+    # ============================================================
+    
+    women_kw = [
+        'woman', 'women', 'girl', 'she', 'her', 'wife', 'lady',
+        'jennifer', 'taylor', 'beyonce', 'selena', 'ariana',
+        'kardashian', 'meghan', 'kate', 'melania', 'kamala',
+        'actress', 'female', 'mom', 'mother', 'daughter', 'sister',
+        'lopez', 'jlo', 'madonna', 'rihanna', 'zendaya', 'emma',
+        'scarlett', 'margot', 'sydney', 'aniston', 'roberts'
+    ]
+    
+    is_woman = any(kw in t for kw in women_kw)
+    
+    # ============================================================
+    # WOMEN EMOTIONS
+    # ============================================================
+    
+    if is_woman:
+        if any(w in t for w in ['shock', 'shocking', 'stun', 'surprise', 'unbelievable']):
+            return ('shock', 'shocked woman face')
+        if any(w in t for w in ['crash', 'crisis', 'collapse', 'disaster', 'panic']):
+            return ('fear', 'worried woman stressed')
+        if any(w in t for w in ['angry', 'outrage', 'furious', 'protest']):
+            return ('anger', 'angry woman face')
+        if any(w in t for w in ['sad', 'tragic', 'death', 'died', 'loss']):
+            return ('sad', 'sad woman portrait')
+        if any(w in t for w in ['happy', 'win', 'victory', 'celebrate']):
+            return ('happy', 'happy woman portrait')
+        if any(w in t for w in ['mugshot', 'arrested', 'police']):
+            return ('serious', 'woman portrait serious')
+        if any(w in t for w in ['glamour', 'celebrity', 'red carpet', 'looks like', 'resemblance']):
+            return ('curious', 'glamorous woman portrait')
+        if any(w in t for w in ['secret', 'leaked', 'hidden', 'exposed']):
+            return ('surprise', 'surprised woman face')
+        if any(w in t for w in ['court', 'law', 'justice']):
+            return ('serious', 'serious woman portrait')
+        
+        return ('neutral', 'woman portrait')
+    
+    # ============================================================
+    # MEN EMOTIONS (default)
+    # ============================================================
     
     if any(w in t for w in ['shock', 'shocking', 'stun', 'surprise', 'unbelievable']):
         return ('shock', 'shocked man face')
@@ -323,7 +370,7 @@ def find_best_moment(video_path, num_samples=20):
 
 
 # ============================================================
-# 🎯 WHITE BAR
+# 🎯 WHITE BAR (STATEMENT - NO QUESTION MARK)
 # ============================================================
 
 def wrap_text_to_width(text, font, max_width, draw):
@@ -375,6 +422,7 @@ def find_best_font_size(text, max_width, max_height, max_lines=3, start_size=62)
 
 
 def make_white_bar(text, topic=""):
+    """White bar - statement text (no question mark)"""
     total_h = WHITE_BAR_HEIGHT
     img = Image.new('RGB', (WIDTH, total_h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
@@ -387,10 +435,13 @@ def make_white_bar(text, topic=""):
     draw.rectangle([0, 0, 18, total_h], fill=GREEN_ACCENT)
     draw.rectangle([WIDTH - 18, 0, WIDTH, total_h], fill=GREEN_ACCENT)
     
+    # Remove question mark from text (statement style)
     text_only = text.strip().upper()
+    text_only = text_only.rstrip('?').strip()
     
-    if text_only and '?' not in text_only:
-        text_only = text_only.rstrip('.!') + '?'
+    # If empty, use default statement
+    if not text_only:
+        text_only = "NOBODY SAW THIS COMING"
     
     max_text_width = WIDTH - 100
     max_text_height = total_h - 30
@@ -438,6 +489,7 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.new('RGB', (WIDTH, HEIGHT), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     
+    # Gender-aware emotion
     emotion, query = detect_emotion_from_text(topic or white_bar_text)
     logger.info(f"   🎭 Emotion: {emotion} | Query: '{query}'")
     
@@ -469,9 +521,12 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     img = Image.alpha_composite(img, overlay_shape).convert('RGB')
     draw = ImageDraw.Draw(img)
     
+    # Remove question mark (statement style)
     text_only = white_bar_text.strip().upper()
-    if text_only and '?' not in text_only:
-        text_only = text_only.rstrip('.!') + '?'
+    text_only = text_only.rstrip('?').strip()
+    
+    if not text_only:
+        text_only = "NOBODY SAW THIS COMING"
     
     italic_fonts = [FONT_BOLD_ITALIC, FONT_BOLD]
     
@@ -733,9 +788,7 @@ def create_video(script_data, editor_data=None):
     script_text = " ".join(words)
     logger.info(f"📝 Script: {len(words)} words")
     
-    # ============================================================
-    # ✅ FIX 1: Extract visual_queries from script_data
-    # ============================================================
+    # Extract visual_queries
     visual_queries = script_data.get('visual_queries', [])
     if visual_queries:
         logger.info(f"🎨 AI visual queries: {visual_queries}")
@@ -771,7 +824,6 @@ def create_video(script_data, editor_data=None):
     if len(visual_paths) < clips_needed:
         try:
             from src.media.asset_finder import find_assets_for_script
-            # ✅ FIX 2: Pass visual_queries to asset_finder
             new = find_assets_for_script(
                 script_text,
                 num_clips=clips_needed,
@@ -895,7 +947,7 @@ def create_video(script_data, editor_data=None):
     
     viral_hook = (script_data.get('viral_hook', '') or
                   script_data.get('title', '')[:60] or
-                  "WHAT JUST HAPPENED?")
+                  "NOBODY SAW THIS COMING")
     topic = script_data.get('title', '') or script_data.get('seo_youtube_title', '')
     logger.info(f"🎨 White bar: '{viral_hook}'")
     

@@ -1,6 +1,5 @@
 """
-src/collectors/trends_collector.py - Working Trending Source
-Uses Google News RSS for trending (no pytrends)
+src/collectors/trends_collector.py - Google News Trending (no pytrends)
 """
 
 import random
@@ -13,28 +12,24 @@ logger = setup_logger(__name__)
 
 
 def collect_trends():
-    """Collect trending via Google News Trending RSS"""
+    """Collect trending via Google News RSS"""
     stories = []
     
-    # Google News has "trending" RSS feeds
     trending_feeds = [
-        # Top stories
         "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-        # Viral
         "https://news.google.com/rss/search?q=viral+trending&hl=en-US&gl=US&ceid=US:en",
-        # Entertainment trending
-        "https://news.google.com/rss/search?q=celebrity+trending&hl=en-US&gl=US&ceid=US:en",
-        # Sports trending  
-        "https://news.google.com/rss/search?q=sports+viral&hl=en-US&gl=US&ceid=US:en",
-        # Breaking
+        "https://news.google.com/rss/search?q=celebrity+news&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=sports+highlights&hl=en-US&gl=US&ceid=US:en",
         "https://news.google.com/rss/search?q=breaking+now&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=entertainment+viral&hl=en-US&gl=US&ceid=US:en",
     ]
     
     REJECT_KEYWORDS = [
-        'weather', 'temperature', 'forecast',
+        'weather', 'temperature', 'forecast', 'muggy',
         'recipe', 'cooking', 'diet',
         'opinion:', 'analysis:', 'editorial:',
-        'how to', 'guide to', 'tips for'
+        'how to', 'guide to', 'tips for',
+        'live updates:', 'live blog:'
     ]
     
     seen_titles = set()
@@ -46,6 +41,7 @@ def collect_trends():
             feed = feedparser.parse(feed_url)
             
             if not feed.entries:
+                logger.warning(f"No entries: {feed_url[:60]}")
                 continue
             
             logger.info(f"Trends feed: {len(feed.entries)} entries")
@@ -56,19 +52,17 @@ def collect_trends():
                 if len(title) < 20:
                     continue
                 
-                # Dedup
                 key = title[:40].lower()
                 if key in seen_titles:
                     continue
                 seen_titles.add(key)
                 
-                # Reject boring
                 title_lower = title.lower()
                 if any(r in title_lower for r in REJECT_KEYWORDS):
                     continue
                 
-                # Clean title (remove source)
-                title = re.sub(r'\s+-\s+[A-Za-z\s]+$', '', title)
+                # Clean source suffix
+                title = re.sub(r'\s+-\s+[A-Za-z\s]{2,40}$', '', title)
                 
                 stories.append({
                     "title": title,
@@ -83,8 +77,8 @@ def collect_trends():
                 })
         
         except Exception as e:
-            logger.warning(f"Trends feed failed: {str(e)[:80]}")
+            logger.warning(f"Feed failed: {str(e)[:80]}")
             continue
     
-    logger.info(f"Trends: {len(stories)} stories")
+    logger.info(f"Trends total: {len(stories)} stories")
     return stories

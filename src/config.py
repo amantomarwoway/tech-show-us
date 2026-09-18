@@ -1,5 +1,5 @@
 """
-src/config.py - BROAD TRENDING CONFIG v2
+src/config.py - BROAD TRENDING CONFIG v3
 Niche: Any trending topic (not restricted to news/politics)
 """
 
@@ -115,7 +115,7 @@ VIDEO_CONFIG = {
 }
 
 # ============================================================
-# TTS CONFIG
+# TTS CONFIG (FIXED - length_scale 1.0 for no audio cut)
 # ============================================================
 
 TTS_CONFIG = {
@@ -123,7 +123,7 @@ TTS_CONFIG = {
     "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx.json",
     "model_path": "models/en_US-ryan-medium.onnx",
     "config_path": "models/en_US-ryan-medium.onnx.json",
-    "length_scale": 1.25,
+    "length_scale": 1.0,          # ✅ FIXED: 1.25 → 1.0 (no audio cut)
     "noise_scale": 0.6,
     "noise_w_scale": 0.75,
     "speed_choices": [1.0, 1.02, 1.03, 1.11, 1.15],

@@ -9,7 +9,6 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
-# Required for GitHub Models access
 permissions:
   contents: read
   models: read
@@ -36,20 +35,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Deps (EMOJI + FONTS)
+      - name: Install System Deps
         run: |
           sudo apt-get update || true
           sudo apt-get install -y \
             imagemagick ffmpeg \
             fonts-dejavu fonts-dejavu-extra fonts-liberation \
-            fonts-noto-color-emoji \
-            fonts-noto-core \
-            fonts-symbola
+            fonts-noto-color-emoji fonts-noto-core fonts-symbola
           fc-cache -f -v
-          echo "=== EMOJI FONTS CHECK ==="
-          fc-list | grep -i emoji || echo "No emoji fonts found"
-          echo "=== TOTAL FONTS ==="
-          fc-list | wc -l
+          fc-list | grep -i emoji || echo "No emoji fonts"
 
       - name: Install Python Deps
         run: |
@@ -75,6 +69,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
@@ -87,11 +82,7 @@ jobs:
       - name: Debug Output
         if: always()
         run: |
-          echo "=== OUTPUT ==="
           ls -lh output/ || true
-          echo "=== DATA ==="
-          ls -lh data/ || true
-          echo "=== LOGS ==="
           tail -100 logs/bot.log || true
 
       - name: Upload Artifact

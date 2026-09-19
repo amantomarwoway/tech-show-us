@@ -1,6 +1,7 @@
 """
-src/config.py - AUTONOMOUS BOT CONFIG
-Bot decides everything. Config is only fallback.
+src/config.py - AUTONOMOUS BOT CONFIG v4
+- Duration capped at 20s (memory safety for GitHub Actions)
+- Faster TTS speed
 """
 
 import os
@@ -9,7 +10,6 @@ GOD_INSTRUCTION = """
 AUTONOMOUS YOUTUBE SHORTS BOT
 Goal: MAXIMIZE views + engagement + subscribers
 Method: Learn from data, self-optimize, self-repair
-Constraint: NONE (bot decides everything)
 """
 
 ENGLISH_COUNTRIES = ["US", "GB", "CA", "AU", "NZ", "IE"]
@@ -34,24 +34,26 @@ STORY_TYPE_WEIGHTS = {
     "news": {"trend_momentum": 0.35, "audience_relevance": 0.20, "news_importance": 0.15, "curiosity": 0.15, "novelty": 0.05, "visual_potential": 0.05, "search_potential": 0.05, "competition_opportunity": 0.00}
 }
 
-# Base video config (bot will override dynamically)
+# ✅ FIXED: Duration capped at 20s for memory safety
 VIDEO_CONFIG = {
     "WIDTH": 1080, "HEIGHT": 1920, "WHITE_BAR_HEIGHT": 210,
     "BLACK_TOP_STRIP": 180, "BLACK_BOTTOM_STRIP": 200,
     "BLACK_BORDER": 16, "CORNER_RADIUS": 38,
-    "CLIP_DENSITY": 0.8, "DURATION_MIN": 15, "DURATION_MAX": 60,
+    "CLIP_DENSITY": 0.8,
+    "DURATION_MIN": 12, "DURATION_MAX": 20,   # ← Capped at 20s
     "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],
     "FIRST_WORDS_PUNCH": 1.4, "KEYWORD_PUNCH": 1.2, "OVERLAP": 0.92,
-    "TTS_SPEED": 1.15, "WORDS_TARGET": 80
+    "TTS_SPEED": 1.15, "WORDS_TARGET": 50     # ← 80 → 50 words
 }
 
+# ✅ FIXED: Faster TTS speeds for shorter audio
 TTS_CONFIG = {
     "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx",
     "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx.json",
     "model_path": "models/en_US-ryan-medium.onnx",
     "config_path": "models/en_US-ryan-medium.onnx.json",
     "length_scale": 1.0, "noise_scale": 0.6, "noise_w_scale": 0.75,
-    "speed_choices": [1.0, 1.05, 1.1, 1.15, 1.2],
+    "speed_choices": [1.15, 1.2, 1.25],        # ← Faster speeds
     "american_filter": "afftdn=nf=-25,acompressor=threshold=-20dB:ratio=3:attack=50:release=200,volume=1.2"
 }
 
@@ -126,10 +128,7 @@ VIRAL_KEYWORDS = ["breaking", "shocking", "leaked", "secret", "exposed", "reveal
 
 TOP_REAL_SOURCES = ["google_trends_breakout", "google_trends_trending_now", "google_news_us_live", "guaranteed_google_news", "reddit_rising_breakout", "cnn_breaking"]
 
-# ============================================================
-# AUTONOMOUS MODE - Bot can override these
-# ============================================================
-AUTONOMOUS_MODE = True  # Bot learns and overrides
+AUTONOMOUS_MODE = True
 
 def get_api_keys():
     return {

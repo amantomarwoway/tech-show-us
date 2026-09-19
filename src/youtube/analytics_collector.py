@@ -1,5 +1,5 @@
 """
-src/youtube/analytics_collector.py - Collect video analytics
+src/youtube/analytics_collector.py - Enhanced analytics
 """
 
 import os
@@ -10,25 +10,22 @@ logger = setup_logger(__name__)
 
 
 def collect_analytics():
-    """Collect analytics for recent uploads"""
     try:
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
         
-        client_id = os.getenv("YT_CLIENT_ID", "")
-        client_secret = os.getenv("YT_CLIENT_SECRET", "")
-        refresh_token = os.getenv("YT_REFRESH_TOKEN", "")
+        cid = os.getenv("YT_CLIENT_ID", "")
+        csec = os.getenv("YT_CLIENT_SECRET", "")
+        rt = os.getenv("YT_REFRESH_TOKEN", "")
         
-        if not all([client_id, client_secret, refresh_token]):
-            logger.warning("Missing YouTube credentials")
+        if not all([cid, csec, rt]):
+            logger.warning("Missing YT credentials")
             return 0
         
         creds = Credentials(
-            token=None,
-            refresh_token=refresh_token,
+            token=None, refresh_token=rt,
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=client_id,
-            client_secret=client_secret,
+            client_id=cid, client_secret=csec,
             scopes=["https://www.googleapis.com/auth/youtube.readonly"]
         )
         
@@ -36,34 +33,21 @@ def collect_analytics():
         
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT video_id FROM uploads
-            ORDER BY uploaded_at DESC
-            LIMIT 10
-        ''')
-        
+        cursor.execute('''SELECT video_id FROM uploads ORDER BY uploaded_at DESC LIMIT 50''')
         rows = cursor.fetchall()
         conn.close()
         
         checked = 0
-        
         for row in rows:
-            video_id = row[0]
-            
+            vid = row[0]
             try:
-                response = youtube.videos().list(
-                    part='statistics',
-                    id=video_id
-                ).execute()
-                
-                items = response.get('items', [])
-                
+                resp = youtube.videos().list(part='statistics', id=vid).execute()
+                items = resp.get('items', [])
                 if not items:
                     continue
-                
                 stats = items[0].get('statistics', {})
                 
-                performance_data = {
+                perf = {
                     'views': int(stats.get('viewCount', 0)),
                     'likes': int(stats.get('likeCount', 0)),
                     'comments': int(stats.get('commentCount', 0)),
@@ -74,19 +58,15 @@ def collect_analytics():
                     'retention_score': 0,
                     'engagement_score': 0
                 }
-                
-                save_performance(video_id, performance_data)
+                save_performance(vid, perf)
                 checked += 1
-                
-                logger.info(f"Analytics {video_id}: {performance_data['views']} views")
-            
+                logger.info(f"Analytics {vid}: {perf['views']} views, {perf['likes']} likes")
             except Exception as e:
-                logger.warning(f"Analytics {video_id} failed: {e}")
+                logger.warning(f"Analytics {vid}: {e}")
                 continue
         
-        logger.info(f"Analytics collected: {checked} videos")
+        logger.info(f"Collected: {checked} videos")
         return checked
-    
     except Exception as e:
-        logger.error(f"Analytics collector failed: {e}")
+        logger.error(f"Analytics failed: {e}")
         return 0

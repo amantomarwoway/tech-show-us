@@ -1,15 +1,10 @@
-
----
-
-## 📄 FILE 2: `src/learning/self_repair.py` (UPDATED)
-
-```python
 """
-src/learning/self_repair.py - Self diagnostics + AI repair orchestration
+src/learning/self_repair.py - Diagnostics + AI repair + Memory cleanup
 """
 
 import os
 import subprocess
+import glob
 from datetime import datetime, timedelta
 from src.utils.logger import setup_logger
 from src.database import get_connection
@@ -18,12 +13,12 @@ logger = setup_logger(__name__)
 
 
 def run_self_diagnostics():
-    """Full diagnostic + AI repair"""
+    """Full diagnostic + AI repair + memory cleanup"""
     logger.info("=" * 60)
-    logger.info("🔧 SELF-DIAGNOSTICS + AI REPAIR")
+    logger.info("SELF-DIAGNOSTICS + AI REPAIR")
     logger.info("=" * 60)
     
-    # Phase 1: Basic health checks
+    # Phase 1: Basic checks
     status = {
         "gemini": check_gemini(),
         "github_models": check_github_models(),
@@ -36,35 +31,35 @@ def run_self_diagnostics():
     }
     
     for name, ok in status.items():
-        emoji = "✅" if ok else "❌"
-        logger.info(f"   {emoji} {name}")
+        emoji = "OK" if ok else "FAIL"
+        logger.info(f"   [{emoji}] {name}")
     
     # Phase 2: Basic repairs
-    failed_basic = [k for k, v in status.items() if not v]
-    if failed_basic:
-        logger.warning(f"⚠️ {len(failed_basic)} components failed: {failed_basic}")
-        attempt_basic_repairs(failed_basic)
+    failed = [k for k, v in status.items() if not v]
+    if failed:
+        logger.warning(f"{len(failed)} components failed: {failed}")
+        attempt_basic_repairs(failed)
     
-    # Phase 3: AI CODE REPAIR (NEW)
+    # Phase 3: AI Code Repair
     try:
         from src.learning.ai_code_repair import ai_repair_main
         ai_result = ai_repair_main()
-        
         if ai_result['fixed'] > 0:
-            logger.info(f"🤖 AI fixed {ai_result['fixed']} files!")
+            logger.info(f"AI fixed {ai_result['fixed']} files!")
             for r in ai_result['errors']:
-                logger.info(f"   ✅ {r['file']}: {r['explanation'][:80]}")
+                logger.info(f"   {r['file']}: {r['explanation'][:80]}")
     except Exception as e:
         logger.warning(f"AI repair failed: {e}")
     
-    # Phase 4: Cleanup
+    # Phase 4: Cleanup + Memory free
     clean_old_files()
+    free_memory()
     
     return status
 
 
 # ============================================================
-# BASIC CHECKS (existing)
+# BASIC CHECKS
 # ============================================================
 
 def check_gemini():
@@ -74,10 +69,7 @@ def check_gemini():
             return False
         from google import genai
         client = genai.Client(api_key=key)
-        resp = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents="Say OK"
-        )
+        resp = client.models.generate_content(model="gemini-3.6-flash", contents="Say OK")
         return bool(getattr(resp, 'text', ''))
     except:
         return False
@@ -139,6 +131,7 @@ def check_disk():
     try:
         stat = os.statvfs('/')
         free_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
+        logger.info(f"   Disk free: {free_gb:.1f} GB")
         return free_gb > 1
     except:
         return True
@@ -166,7 +159,7 @@ def check_ffmpeg():
 
 def attempt_basic_repairs(failed):
     logger.info("=" * 60)
-    logger.info("🔨 BASIC REPAIRS")
+    logger.info("BASIC REPAIRS")
     logger.info("=" * 60)
     
     for comp in failed:
@@ -185,25 +178,23 @@ def repair_database():
         cur.execute("VACUUM")
         conn.commit()
         conn.close()
-        logger.info("   ✅ Database VACUUM'd")
+        logger.info("   Database VACUUM'd")
     except Exception as e:
         logger.error(f"   DB repair failed: {e}")
 
 
 def clean_old_files():
+    """Clean files older than 2 days"""
     try:
         from src.config import PATHS
-        import glob
-        
         cutoff = datetime.now() - timedelta(days=2)
+        cleaned = 0
         
-        # Clean temp files
         patterns = [
             os.path.join(PATHS['temp'], '*'),
             os.path.join(PATHS.get('output_videos', 'output/videos'), 'short_*.mp4'),
         ]
         
-        cleaned = 0
         for pattern in patterns:
             for file in glob.glob(pattern):
                 try:
@@ -215,20 +206,54 @@ def clean_old_files():
                     pass
         
         if cleaned > 0:
-            logger.info(f"   🗑️ Cleaned {cleaned} old files")
+            logger.info(f"   Cleaned {cleaned} old files")
     except Exception as e:
         logger.error(f"   Cleanup failed: {e}")
 
 
+def free_memory():
+    """Free memory by clearing temp files DURING run (memory safety)"""
+    try:
+        from src.config import PATHS
+        
+        freed = 0
+        
+        # Clear temp PNG files (already processed)
+        for f in glob.glob(os.path.join(PATHS['temp'], "*.png")):
+            try:
+                os.remove(f)
+                freed += 1
+            except:
+                pass
+        
+        # Clear temp MP4 files (already composited)
+        for f in glob.glob(os.path.join(PATHS['temp'], "*.mp4")):
+            try:
+                os.remove(f)
+                freed += 1
+            except:
+                pass
+        
+        # Clear temp JPG files
+        for f in glob.glob(os.path.join(PATHS['temp'], "*.jpg")):
+            try:
+                os.remove(f)
+                freed += 1
+            except:
+                pass
+        
+        if freed > 0:
+            logger.info(f"   Memory freed: {freed} temp files")
+    except Exception as e:
+        logger.debug(f"Memory free failed: {e}")
+
+
 # ============================================================
-# LAST FIX VERIFICATION - Rollback if failed
+# VERIFY LAST FIX
 # ============================================================
 
 def verify_last_fix():
-    """
-    If last fix was applied but bot still failing → rollback
-    Called at START of next run
-    """
+    """Rollback if last fix failed"""
     try:
         from src.learning.ai_code_repair import load_history, rollback_last_fix
         
@@ -236,7 +261,6 @@ def verify_last_fix():
         if not history:
             return
         
-        # Find last applied fix
         last_fix = None
         for entry in reversed(history):
             if entry.get('status') == 'applied':
@@ -246,19 +270,17 @@ def verify_last_fix():
         if not last_fix:
             return
         
-        # Check if error still present in current log
         log_file = "logs/bot.log"
         if not os.path.exists(log_file):
             return
         
         with open(log_file, 'r', errors='ignore') as f:
-            recent = f.read()[-10000:]  # Last 10KB
+            recent = f.read()[-10000:]
         
         error_snippet = last_fix.get('error', '')[:80]
         
         if error_snippet and error_snippet in recent:
-            # Same error again → rollback
-            logger.warning(f"⚠️ Last fix failed for {last_fix['file']} - rolling back")
+            logger.warning(f"Last fix failed for {last_fix['file']} - rolling back")
             rollback_last_fix(last_fix['file'])
     except Exception as e:
         logger.debug(f"Verify fix failed: {e}")

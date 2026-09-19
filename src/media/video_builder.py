@@ -1,10 +1,10 @@
 """
-src/media/video_builder.py - AUTONOMOUS VIDEO BUILDER
-- Reads learned params from auto_optimizer
-- Fast cuts first 5s (0.5s) then learned density
+src/media/video_builder.py - AUTONOMOUS VIDEO BUILDER v6 (Memory Safe)
+- Duration capped at 20s
+- Clips capped at 40 (GitHub Actions memory limit)
+- 8K only if video < 18s, else 4K fallback
+- Fast cuts first 5s (0.5s), then learned density
 - Audio cut fix
-- Gender + emotion aware first frame
-- 8K upscale
 """
 
 import os
@@ -62,6 +62,8 @@ UPSCALE_HEIGHT = 7680
 
 FAST_CUT_DURATION = 0.5
 FAST_CUT_UNTIL = 5.0
+MAX_CLIPS = 40           # ✅ Hard cap for memory
+MAX_DURATION = 20        # ✅ Hard cap for duration
 
 
 def load_font(path, size):
@@ -75,22 +77,17 @@ def load_font(path, size):
 
 
 def get_learned_params():
-    """Read autonomous params from optimizer"""
     try:
         from src.learning.auto_optimizer import get_config
         return {
-            "duration": get_config("video_duration", 30),
+            "duration": get_config("video_duration", 18),
             "clip_density": get_config("clip_density", 0.8),
             "tts_speed": get_config("tts_speed", 1.15),
-            "words_target": get_config("words_target", 80),
+            "words_target": get_config("words_target", 50),
             "bar_color": get_config("bar_color", "green"),
         }
     except:
-        return {
-            "duration": 30, "clip_density": 0.8,
-            "tts_speed": 1.15, "words_target": 80,
-            "bar_color": "green"
-        }
+        return {"duration": 18, "clip_density": 0.8, "tts_speed": 1.15, "words_target": 50, "bar_color": "green"}
 
 
 def get_accent_color():
@@ -100,13 +97,12 @@ def get_accent_color():
 
 
 # ============================================================
-# EMOTION DETECTION (Gender + Category aware)
+# EMOTION
 # ============================================================
 
 def detect_emotion_from_text(text):
     if not text:
         return ('neutral', 'serious man portrait')
-    
     t = text.lower()
     
     women_kw = ['woman', 'women', 'girl', 'she', 'her', 'wife', 'lady',
@@ -114,7 +110,6 @@ def detect_emotion_from_text(text):
                 'kardashian', 'meghan', 'kate', 'melania', 'kamala',
                 'actress', 'female', 'mom', 'mother', 'daughter', 'sister',
                 'lopez', 'jlo', 'madonna', 'rihanna', 'zendaya']
-    
     is_woman = any(kw in t for kw in women_kw)
     
     if is_woman:
@@ -136,16 +131,13 @@ def detect_emotion_from_text(text):
             return ('serious', 'female hacker portrait')
         return ('neutral', 'woman portrait')
     
-    # Kids
     kid_kw = ['kid', 'child', 'boy', 'girl', '7-year', 'young', 'baby', 'teen']
     if any(kw in t for kw in kid_kw):
         return ('happy', 'happy child playing')
     
-    # Cyber/hack
     if any(w in t for w in ['hack', 'cyber', 'leak', 'security']):
         return ('serious', 'hacker hoodie portrait')
     
-    # Men
     if any(w in t for w in ['shock', 'shocking', 'stun', 'surprise']):
         return ('shock', 'shocked man face')
     if any(w in t for w in ['crash', 'crisis', 'disaster', 'panic']):
@@ -260,7 +252,7 @@ def generate_audio(script_text, voice):
     ap = os.path.join(PATHS['temp'], 'voice.wav')
     os.makedirs(PATHS['temp'], exist_ok=True)
     if not voice:
-        return create_silent_audio(ap, 30)
+        return create_silent_audio(ap, 20)
     try:
         chunks = []
         sr = 22050
@@ -273,7 +265,7 @@ def generate_audio(script_text, voice):
             chunks.append(c)
             sr = c.sample_rate
         if not chunks:
-            return create_silent_audio(ap, 30)
+            return create_silent_audio(ap, 20)
         with wave.open(ap, 'wb') as wav:
             wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(sr)
             for c in chunks:
@@ -282,10 +274,10 @@ def generate_audio(script_text, voice):
         return ap
     except Exception as e:
         logger.error(f"Audio failed: {e}")
-        return create_silent_audio(ap, 30)
+        return create_silent_audio(ap, 20)
 
 
-def create_silent_audio(path, duration=30):
+def create_silent_audio(path, duration=20):
     try:
         subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono",
                         "-t", str(duration), "-c:a", "pcm_s16le", path],
@@ -329,7 +321,7 @@ def analyze_frame_engagement(frame_array):
         return 50
 
 
-def find_best_moment(video_path, num_samples=20):
+def find_best_moment(video_path, num_samples=15):
     try:
         vid = VideoFileClip(video_path, audio=False)
         dur = vid.duration
@@ -457,7 +449,6 @@ def create_text_based_first_frame(white_bar_text, topic=""):
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
-        logger.info("   Human emotion loaded")
     else:
         for y in range(HEIGHT):
             ratio = y / HEIGHT
@@ -490,7 +481,7 @@ def create_text_based_first_frame(white_bar_text, topic=""):
     font = None
     lines = []
     max_w = WIDTH - 250
-    for size in range(110, 40, -5):
+    for size in range(100, 40, -5):
         f = load_italic(italic_fonts, size)
         words = text.split()
         test_lines = []
@@ -600,11 +591,26 @@ def create_gradient_visual(text="", index=0):
 
 
 # ============================================================
-# 8K UPSCALE
+# UPSCALE (8K if short, 4K if long)
 # ============================================================
 
 def upscale_to_8k(input_path):
     try:
+        # ✅ Check duration - skip 8K if > 18s
+        try:
+            probe = subprocess.run([
+                "ffprobe", "-v", "error", "-show_entries",
+                "format=duration", "-of",
+                "default=noprint_wrappers=1:nokey=1", input_path
+            ], capture_output=True, text=True, timeout=30)
+            video_duration = float(probe.stdout.strip()) if probe.stdout.strip() else 20
+        except:
+            video_duration = 20
+        
+        if video_duration > 18:
+            logger.warning(f"Video {video_duration:.1f}s > 18s - using 4K (memory safe)")
+            return upscale_to_4k(input_path)
+        
         logger.info("=" * 50)
         logger.info("[8K UPSCALE] Starting...")
         logger.info("=" * 50)
@@ -632,15 +638,52 @@ def upscale_to_8k(input_path):
             os.rename(output_8k, input_path)
             return input_path
         else:
-            logger.warning(f"[8K] Failed")
+            logger.warning("[8K] Failed - trying 4K")
             if os.path.exists(output_8k):
                 try:
                     os.remove(output_8k)
                 except:
                     pass
-            return input_path
+            return upscale_to_4k(input_path)
     except Exception as e:
         logger.error(f"[8K] Error: {e}")
+        return upscale_to_4k(input_path)
+
+
+def upscale_to_4k(input_path):
+    """4K fallback for long videos or 8K failure"""
+    try:
+        logger.info("[4K UPSCALE] Starting...")
+        if not os.path.exists(input_path):
+            return input_path
+        output_4k = input_path.replace('.mp4', '_4k.mp4')
+        start = time.time()
+        cmd = ["ffmpeg", "-y", "-i", input_path,
+               "-vf", "scale=2160:3840:flags=lanczos",
+               "-c:v", "libx264", "-preset", "ultrafast", "-tune", "fastdecode",
+               "-crf", "23", "-pix_fmt", "yuv420p", "-threads", "2",
+               "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", output_4k]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        elapsed = time.time() - start
+        if r.returncode == 0 and os.path.exists(output_4k):
+            size = os.path.getsize(output_4k) / (1024 * 1024)
+            logger.info(f"[4K] Done in {elapsed:.1f}s | {size:.1f}MB")
+            try:
+                os.remove(input_path)
+            except:
+                pass
+            os.rename(output_4k, input_path)
+            return input_path
+        else:
+            logger.warning("[4K] Failed - keeping original")
+            if os.path.exists(output_4k):
+                try:
+                    os.remove(output_4k)
+                except:
+                    pass
+            return input_path
+    except Exception as e:
+        logger.error(f"[4K] Error: {e}")
         return input_path
 
 
@@ -658,9 +701,8 @@ def create_video(script_data, editor_data=None):
     
     output_path = os.path.join(PATHS['output_videos'], f"short_{random.randint(1000,9999)}.mp4")
     
-    # Learn params
     params = get_learned_params()
-    target_duration = params['duration']
+    target_duration = min(params['duration'], MAX_DURATION)
     clip_density = params['clip_density']
     tts_speed = params['tts_speed']
     
@@ -675,7 +717,6 @@ def create_video(script_data, editor_data=None):
     
     visual_queries = script_data.get('visual_queries', [])
     
-    # TTS
     voice = get_tts_voice()
     audio_path = generate_audio(script_text, voice)
     if not audio_path or not os.path.exists(audio_path):
@@ -691,7 +732,7 @@ def create_video(script_data, editor_data=None):
         logger.info(f"Audio after {tts_speed}x: {audio_duration:.2f}s")
     
     duration_max = target_duration
-    duration_min = max(15, target_duration - 10)
+    duration_min = max(12, target_duration - 6)
     
     if audio_duration > duration_max:
         audio = audio.subclip(0, duration_max)
@@ -705,11 +746,16 @@ def create_video(script_data, editor_data=None):
     
     logger.info(f"Final duration: {total_duration:.2f}s")
     
-    # Visuals
+    # Clips calculation with CAP
     first_5_clips = int(FAST_CUT_UNTIL / FAST_CUT_DURATION)
     remaining = max(0, total_duration - FAST_CUT_UNTIL)
-    remaining_clips = int(remaining / clip_density) + 3
-    clips_needed = first_5_clips + remaining_clips + 5
+    remaining_clips = int(remaining / clip_density) + 2
+    clips_needed = first_5_clips + remaining_clips
+    
+    # ✅ HARD CAP 40
+    if clips_needed > MAX_CLIPS:
+        logger.warning(f"Clips capped: {clips_needed} -> {MAX_CLIPS}")
+        clips_needed = MAX_CLIPS
     
     logger.info(f"Clips needed: {clips_needed}")
     
@@ -719,15 +765,20 @@ def create_video(script_data, editor_data=None):
             p = v.get('path') if isinstance(v, dict) else None
             if p and os.path.exists(p):
                 visual_paths.append(p)
+                if len(visual_paths) >= MAX_CLIPS:
+                    break
     
     if len(visual_paths) < clips_needed:
         try:
             from src.media.asset_finder import find_assets_for_script
-            new = find_assets_for_script(script_text, num_clips=clips_needed, visual_queries=visual_queries)
+            need = min(clips_needed - len(visual_paths), MAX_CLIPS)
+            new = find_assets_for_script(script_text, num_clips=need, visual_queries=visual_queries)
             for a in new:
                 p = a.get('path') if isinstance(a, dict) else None
                 if p and os.path.exists(p) and p not in visual_paths:
                     visual_paths.append(p)
+                    if len(visual_paths) >= MAX_CLIPS:
+                        break
         except Exception as e:
             logger.error(f"Download failed: {e}")
     
@@ -735,18 +786,22 @@ def create_video(script_data, editor_data=None):
         needed = clips_needed - len(visual_paths)
         for i in range(needed):
             visual_paths.append(create_gradient_visual("", i))
+            if len(visual_paths) >= MAX_CLIPS:
+                break
     
     if not visual_paths:
-        for i in range(clips_needed):
+        for i in range(min(clips_needed, MAX_CLIPS)):
             visual_paths.append(('color', (random.randint(20,50), random.randint(20,50), random.randint(60,100))))
     
+    # Hard cap final
+    visual_paths = visual_paths[:MAX_CLIPS]
     logger.info(f"Final clips: {len(visual_paths)}")
     
     # Best frame
     best_idx, best_ts, best_sc = 0, 0.0, -1
-    for idx, vp in enumerate(visual_paths[:6]):
+    for idx, vp in enumerate(visual_paths[:5]):
         if isinstance(vp, str) and os.path.exists(vp) and vp.lower().endswith(('.mp4', '.mov', '.webm')):
-            ts, sc = find_best_moment(vp, 15)
+            ts, sc = find_best_moment(vp, 12)
             if sc > best_sc:
                 best_sc = sc
                 best_idx = idx
@@ -806,7 +861,6 @@ def create_video(script_data, editor_data=None):
     
     logger.info(f"Compositing {len(video_clips)} clips")
     
-    # Layout
     video_top = TOP_BLACK_STRIP + WHITE_BAR_HEIGHT
     video_h = HEIGHT - video_top - BOTTOM_BLACK_STRIP
     
@@ -842,7 +896,6 @@ def create_video(script_data, editor_data=None):
     
     overlays.append(ImageClip(make_bottom_strip()).set_duration(total_duration).set_position((0, HEIGHT - BOTTOM_BLACK_STRIP)))
     
-    # Captions
     words_list = script_text.split()
     word_dur = total_duration / max(len(words_list), 1)
     red_kw = ['BREAKING','SHOCKING','TRUMP','BIDEN','WAR','DEAD','KILLED','LEAKED',
@@ -887,7 +940,6 @@ def create_video(script_data, editor_data=None):
     final.write_videofile(temp_out, fps=fps, codec='libx264', audio_codec='aac',
                           preset='ultrafast', threads=4, logger=None)
     
-    # FFmpeg filter
     try:
         cmd = ["ffmpeg", "-y", "-i", temp_out,
                "-vf", "noise=alls=5:allf=t,hue=h=2:s=1.08",
@@ -902,7 +954,7 @@ def create_video(script_data, editor_data=None):
         if os.path.exists(temp_out):
             os.rename(temp_out, output_path)
     
-    # 8K
+    # Upscale (8K if short, 4K if long)
     output_path = upscale_to_8k(output_path)
     
     try:

@@ -1,6 +1,7 @@
 """
-main.py - AUTONOMOUS BOT
-Bot decides everything. Learns from performance. Never stops.
+main.py - AUTONOMOUS BOT WITH AI SELF-REPAIR
+Goal: Maximize views + engagement + subscribers
+Features: Learn from data, self-optimize, self-repair
 """
 
 import os
@@ -23,7 +24,7 @@ logger = setup_logger(__name__)
 
 
 # ============================================================
-# LAZY LOADING
+# SAFE IMPORT
 # ============================================================
 
 def safe_import(module_path, function_name=None):
@@ -112,13 +113,11 @@ def is_spam_topic(title):
 
 
 def is_viral_topic(title):
-    """Reject niche + boring"""
     if not title or is_spam_topic(title):
         return False
     
     tl = title.lower()
     
-    # Reject niche
     niche = ['skincare', 'botox', 'beauty', 'makeup', 'haircare', 'recipe',
              'cooking', 'diet', 'meal prep', 'workout', 'yoga', 'kitchen',
              'home decor', 'diy', 'craft', 'fashion', 'outfit', 'jewelry',
@@ -197,7 +196,7 @@ def check_trends_spike(title):
 
 
 # ============================================================
-# RESEARCH
+# LEG 1: RESEARCH
 # ============================================================
 
 def research_god_main():
@@ -295,7 +294,7 @@ def get_fallback_stories():
 
 
 # ============================================================
-# EDITOR
+# LEG 2: EDITOR
 # ============================================================
 
 def editor_god_main(script_data, candidate):
@@ -324,7 +323,7 @@ def editor_god_main(script_data, candidate):
 
 
 # ============================================================
-# BOSS APPROVAL
+# LEG 3: BOSS APPROVAL
 # ============================================================
 
 def boss_approval_main(video_path, script_data, full_story):
@@ -368,7 +367,7 @@ def boss_approval_main(video_path, script_data, full_story):
 
 
 # ============================================================
-# UPLOADER
+# LEG 4: UPLOADER
 # ============================================================
 
 def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
@@ -409,59 +408,76 @@ def post_upload(video_id, script_data):
 
 
 # ============================================================
-# SELF EVOLUTION
+# LEG 5: SELF EVOLUTION + SELF REPAIR (AI POWERED)
 # ============================================================
 
 def self_evolution_main():
+    """
+    Full self-evolution pipeline:
+    1. Collect analytics
+    2. Analyze retention
+    3. Auto-optimize parameters
+    4. AI-powered self-repair
+    5. Learn from performance
+    """
     logger.info("=" * 60)
-    logger.info("LEG 5: SELF EVOLUTION")
+    logger.info("LEG 5: SELF EVOLUTION + AI REPAIR")
     logger.info("=" * 60)
     
-    # Collect analytics
+    # Step 1: Collect analytics
     try:
         from src.youtube.analytics_collector import collect_analytics
-        collect_analytics()
+        collected = collect_analytics()
+        logger.info(f"📊 Analytics collected: {collected} videos")
     except Exception as e:
         logger.warning(f"Analytics failed: {e}")
     
-    # Analyze retention
+    # Step 2: Analyze retention
     try:
         from src.learning.retention_analyzer import analyze_retention
         analyze_retention()
+        logger.info("📊 Retention analyzed")
     except Exception as e:
         logger.warning(f"Retention analysis failed: {e}")
     
-    # Auto-optimize
+    # Step 3: Auto-optimize
     try:
         from src.learning.auto_optimizer import analyze_and_optimize
         analyze_and_optimize()
+        logger.info("🧠 Optimization complete")
     except Exception as e:
         logger.warning(f"Optimizer failed: {e}")
     
-    # Self-repair
+    # Step 4: AI-POWERED SELF-REPAIR (NEW)
     try:
         from src.learning.self_repair import run_self_diagnostics
+        logger.info("🔧 Starting self-diagnostics + AI repair...")
         run_self_diagnostics()
+        logger.info("🔧 Self-repair cycle complete")
     except Exception as e:
-        logger.warning(f"Diagnostics failed: {e}")
+        logger.warning(f"Self-repair failed: {e}")
+        traceback.print_exc()
     
-    # Learning from performance (legacy)
+    # Step 5: Learn from performance
     learner = safe_import('src.learning.performance_learner', 'learn_from_performance')
     if learner:
         try:
             insights = learner()
-            logger.info(f"Insights: {insights}")
-        except:
-            pass
+            logger.info(f"📚 Insights: {insights}")
+        except Exception as e:
+            logger.warning(f"Learning failed: {e}")
+    
+    logger.info("=" * 60)
+    logger.info("LEG 5 COMPLETE")
+    logger.info("=" * 60)
 
 
 # ============================================================
-# PROMPT + SCRIPT GENERATION
+# SCRIPT GENERATION
 # ============================================================
 
 def build_prompt(topic, video_duration=30, hook_style="statement", title_pattern="reason"):
-    """Build dynamic prompt based on learned params"""
-    words = int(video_duration * 2.5)  # ~2.5 words per sec
+    words = int(video_duration * 2.5)
     
     patterns = {
         'reason': "The Reason [X] Nobody Knows",
@@ -479,20 +495,20 @@ TOPIC: {topic}
 TARGET DURATION: {video_duration} seconds ({words} words)
 HOOK STYLE: {hook_style}
 
-🚨 TITLE (30-50 chars, NO question mark, ends with 1 hashtag):
+TITLE (30-50 chars, NO question mark, ends with 1 hashtag):
 Use pattern: "{title_pattern_str}"
 FORBIDDEN: BREAKING NEWS, MINNEAPOLIMEDIA, CNN, BBC, ABC, NBC, CBS, FOX
 GOOD: "The Reason Nobody Saw This Coming #Viral"
 
-🚨 WHITE BAR HOOK (4-5 words, ALL CAPS, NO ?):
+WHITE BAR HOOK (4-5 words, ALL CAPS, NO ?):
 GOOD: "NOBODY SAW THIS COMING", "THIS CHANGES EVERYTHING"
 
-🚨 SCRIPT ({words} words):
+SCRIPT ({words} words):
 - First sentence = HOOK (statement, not question)
 - 2-3 surprising facts
 - End with mystery
 
-🚨 VISUAL QUERIES (6 queries, 2-4 words each, SPECIFIC):
+VISUAL QUERIES (6 queries, 2-4 words each, SPECIFIC):
 GOOD: "police mugshot camera", "glamorous woman red carpet"
 BAD: "story continues", "sources say"
 
@@ -579,12 +595,11 @@ def generate_script_god(story):
     if len(topic) < 15:
         topic = raw
     
-    # Bot learns these
     video_duration = get_config("video_duration", 30)
     hook_style = get_config("hook_style", "statement")
     title_pattern = get_config("title_pattern", "reason")
     
-    logger.info(f"🧠 Learned params: duration={video_duration}s, hook={hook_style}, title={title_pattern}")
+    logger.info(f"🧠 Learned: duration={video_duration}s, hook={hook_style}, title={title_pattern}")
     
     prompt = build_prompt(topic, video_duration, hook_style, title_pattern)
     
@@ -638,7 +653,6 @@ def generate_script_god(story):
         except Exception as e:
             logger.warning(f"   GitHub Models: {e}")
     
-    # Fallback
     logger.info("⚠️ Using fallback template")
     return get_fallback_script(topic, video_duration)
 
@@ -672,9 +686,12 @@ def get_fallback_script(topic, video_duration):
     if len(tf) > 60:
         tf = f"{t[:55].rsplit(' ', 1)[0]} {h}"
     
-    # Dynamic word count based on learned duration
     target_words = int(video_duration * 2.5)
-    script = "This moment went viral for one surprising reason. Sources confirm the details nobody expected. Reports show millions are watching this unfold right now. Experts say the trend is only getting bigger. Here is what everyone is missing. " * 2
+    script = ("This moment went viral for one surprising reason. "
+              "Sources confirm the details nobody expected. "
+              "Reports show millions are watching this unfold right now. "
+              "Experts say the trend is only getting bigger. "
+              "Here is what everyone is missing. ") * 3
     script = " ".join(script.split()[:target_words])
     
     return {
@@ -773,19 +790,26 @@ def is_duplicate(title):
 
 def main():
     logger.info("=" * 60)
-    logger.info("🚀 AUTONOMOUS BOT START")
+    logger.info("🚀 AUTONOMOUS BOT START (WITH AI REPAIR)")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
     
-    # Init
+    # Init DB
     init_db()
+    
+    # Verify last fix (rollback if failed)
+    try:
+        from src.learning.self_repair import verify_last_fix
+        verify_last_fix()
+    except:
+        pass
     
     # Init autonomous config
     try:
         from src.learning.auto_optimizer import init_autonomous_config, get_all_config
         init_autonomous_config()
         config = get_all_config()
-        logger.info(f"🧠 Autonomous config loaded (v{config.get('version', 1)})")
+        logger.info(f"🧠 Autonomous config v{config.get('version', 1)}")
         logger.info(f"   Duration: {config.get('video_duration')}s | Hook: {config.get('hook_style')} | Title: {config.get('title_pattern')}")
     except Exception as e:
         logger.warning(f"Config init failed: {e}")
@@ -793,7 +817,7 @@ def main():
     stats = get_performance_stats()
     logger.info(f"Stats: {stats}")
     
-    # LEG 1
+    # LEG 1: Research
     stories = research_god_main()
     if not stories:
         logger.error("No stories - exit")
@@ -878,6 +902,7 @@ def main():
     
     if not approved:
         logger.error("All rejected - safe exit")
+        self_evolution_main()  # Still run repair even if no upload
         return
     
     # Upload
@@ -889,7 +914,7 @@ def main():
         mark_uploaded(story_id, video_id)
         logger.info(f"\n✅ UPLOADED: https://youtu.be/{video_id}")
     
-    # LEG 5
+    # LEG 5: Self Evolution + AI Repair
     self_evolution_main()
     
     logger.info("\n" + "=" * 60)

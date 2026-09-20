@@ -1,9 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT-BASED BOT - FINAL v13
-- Fact-based text videos (no Pexels)
-- Cinematic FFmpeg visuals
-- AI fact extraction
-- Self-repair
+main.py - AUTONOMOUS TEXT BOT - FINAL v15
+- Self evolution runs FIRST (learns + repairs)
+- All processing BEFORE upload
+- Uploader ABSOLUTE LAST
 """
 
 import os
@@ -98,7 +97,8 @@ def is_viral_topic(title):
              'forecast', 'county', 'municipal', 'neighborhood',
              'daily thread', 'weekly thread', 'megathread', 'roundup',
              'vs prediction', 'odds', 'preview', 'recap', 'discussion',
-             'help me', 'was wearing', 'picked up my']
+             'help me', 'was wearing', 'picked up my', "i can't use",
+             'ama/q&a', 'announcement']
     if any(kw in tl for kw in niche):
         return False
     if len(title.split()) < 5:
@@ -110,25 +110,25 @@ def is_audience_active(story):
     title = story.get('title', '')
     source = story.get('source', '').lower()
     logger.info(f"Activity: {title[:55]}")
-    
+
     reddit_score = 40
     if 'reddit' in source:
         up = story.get('reddit_score', 0)
         reddit_score = 100 if up >= 5000 else 80 if up >= 2000 else 60 if up >= 1000 else 45 if up >= 500 else 25
-    
+
     trends_score = 40
     if any(x in source for x in ['trends', 'trending', 'breakout']):
         trends_score = 85
     elif 'google_news' in source:
         trends_score = 60
-    
+
     spike_score = check_trends_spike(title)
     logger.info(f"   Reddit: {reddit_score} | Trends: {trends_score} | Spike: {spike_score}")
-    
+
     weighted = reddit_score * 0.35 + trends_score * 0.30 + spike_score * 0.35
     active = sum(1 for s in [reddit_score, trends_score, spike_score] if s >= 55)
     logger.info(f"   Weighted: {weighted:.1f} ({active}/3)")
-    
+
     return (active >= 1 or weighted >= 50), weighted
 
 
@@ -161,9 +161,9 @@ def research_god_main():
     logger.info("=" * 60)
     logger.info("LEG 1: RESEARCH")
     logger.info("=" * 60)
-    
+
     all_stories = []
-    
+
     reddit = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit:
         try:
@@ -172,7 +172,7 @@ def research_god_main():
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Reddit: {e}")
-    
+
     trends = safe_import('src.collectors.trends_collector', 'collect_trends')
     if trends:
         try:
@@ -181,7 +181,7 @@ def research_god_main():
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Trends: {e}")
-    
+
     google = safe_import('src.collectors.google_news_collector', 'collect_google_news')
     if google:
         try:
@@ -190,7 +190,7 @@ def research_god_main():
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Google: {e}")
-    
+
     if len(all_stories) < 30:
         rss = safe_import('src.collectors.rss_collector', 'collect_rss_news')
         if rss:
@@ -200,21 +200,21 @@ def research_god_main():
                 all_stories.extend(s)
             except:
                 pass
-    
+
     if not all_stories:
         all_stories = get_fallback_stories()
-    
+
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
         if not story['title'] or len(story['title']) < 10:
             story['title'] = 'Trending Topic'
-    
+
     all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 10]
-    
+
     before = len(all_stories)
     all_stories = [s for s in all_stories if is_viral_topic(s.get('title', ''))]
     logger.info(f"Viral filter: {before} -> {len(all_stories)}")
-    
+
     seen = set()
     unique = []
     for s in all_stories:
@@ -224,7 +224,7 @@ def research_god_main():
             unique.append(s)
     all_stories = unique
     logger.info(f"Dedup: {len(all_stories)}")
-    
+
     scorer = safe_import('src.intelligence.topic_scorer', 'rank_stories')
     if scorer:
         try:
@@ -233,11 +233,11 @@ def research_god_main():
             ranked = sorted(all_stories, key=lambda x: x.get('breakout_score', 0), reverse=True)
     else:
         ranked = sorted(all_stories, key=lambda x: x.get('breakout_score', 0), reverse=True)
-    
+
     logger.info(f"LEG 1: {len(ranked)} stories")
     for i, s in enumerate(ranked[:5]):
         logger.info(f"  #{i+1}: {s.get('title', '')[:60]}")
-    
+
     return ranked[:15]
 
 
@@ -251,17 +251,16 @@ def get_fallback_stories():
 
 
 def editor_god_main(script_data, candidate):
-    """Editor - extract facts instead of Pexels"""
     logger.info("=" * 60)
     logger.info("LEG 2: EDITOR - FACT EXTRACTION")
     logger.info("=" * 60)
-    
+
     editor_data = {"facts": [], "visuals": []}
-    
+
     try:
         from src.writing.fact_extractor import extract_facts
         result = extract_facts(candidate, script_data.get('short_script', ''))
-        
+
         if result:
             editor_data['facts'] = result['facts']
             if result.get('script'):
@@ -270,11 +269,11 @@ def editor_god_main(script_data, candidate):
                 script_data['seo_youtube_title'] = result['title']
             if result.get('hook'):
                 script_data['viral_hook'] = result['hook']
-        
+
         logger.info(f"Extracted {len(editor_data['facts'])} facts")
     except Exception as e:
         logger.error(f"Fact extraction failed: {e}")
-    
+
     return editor_data
 
 
@@ -317,11 +316,18 @@ def boss_approval_main(video_path, script_data, full_story):
 
 def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
     logger.info("=" * 60)
-    logger.info("LEG 4: UPLOADER")
+    logger.info("LEG 4: UPLOADER (FINAL STEP)")
     logger.info("=" * 60)
+
+    if not os.path.exists(video_path):
+        logger.error(f"Video file not found: {video_path}")
+        return None
+
     uploader = safe_import('src.youtube.uploader', 'upload_video')
     if not uploader:
+        logger.error("Uploader not available")
         return None
+
     try:
         title = script_data.get('seo_youtube_title', '') or candidate.get('title', 'Facts')
         video_id = uploader(
@@ -330,55 +336,45 @@ def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_d
             title=title[:100],
             description=script_data.get('description', 'Fact-based content.'),
             tags=script_data.get('tags', ['facts', 'viral', 'shorts']),
-            category_id="27"  # Education
+            category_id="27"
         )
         if video_id:
             logger.info(f"Uploaded: https://youtu.be/{video_id}")
-            post_upload(video_id, script_data)
         return video_id
     except Exception as e:
         logger.error(f"Upload: {e}")
         return None
 
 
-def post_upload(video_id, script_data):
-    ce = safe_import('src.youtube.comment_engine', 'reply_to_comments')
-    if ce:
-        try:
-            ce(video_id)
-        except:
-            pass
-
-
 def self_evolution_main():
     logger.info("=" * 60)
-    logger.info("LEG 5: SELF EVOLUTION")
+    logger.info("SELF EVOLUTION (PRE-PIPELINE)")
     logger.info("=" * 60)
-    
+
     try:
         from src.youtube.analytics_collector import collect_analytics
         collect_analytics()
     except Exception as e:
         logger.warning(f"Analytics: {e}")
-    
+
     try:
         from src.learning.retention_analyzer import analyze_retention
         analyze_retention()
     except Exception as e:
         logger.warning(f"Retention: {e}")
-    
+
     try:
         from src.learning.auto_optimizer import analyze_and_optimize
         analyze_and_optimize()
     except Exception as e:
         logger.warning(f"Optimizer: {e}")
-    
+
     try:
         from src.learning.self_repair import run_self_diagnostics
         run_self_diagnostics()
     except Exception as e:
         logger.warning(f"Repair: {e}")
-    
+
     learner = safe_import('src.learning.performance_learner', 'learn_from_performance')
     if learner:
         try:
@@ -387,7 +383,7 @@ def self_evolution_main():
             pass
 
 
-def build_prompt(topic, video_duration=15):
+def build_prompt(topic, video_duration=13):
     words = int(video_duration * 2.5)
     return f"""You are a VIRAL YouTube Shorts expert.
 
@@ -431,13 +427,13 @@ def process_ai_response(text, model_name):
         data = json.loads(m.group())
     except:
         return None
-    
+
     vq = data.get('visual_queries', [])
     if not isinstance(vq, list):
         vq = []
     clean_vq = [q.strip() for q in vq if isinstance(q, str) and 3 <= len(q.strip()) <= 50]
     data['visual_queries'] = clean_vq[:6]
-    
+
     hook = data.get('viral_hook', '')
     hook = re.sub(r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+', '', hook).strip()
     hook = hook.rstrip('?').strip()
@@ -449,7 +445,7 @@ def process_ai_response(text, model_name):
             hook = "THIS CHANGES " + hook.upper()
             words = hook.split()[:5]
     data['viral_hook'] = " ".join(words).upper()
-    
+
     title = data.get('seo_youtube_title', '')
     title = clean_topic(title)
     title = re.sub(r'#\w+', '', title).strip()
@@ -458,23 +454,23 @@ def process_ai_response(text, model_name):
         title = re.sub(rf'\b{bad}\b', '', title, flags=re.IGNORECASE)
     title = re.sub(r'\s+', ' ', title).strip()
     title = title.replace('?', '').strip()
-    
+
     if has_publisher_name(title) or is_spam_topic(title):
         return None
-    
+
     hashtags = data.get('hashtags', ['#Facts'])
     hashtag = hashtags[0] if hashtags else '#Facts'
     if not hashtag.startswith('#'):
         hashtag = '#' + hashtag
-    
+
     title_full = f"{title} {hashtag}"
     if len(title_full) > 55:
         max_len = 55 - len(hashtag) - 1
         title_full = f"{title[:max_len].rsplit(' ', 1)[0]} {hashtag}"
-    
+
     data['seo_youtube_title'] = title_full
     data['hashtags'] = hashtags[:3]
-    
+
     logger.info(f"Script by {model_name}")
     logger.info(f"   Title: {title_full}")
     logger.info(f"   Hook: {data['viral_hook']}")
@@ -487,13 +483,12 @@ def generate_script_god(story):
     topic = clean_topic(raw)
     if len(topic) < 15:
         topic = raw
-    
-    video_duration = min(15, get_config("video_duration", 15))
-    
+
+    video_duration = min(15, get_config("video_duration", 13))
     logger.info(f"Duration: {video_duration}s")
-    
+
     prompt = build_prompt(topic, video_duration)
-    
+
     gk = os.getenv("GEMINI_API_KEY", "")
     if gk:
         try:
@@ -516,7 +511,7 @@ def generate_script_god(story):
                         time.sleep(3)
         except Exception as e:
             logger.warning(f"Gemini client: {e}")
-    
+
     gh = os.getenv("GITHUB_TOKEN", "")
     if gh:
         for endpoint in ["https://models.inference.ai.azure.com",
@@ -545,14 +540,14 @@ def generate_script_god(story):
                         continue
             except:
                 continue
-    
+
     logger.info("Fallback template")
     return get_fallback_script(topic)
 
 
 def get_fallback_script(topic):
     tl = topic.lower()
-    if any(w in tl for w in ['trump', 'biden', 'president', 'congress']):
+    if any(w in tl for w in ['trump', 'biden', 'president', 'congress', 'obama']):
         h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
     elif any(w in tl for w in ['ai', 'tech', 'apple', 'google', 'musk']):
         h, t, hk = "#Tech", "What The Tech World Missed", "THIS CHANGES EVERYTHING"
@@ -560,11 +555,11 @@ def get_fallback_script(topic):
         h, t, hk = "#Entertainment", "What Really Happened Here", "THIS CHANGED EVERYTHING"
     else:
         h, t, hk = "#Facts", "The Story Behind This Moment", "NOBODY SAW THIS COMING"
-    
+
     tf = f"{t} {h}"
     if len(tf) > 55:
         tf = f"{t[:50].rsplit(' ', 1)[0]} {h}"
-    
+
     return {
         "short_script": "This story has three surprising facts. Reports confirm the numbers are bigger than expected. Experts say this changes everything. Here is what you need to know.",
         "seo_youtube_title": tf,
@@ -578,7 +573,6 @@ def get_fallback_script(topic):
 
 
 def create_video_god(script_data, editor_data):
-    """Text-based cinematic video"""
     logger.info("=" * 60)
     logger.info("VIDEO GENERATION - TEXT MODE")
     logger.info("=" * 60)
@@ -587,7 +581,7 @@ def create_video_god(script_data, editor_data):
         merged = {**script_data, **editor_data}
         merged['full_script'] = script_data.get('short_script', '')
         merged['title'] = script_data.get('seo_youtube_title', '')
-        
+
         video_path = create_text_video(merged, editor_data)
         logger.info(f"Video: {video_path}")
         return video_path
@@ -649,15 +643,15 @@ def main():
     logger.info("AUTONOMOUS TEXT BOT START")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
-    
+
     init_db()
-    
+
     try:
         from src.learning.self_repair import verify_last_fix
         verify_last_fix()
     except:
         pass
-    
+
     try:
         from src.learning.auto_optimizer import init_autonomous_config, get_all_config
         init_autonomous_config()
@@ -666,20 +660,24 @@ def main():
         logger.info(f"   Duration: {config.get('video_duration')}s")
     except Exception as e:
         logger.warning(f"Config: {e}")
-    
+
     stats = get_performance_stats()
     logger.info(f"Stats: {stats}")
-    
+
+    # STEP 1: Self evolution FIRST
+    self_evolution_main()
+
+    # STEP 2: Research
     stories = research_god_main()
     if not stories:
-        logger.error("No stories")
-        self_evolution_main()
+        logger.error("No stories - exit")
         return
-    
+
+    # STEP 3: Activity filter
     logger.info("=" * 60)
     logger.info("ACTIVITY FILTER")
     logger.info("=" * 60)
-    
+
     active = []
     for s in stories[:10]:
         is_active, score = is_audience_active(s)
@@ -689,76 +687,75 @@ def main():
             logger.info(f"   ACTIVE ({score:.0f}): {s.get('title', '')[:50]}")
         else:
             logger.info(f"   SKIP ({score:.0f}): {s.get('title', '')[:50]}")
-    
+
     if not active:
         logger.warning("No active - using top 3")
         active = stories[:3]
     else:
         logger.info(f"{len(active)} ACTIVE topics")
-    
+
     stories = active
-    
+
+    # STEP 4: Process candidates
     approved = None
     best_rejected = None
     skipped = 0
-    
+
     for i, candidate in enumerate(stories[:8]):
         logger.info(f"\nCANDIDATE {i+1}: {candidate.get('title', '')[:60]}")
-        
+
         if is_duplicate(candidate.get('title', '')):
             logger.warning("Duplicate")
             skipped += 1
             continue
-        
+
         script_data = generate_script_god(candidate)
-        
+
         if has_publisher_name(script_data.get('seo_youtube_title', '')):
             continue
         if is_spam_topic(script_data.get('seo_youtube_title', '')):
             continue
         if script_data.get('confidence_score', 0) < 60:
             continue
-        
+
         fc = safe_import('src.verification.claim_checker', 'fact_check')
         if fc:
             fr = fc(script_data.get('short_script', ''), candidate)
             if not fr.get('passed', False):
                 logger.warning("Fact check failed")
                 continue
-        
+
         editor_data = editor_god_main(script_data, candidate)
         full_story = {**candidate, **script_data}
         story_id = save_story(full_story)
         video_path = create_video_god(script_data, editor_data)
         boss_data = boss_approval_main(video_path, script_data, full_story)
-        
+
         if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
             best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)
-        
+
         if not boss_data.get('approved'):
             continue
-        
+
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
-    
+
     if not approved and best_rejected and best_rejected[3].get('score', 0) >= 50:
         approved = best_rejected
-    
+
     if not approved:
-        logger.error("All rejected")
-        self_evolution_main()
+        logger.error("All rejected - no upload")
         return
-    
+
+    # STEP 5: UPLOADER (LAST - nothing after)
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved
     thumb = create_thumbnail(candidate, script_data)
     video_id = uploader_god_main(video_path, thumb, script_data, candidate, boss_data)
-    
+
     if video_id:
         mark_uploaded(story_id, video_id)
         logger.info(f"UPLOADED: https://youtu.be/{video_id}")
-    
-    self_evolution_main()
-    
+
     logger.info("=" * 60)
     logger.info("BOT COMPLETE")
     logger.info("=" * 60)

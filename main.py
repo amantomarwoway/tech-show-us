@@ -153,17 +153,19 @@ def check_trends_spike(title):
             return 40
         c = vals[-1]
         return 100 if c >= 80 else 80 if c >= 50 else 55 if c >= 20 else 35 if c >= 5 else 20
-    except:
+    except Exception:
         return 45
 
 
 def research_god_main():
+    """Research ONLY real trending topics"""
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH")
+    logger.info("LEG 1: RESEARCH - REAL TRENDING ONLY")
     logger.info("=" * 60)
 
     all_stories = []
 
+    # ONLY trusted real-trending sources
     reddit = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit:
         try:
@@ -177,68 +179,101 @@ def research_god_main():
     if trends:
         try:
             s = trends()
-            logger.info(f"Google News: {len(s)}")
+            logger.info(f"Google News Trending: {len(s)}")
             all_stories.extend(s)
         except Exception as e:
             logger.error(f"Trends: {e}")
 
-    google = safe_import('src.collectors.google_news_collector', 'collect_google_news')
-    if google:
-        try:
-            s = google()
-            logger.info(f"Google RSS: {len(s)}")
-            all_stories.extend(s)
-        except Exception as e:
-            logger.error(f"Google: {e}")
-
-    if len(all_stories) < 30:
-        rss = safe_import('src.collectors.rss_collector', 'collect_rss_news')
-        if rss:
-            try:
-                s = rss()
-                logger.info(f"RSS: {len(s)}")
-                all_stories.extend(s)
-            except:
-                pass
-
     if not all_stories:
-        all_stories = get_fallback_stories()
+        logger.error("No real trending sources available")
+        return []
 
+    # Clean titles
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
         if not story['title'] or len(story['title']) < 10:
-            story['title'] = 'Trending Topic'
+            story['title'] = ''
 
     all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 10]
 
+    # Viral filter
     before = len(all_stories)
     all_stories = [s for s in all_stories if is_viral_topic(s.get('title', ''))]
     logger.info(f"Viral filter: {before} -> {len(all_stories)}")
 
+    # REAL trending verification (via Google Trends)
+    verified = []
+    for s in all_stories:
+        source = s.get('source', '').lower()
+
+        # Reddit needs high upvotes
+        if 'reddit' in source:
+            upvotes = s.get('reddit_score', 0)
+            if upvotes >= 500:
+                verified.append(s)
+                logger.info(f"  REAL REDDIT: {s.get('title', '')[:50]} ({upvotes} up)")
+            continue
+
+        # Google source → verify trends
+        if 'trends' in source or 'trending' in source or 'google' in source:
+            score = check_trends_actual(s.get('title', ''))
+            if score >= 40:
+                verified.append(s)
+                logger.info(f"  REAL TREND ({score}): {s.get('title', '')[:50]}")
+
+    if not verified:
+        logger.error("No verified trending topics")
+        return []
+
+    logger.info(f"Verified: {len(verified)}")
+
+    # Dedup
     seen = set()
     unique = []
-    for s in all_stories:
+    for s in verified:
         k = s.get('title', '')[:30].lower()
         if k not in seen:
             seen.add(k)
             unique.append(s)
-    all_stories = unique
-    logger.info(f"Dedup: {len(all_stories)}")
 
+    # Rank
     scorer = safe_import('src.intelligence.topic_scorer', 'rank_stories')
     if scorer:
         try:
-            ranked = scorer(all_stories)
-        except:
-            ranked = sorted(all_stories, key=lambda x: x.get('breakout_score', 0), reverse=True)
+            ranked = scorer(unique)
+        except Exception:
+            ranked = sorted(unique, key=lambda x: x.get('breakout_score', 0), reverse=True)
     else:
-        ranked = sorted(all_stories, key=lambda x: x.get('breakout_score', 0), reverse=True)
+        ranked = sorted(unique, key=lambda x: x.get('breakout_score', 0), reverse=True)
 
-    logger.info(f"LEG 1: {len(ranked)} stories")
+    logger.info(f"LEG 1: {len(ranked)} verified trending")
     for i, s in enumerate(ranked[:5]):
         logger.info(f"  #{i+1}: {s.get('title', '')[:60]}")
 
-    return ranked[:15]
+    return ranked[:10]
+
+
+def check_trends_actual(title):
+    """Verify via Google Trends (0-100)"""
+    try:
+        from pytrends.request import TrendReq
+        words = [w for w in title.split() if len(w) > 4][:3]
+        if not words:
+            return 40
+        query = " ".join(words)
+        try:
+            pytrends = TrendReq(hl='en-US', tz=360, timeout=10)
+        except TypeError:
+            pytrends = TrendReq(hl='en-US', tz=360)
+        pytrends.build_payload([query], timeframe='now 1-H', geo='US')
+        time.sleep(1)
+        data = pytrends.interest_over_time()
+        if data.empty or query not in data.columns:
+            return 40
+        vals = data[query].tolist()
+        return vals[-1] if vals else 40
+    except Exception:
+        return 40
 
 
 def get_fallback_stories():
@@ -379,7 +414,7 @@ def self_evolution_main():
     if learner:
         try:
             learner()
-        except:
+        except Exception:
             pass
 
 
@@ -425,7 +460,7 @@ def process_ai_response(text, model_name):
         return None
     try:
         data = json.loads(m.group())
-    except:
+    except Exception:
         return None
 
     vq = data.get('visual_queries', [])
@@ -478,6 +513,7 @@ def process_ai_response(text, model_name):
 
 
 def generate_script_god(story):
+    """Gemini 3.6-flash ONLY with retries"""
     from src.learning.auto_optimizer import get_config
     raw = story.get('title', '')
     topic = clean_topic(raw)
@@ -489,59 +525,32 @@ def generate_script_god(story):
 
     prompt = build_prompt(topic, video_duration)
 
+    # Gemini 3.6-flash ONLY - 3 retries
     gk = os.getenv("GEMINI_API_KEY", "")
     if gk:
         try:
             from google import genai
             client = genai.Client(api_key=gk)
-            for attempt in range(1, 3):
+
+            for attempt in range(1, 4):
                 try:
-                    logger.info(f"Gemini attempt {attempt}/2")
+                    logger.info(f"Gemini 3.6-flash attempt {attempt}/3")
                     resp = client.models.generate_content(
                         model="gemini-3.6-flash", contents=prompt
                     )
                     text = getattr(resp, 'text', '')
                     if text:
-                        data = process_ai_response(text, "Gemini-3.6")
+                        data = process_ai_response(text, "Gemini-3.6-flash")
                         if data:
                             return data
                 except Exception as e:
-                    logger.warning(f"Gemini: {str(e)[:80]}")
-                    if attempt < 2:
-                        time.sleep(3)
+                    logger.warning(f"Gemini attempt {attempt}: {str(e)[:80]}")
+                    if attempt < 3:
+                        time.sleep(3 * attempt)
         except Exception as e:
-            logger.warning(f"Gemini client: {e}")
+            logger.error(f"Gemini client failed: {e}")
 
-    gh = os.getenv("GITHUB_TOKEN", "")
-    if gh:
-        for endpoint in ["https://models.inference.ai.azure.com",
-                         "https://models.github.ai/inference"]:
-            try:
-                from openai import OpenAI
-                client = OpenAI(api_key=gh, base_url=endpoint)
-                for model in ["gpt-4o-mini", "gpt-4o"]:
-                    try:
-                        logger.info(f"GH Models {model}")
-                        r = client.chat.completions.create(
-                            model=model,
-                            messages=[
-                                {"role": "system", "content": "JSON only."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=0.9, max_tokens=1500,
-                            response_format={"type": "json_object"}
-                        )
-                        text = r.choices[0].message.content
-                        if text:
-                            data = process_ai_response(text, f"GH-{model}")
-                            if data:
-                                return data
-                    except:
-                        continue
-            except:
-                continue
-
-    logger.info("Fallback template")
+    logger.warning("Gemini failed all attempts - using fallback")
     return get_fallback_script(topic)
 
 
@@ -601,13 +610,13 @@ def create_thumbnail(candidate, script_data):
         title = script_data.get('seo_youtube_title', candidate.get('title', 'Facts'))
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 70)
-        except:
+        except Exception:
             font = ImageFont.load_default()
         draw.text((644, 364), title[:40], font=font, fill=(0, 0, 0), anchor="mm")
         draw.text((640, 360), title[:40], font=font, fill=(255, 255, 255), anchor="mm")
         img.save(tp, quality=95)
         return tp
-    except:
+    except Exception:
         return None
 
 
@@ -634,7 +643,7 @@ def is_duplicate(title):
                 if len(set(key.split()) & set(ex_key.split())) >= 3:
                     return True
         return False
-    except:
+    except Exception:
         return False
 
 
@@ -649,7 +658,7 @@ def main():
     try:
         from src.learning.self_repair import verify_last_fix
         verify_last_fix()
-    except:
+    except Exception:
         pass
 
     try:

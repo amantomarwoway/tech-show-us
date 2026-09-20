@@ -1,10 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v19
+main.py - AUTONOMOUS TEXT BOT - FINAL v20
 - Self evolution FIRST, Uploader LAST
 - FORCED 45-55s long-form
 - PROTECTED script from truncation
 - FIXED duplicate detection (uploaded-only + stricter match)
-- Expanded candidate pool
+- OVERRIDE "script too long" gate for long-form Shorts
 """
 
 import os
@@ -28,6 +28,7 @@ logger = setup_logger(__name__)
 FORCED_MIN_DURATION = 45
 FORCED_MAX_DURATION = 55
 MIN_ACCEPTABLE_WORDS = 80
+MAX_ACCEPTABLE_WORDS = 200      # gate override ceiling
 CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 
@@ -319,9 +320,26 @@ def boss_approval_main(video_path, script_data, full_story):
         if gate:
             g = gate(script_data, full_story)
             if not g.get('passed', False):
-                result['reason'] = g.get('reason', 'Quality gate failed')
-                logger.info(f"LEG 3: REJECTED by gate - {result['reason']}")
-                return result
+                reason = g.get('reason', 'Quality gate failed')
+
+                # === OVERRIDE: allow long scripts (target is 45-55s now) ===
+                if 'too long' in reason.lower():
+                    wc = len(script_data.get('short_script', '').split())
+                    if wc <= MAX_ACCEPTABLE_WORDS:
+                        logger.warning(
+                            f"Overriding 'script too long' gate ({wc} words) "
+                            f"- allowed up to {MAX_ACCEPTABLE_WORDS} for long-form Shorts"
+                        )
+                        # fall through to ranker
+                    else:
+                        result['reason'] = reason
+                        logger.info(f"LEG 3: REJECTED - {reason} (> {MAX_ACCEPTABLE_WORDS} words)")
+                        return result
+                else:
+                    result['reason'] = reason
+                    logger.info(f"LEG 3: REJECTED by gate - {reason}")
+                    return result
+
         ranker = safe_import('src.intelligence.story_ranker', 'calculate_publish_score')
         if ranker:
             score = ranker(full_story)

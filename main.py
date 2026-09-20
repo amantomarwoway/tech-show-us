@@ -28,8 +28,8 @@ logger = setup_logger(__name__)
 FORCED_MIN_DURATION = 45
 FORCED_MAX_DURATION = 55
 MIN_ACCEPTABLE_WORDS = 80
-CANDIDATE_POOL_SIZE = 15        # was 8
-BOSS_FALLBACK_SCORE = 40        # was 50
+CANDIDATE_POOL_SIZE = 15
+BOSS_FALLBACK_SCORE = 40
 
 
 def safe_import(module_path, function_name=None):
@@ -383,31 +383,31 @@ def self_evolution_main():
     logger.info("=" * 60)
     logger.info("SELF EVOLUTION (PRE-PIPELINE)")
     logger.info("=" * 60)
+
     try:
         from src.youtube.analytics_collector import collect_analytics
         collect_analytics()
     except Exception as e:
         logger.warning(f"Analytics: {e}")
+
     try:
         from src.learning.retention_analyzer import analyze_retention
         analyze_retention()
     except Exception as e:
         logger.warning(f"Retention: {e}")
+
     try:
         from src.learning.auto_optimizer import analyze_and_optimize
         analyze_and_optimize()
     except Exception as e:
         logger.warning(f"Optimizer: {e}")
-    try:
-        from src.learning.self_repair import run_last_diagnostics if False else run_self_diagnostics
-        pass
-    except Exception:
-        pass
+
     try:
         from src.learning.self_repair import run_self_diagnostics
         run_self_diagnostics()
     except Exception as e:
         logger.warning(f"Repair: {e}")
+
     learner = safe_import('src.learning.performance_learner', 'learn_from_performance')
     if learner:
         try:
@@ -671,23 +671,12 @@ def create_thumbnail(candidate, script_data):
         return None
 
 
-# ============================================================
-# FIXED DUPLICATE DETECTION
-# ============================================================
-
 def _significant_words(title):
-    """Extract significant words (len > 4) from a title."""
     clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
     return set(w for w in clean.split() if len(w) > 4)
 
 
 def is_duplicate(title):
-    """
-    Check if title duplicates a RECENTLY UPLOADED story.
-    - Only compares against UPLOADED stories (not pending/saved-in-this-run)
-    - Requires 4+ overlapping significant words
-    - Or 3+ if that covers 60%+ of the shorter title
-    """
     if not title:
         return False
     try:
@@ -698,7 +687,6 @@ def is_duplicate(title):
 
         conn = get_connection()
         cur = conn.cursor()
-        # ONLY compare against UPLOADED stories within last 2 days
         cur.execute('''
             SELECT s.title FROM stories s
             INNER JOIN uploads u ON u.story_id = s.id
@@ -712,11 +700,9 @@ def is_duplicate(title):
             if not ex_words:
                 continue
             overlap = len(key_words & ex_words)
-            # Require 4+ overlap
             if overlap >= 4:
                 logger.info(f"   Duplicate vs uploaded: {overlap} words match")
                 return True
-            # Or 3+ with 60%+ coverage of shorter
             if overlap >= 3:
                 min_len = min(len(key_words), len(ex_words))
                 if min_len > 0 and overlap / min_len >= 0.6:
@@ -729,7 +715,6 @@ def is_duplicate(title):
 
 
 def is_similar_this_run(title, seen_sets):
-    """Check if title is similar to any title processed earlier in THIS run."""
     key_words = _significant_words(title)
     if len(key_words) < 3:
         return False
@@ -796,20 +781,18 @@ def main():
     approved = None
     best_rejected = None
     skipped = 0
-    seen_this_run = []   # sets of significant words from this run
+    seen_this_run = []
 
     for i, candidate in enumerate(stories[:CANDIDATE_POOL_SIZE]):
         title = candidate.get('title', '')
         logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
 
-        # In-run similarity check
         if is_similar_this_run(title, seen_this_run):
             logger.warning("Similar topic already processed this run - skip")
             skipped += 1
             continue
         seen_this_run.append(_significant_words(title))
 
-        # DB duplicate check (uploaded-only)
         if is_duplicate(title):
             logger.warning("Duplicate of recent upload")
             skipped += 1
@@ -863,7 +846,6 @@ def main():
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
 
-    # Fallback to best rejected if score >= BOSS_FALLBACK_SCORE
     if not approved and best_rejected and best_rejected[3].get('score', 0) >= BOSS_FALLBACK_SCORE:
         logger.info(f"Using best rejected (score {best_rejected[3].get('score', 0):.1f})")
         approved = best_rejected

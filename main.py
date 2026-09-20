@@ -1,8 +1,9 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v15
+main.py - AUTONOMOUS TEXT BOT - FINAL v16
 - Self evolution runs FIRST (learns + repairs)
 - All processing BEFORE upload
 - Uploader ABSOLUTE LAST
+- Long-form Shorts (40-55s) with full script value
 """
 
 import os
@@ -165,7 +166,6 @@ def research_god_main():
 
     all_stories = []
 
-    # ONLY trusted real-trending sources
     reddit = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
     if reddit:
         try:
@@ -188,7 +188,6 @@ def research_god_main():
         logger.error("No real trending sources available")
         return []
 
-    # Clean titles
     for story in all_stories:
         story['title'] = clean_topic(story.get('title', ''))
         if not story['title'] or len(story['title']) < 10:
@@ -196,17 +195,14 @@ def research_god_main():
 
     all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 10]
 
-    # Viral filter
     before = len(all_stories)
     all_stories = [s for s in all_stories if is_viral_topic(s.get('title', ''))]
     logger.info(f"Viral filter: {before} -> {len(all_stories)}")
 
-    # REAL trending verification (via Google Trends)
     verified = []
     for s in all_stories:
         source = s.get('source', '').lower()
 
-        # Reddit needs high upvotes
         if 'reddit' in source:
             upvotes = s.get('reddit_score', 0)
             if upvotes >= 500:
@@ -214,7 +210,6 @@ def research_god_main():
                 logger.info(f"  REAL REDDIT: {s.get('title', '')[:50]} ({upvotes} up)")
             continue
 
-        # Google source → verify trends
         if 'trends' in source or 'trending' in source or 'google' in source:
             score = check_trends_actual(s.get('title', ''))
             if score >= 40:
@@ -227,7 +222,6 @@ def research_god_main():
 
     logger.info(f"Verified: {len(verified)}")
 
-    # Dedup
     seen = set()
     unique = []
     for s in verified:
@@ -236,7 +230,6 @@ def research_god_main():
             seen.add(k)
             unique.append(s)
 
-    # Rank
     scorer = safe_import('src.intelligence.topic_scorer', 'rank_stories')
     if scorer:
         try:
@@ -418,8 +411,8 @@ def self_evolution_main():
             pass
 
 
-def build_prompt(topic, video_duration=13):
-    words = int(video_duration * 2.5)
+def build_prompt(topic, video_duration=45):
+    words = int(video_duration * 2.3)
     return f"""You are a VIRAL YouTube Shorts expert.
 
 TOPIC: {topic}
@@ -428,13 +421,16 @@ TARGET: {video_duration}s ({words} words)
 TITLE (30-50 chars, NO "?", ends with 1 hashtag):
 Example: "The Reason This Changed Everything #Facts"
 
-HOOK (4-5 words, ALL CAPS):
+HOOK (4-6 words, ALL CAPS, attention-grabbing):
 Example: "NOBODY SAW THIS COMING"
 
 SCRIPT ({words} words):
-- First sentence = HOOK (statement)
-- 2-3 surprising facts with NUMBERS
-- End with mystery
+- First sentence = HOOK (statement, under 8 words)
+- Then 5-7 surprising facts with NUMBERS, DATES, or SPECIFIC DETAILS
+- Explain WHY this matters to the viewer (impact, context)
+- Include 1 direct question to the viewer midway (like "Did you know...")
+- End with mystery or "here's what nobody's saying"
+- NO filler words, NO repetition, NO generic phrases
 
 VISUAL QUERIES (6 queries, 2-4 words, SPECIFIC):
 GOOD: "stock market chart", "government building"
@@ -446,7 +442,7 @@ OUTPUT JSON ONLY:
     "description": "SEO description",
     "hashtags": ["#Facts", "#Trending", "#Shorts"],
     "tags": ["facts", "viral", "shorts"],
-    "viral_hook": "4-5 WORD STATEMENT",
+    "viral_hook": "4-6 WORD STATEMENT",
     "visual_queries": ["q1", "q2", "q3", "q4", "q5", "q6"],
     "confidence_score": 85
 }}"""
@@ -473,12 +469,12 @@ def process_ai_response(text, model_name):
     hook = re.sub(r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+', '', hook).strip()
     hook = hook.rstrip('?').strip()
     words = hook.split()
-    if len(words) > 5:
-        words = words[:5]
+    if len(words) > 6:
+        words = words[:6]
     elif len(words) < 4:
         if not any(w in hook.upper() for w in ['THIS', 'NOBODY', 'THE', 'EVERY']):
             hook = "THIS CHANGES " + hook.upper()
-            words = hook.split()[:5]
+            words = hook.split()[:6]
     data['viral_hook'] = " ".join(words).upper()
 
     title = data.get('seo_youtube_title', '')
@@ -520,12 +516,11 @@ def generate_script_god(story):
     if len(topic) < 15:
         topic = raw
 
-    video_duration = min(15, get_config("video_duration", 13))
+    video_duration = min(55, get_config("video_duration", 45))
     logger.info(f"Duration: {video_duration}s")
 
     prompt = build_prompt(topic, video_duration)
 
-    # Gemini 3.6-flash ONLY - 3 retries
     gk = os.getenv("GEMINI_API_KEY", "")
     if gk:
         try:
@@ -570,7 +565,13 @@ def get_fallback_script(topic):
         tf = f"{t[:50].rsplit(' ', 1)[0]} {h}"
 
     return {
-        "short_script": "This story has three surprising facts. Reports confirm the numbers are bigger than expected. Experts say this changes everything. Here is what you need to know.",
+        "short_script": (
+            "Nobody saw this coming. Reports confirm over three billion dollars "
+            "changed hands in a single week. Experts say the numbers are three "
+            "times bigger than last year. Did you know most people missed this "
+            "entirely? The full impact may not surface for months. Here is what "
+            "nobody is telling you yet."
+        ),
         "seo_youtube_title": tf,
         "description": "Fact-based content. Subscribe for more.",
         "hashtags": [h, "#Shorts", "#Facts"],
@@ -597,7 +598,7 @@ def create_video_god(script_data, editor_data):
     except Exception as e:
         logger.error(f"Video failed: {e}")
         traceback.print_exc()
-        return "output/videos/final.mp4"
+        return None
 
 
 def create_thumbnail(candidate, script_data):
@@ -738,6 +739,11 @@ def main():
         full_story = {**candidate, **script_data}
         story_id = save_story(full_story)
         video_path = create_video_god(script_data, editor_data)
+
+        if not video_path or not os.path.exists(video_path):
+            logger.warning("Video missing - skipping candidate")
+            continue
+
         boss_data = boss_approval_main(video_path, script_data, full_story)
 
         if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):

@@ -4,6 +4,7 @@ src/media/text_video_builder.py - WARRIOR LETTER BATTLE
 - Letters fight with weapons to form words
 - Word drops with explosion
 - Final warrior display
+- Proportional timing (faster pacing, form-frame holds longer)
 """
 
 import os
@@ -48,6 +49,21 @@ BG_SCHEMES = [
 ]
 
 WEAPON_TYPES = ['sword', 'hammer', 'axe', 'spear', 'mace']
+
+# ============================================================
+# PACING KNOBS — tune these to control speed
+# ============================================================
+
+# Max words shown per video (higher = faster overall pace)
+MAX_WORDS_PER_VIDEO = 8
+
+# Frame weights WITHIN one word (must sum to ~1.0)
+# fight  = quick flash-in
+# clash  = quick clash
+# form   = HOLD the formed word (the money shot)
+# expl   = quick explosion
+# final  = brief warrior display
+FRAME_WEIGHTS = [0.10, 0.10, 0.46, 0.14, 0.20]
 
 
 def load_font(path, size):
@@ -545,6 +561,24 @@ def split_script_into_words(script_text):
     return result
 
 
+def calculate_word_timings(words, total_duration):
+    """
+    Distribute total_duration across words proportionally to character length.
+    Longer words get more screen time; short words get a floor.
+    Returns a list of per-word durations (seconds).
+    """
+    if not words:
+        return []
+
+    # Weight: longest words matter, but floor at 5 chars
+    weights = [max(len(w), 5) for w in words]
+    total_weight = sum(weights)
+
+    # Reserve 4% for intro hold, 4% for outro hold
+    usable = total_duration * 0.92
+    return [(w / total_weight) * usable for w in weights]
+
+
 # ============================================================
 # BUILD VIDEO
 # ============================================================
@@ -638,8 +672,9 @@ def create_text_video(script_data, editor_data=None):
     except:
         audio_dur = 12
 
-    total_duration = max(10, min(20, audio_dur))
-    logger.info(f"Audio: {audio_dur:.2f}s | Video: {total_duration:.2f}s")
+    # Match audio exactly; only enforce a minimum so we don't get 2s videos
+    total_duration = max(8.0, min(59.0, audio_dur))
+    logger.info(f"Final video duration: {total_duration:.2f}s (audio: {audio_dur:.2f}s)")
 
     words = split_script_into_words(script_text)
     logger.info(f"Words: {len(words)}")
@@ -647,24 +682,28 @@ def create_text_video(script_data, editor_data=None):
     if not words:
         words = ["Breaking", "News"]
 
-    # Limit to first 5 words
-    words = words[:5]
+    # Show more words (8 instead of 5) → faster pacing
+    words = words[:MAX_WORDS_PER_VIDEO]
+
+    # Proportional timing based on word length
+    word_timings = calculate_word_timings(words, total_duration)
+    logger.info("Word timing plan:")
+    for w, t in zip(words, word_timings):
+        logger.info(f"  '{w}' -> {t:.2f}s")
 
     # Build full frame sequence
     all_frames = []
     all_durations = []
 
-    # For each word: 5 frames
-    word_time = total_duration / len(words)
-    per_frame = word_time / 5
-
     for i, word in enumerate(words):
-        logger.info(f"Word {i+1}/{len(words)}: '{word}'")
+        logger.info(f"Word {i+1}/{len(words)}: '{word}' ({word_timings[i]:.2f}s)")
+
+        word_time = word_timings[i]
+        frame_durs = [word_time * fw for fw in FRAME_WEIGHTS]
 
         # Scattered letters for fight scene
         letters_scattered = []
         clean_word = word.strip()[:14]
-        base_x = 100
         for j, char in enumerate(clean_word):
             if char == ' ':
                 continue
@@ -677,38 +716,38 @@ def create_text_video(script_data, editor_data=None):
                 'weapon_angle': random.uniform(-60, 60)
             })
 
-        # Frame 1: Battle begins
+        # Frame 1: Battle begins — QUICK
         try:
             all_frames.append(frame_fight(word, scheme, letters_scattered))
-            all_durations.append(per_frame)
+            all_durations.append(frame_durs[0])
         except Exception as e:
             logger.warning(f"F1 fail: {e}")
 
-        # Frame 2: Clash
+        # Frame 2: Clash — QUICK
         try:
             all_frames.append(frame_clash(word, scheme, letters_scattered))
-            all_durations.append(per_frame)
+            all_durations.append(frame_durs[1])
         except Exception as e:
             logger.warning(f"F2 fail: {e}")
 
-        # Frame 3: Word formed on bar
+        # Frame 3: Word formed — HOLD (money shot)
         try:
             all_frames.append(frame_forming(word, scheme))
-            all_durations.append(per_frame)
+            all_durations.append(frame_durs[2])
         except Exception as e:
             logger.warning(f"F3 fail: {e}")
 
-        # Frame 4: Explosion
+        # Frame 4: Explosion — QUICK
         try:
             all_frames.append(frame_explosion(word, scheme, 0.5))
-            all_durations.append(per_frame)
+            all_durations.append(frame_durs[3])
         except Exception as e:
             logger.warning(f"F4 fail: {e}")
 
-        # Frame 5: Final display
+        # Frame 5: Final display — brief
         try:
             all_frames.append(frame_final(word, scheme))
-            all_durations.append(per_frame)
+            all_durations.append(frame_durs[4])
         except Exception as e:
             logger.warning(f"F5 fail: {e}")
 

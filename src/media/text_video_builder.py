@@ -1,11 +1,12 @@
 """
-src/media/text_video_builder.py - WARRIOR LETTER BATTLE
+src/media/text_video_builder.py - WARRIOR LETTER BATTLE v2
 - Extended white bar (top)
 - Letters fight with weapons to form words
 - Word drops with explosion
 - Final warrior display
-- FULL script shown (no word cap), synced to audio
-- Adaptive frames: fast words get fewer frames, slow words get more
+- FULL script shown (no word cap) — synced to audio
+- Adaptive frames: fast words get fewer frames, slow words get full battle
+- Optimized for 45-55s long-form Shorts
 """
 
 import os
@@ -24,7 +25,7 @@ logger = setup_logger(__name__)
 WIDTH = 1080
 HEIGHT = 1920
 WHITE_BAR_TOP = 0
-WHITE_BAR_BOTTOM = 420  # Extended bar (double)
+WHITE_BAR_BOTTOM = 420
 MAIN_TOP = 420
 MAIN_HEIGHT = HEIGHT - MAIN_TOP
 
@@ -51,6 +52,10 @@ BG_SCHEMES = [
 
 WEAPON_TYPES = ['sword', 'hammer', 'axe', 'spear', 'mace']
 
+
+# ============================================================
+# HELPERS
+# ============================================================
 
 def load_font(path, size):
     try:
@@ -118,7 +123,6 @@ def generate_audio(text, voice):
 # ============================================================
 
 def draw_dark_background(img, scheme):
-    """Dark cinematic background for main area"""
     draw = ImageDraw.Draw(img)
     bg1, bg2 = scheme['bg1'], scheme['bg2']
     for y in range(MAIN_TOP, HEIGHT):
@@ -127,14 +131,12 @@ def draw_dark_background(img, scheme):
         g = int(bg1[1] * (1 - ratio) + bg2[1] * ratio)
         b = int(bg1[2] * (1 - ratio) + bg2[2] * ratio)
         draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
-    # Diagonal slashes
     slash_color = tuple(min(255, c + 10) for c in bg2)
     for i in range(-HEIGHT, WIDTH + HEIGHT, 90):
         draw.line([(i, MAIN_TOP), (i + HEIGHT, HEIGHT)], fill=slash_color, width=1)
 
 
 def draw_white_bar(img, scheme):
-    """Extended white bar at top"""
     draw = ImageDraw.Draw(img)
     draw.rectangle([0, WHITE_BAR_TOP, WIDTH, WHITE_BAR_BOTTOM], fill=(248, 248, 252))
     draw.rectangle([0, WHITE_BAR_BOTTOM, WIDTH, WHITE_BAR_BOTTOM + 8], fill=scheme['accent'])
@@ -142,7 +144,6 @@ def draw_white_bar(img, scheme):
 
 
 def draw_branding(img, scheme):
-    """Top + bottom branding"""
     draw = ImageDraw.Draw(img)
     font = load_font(FONT_BOLD, 42)
     draw.text((40, 45), "UNCOVERED USA", font=font, fill=(255, 255, 255), anchor='lm')
@@ -204,7 +205,7 @@ def draw_weapon(draw, x, y, size, angle_deg, color):
 
 
 # ============================================================
-# FRAME TYPES
+# FRAMES
 # ============================================================
 
 def frame_fight(word, scheme, letters_scattered):
@@ -406,10 +407,11 @@ def frame_final(word, scheme):
 
 
 # ============================================================
-# SCRIPT SPLIT
+# SCRIPT SPLIT + TIMING
 # ============================================================
 
 def split_script_into_words(script_text):
+    """Split script into displayable word units (keeps numbers+units together)."""
     words = script_text.split()
     result = []
     i = 0
@@ -433,20 +435,27 @@ def split_script_into_words(script_text):
 def calculate_word_timings(words, total_duration):
     """
     Distribute total_duration across words proportionally to character length.
-    Longer words get slightly more time, short words get a floor.
+    Longer words get slightly more time; short words get a floor.
+    Guarantees sum == total_duration (no drift).
     """
     if not words:
         return []
+
     weights = [max(len(w), 4) for w in words]
     total_weight = sum(weights)
-    return [(w / total_weight) * total_duration for w in weights]
+    timings = [(w / total_weight) * total_duration for w in weights]
+
+    # Fix float drift so the sum exactly equals total_duration
+    drift = total_duration - sum(timings)
+    timings[-1] += drift
+    return timings
 
 
 def get_frame_plan(word_time):
     """
     Adaptive frame plan based on available time for the word.
     Returns list of (frame_name, weight) — weights sum to 1.0.
-    Fast words get fewer frames; slow words get the full battle sequence.
+    Fast words get fewer frames; slow words get the full battle.
     """
     if word_time < 0.35:
         # Ultra fast — single frame, just the formed word
@@ -512,7 +521,7 @@ def build_video(frame_paths, frame_durations, audio_path, output_path):
     ]
 
     logger.info(f"FFmpeg: {len(frame_paths)} frames, {total_duration:.1f}s total")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     if r.returncode != 0:
         logger.error(f"FFmpeg failed: {r.stderr[-400:]}")
         return False
@@ -566,22 +575,24 @@ def create_text_video(script_data, editor_data=None):
     except:
         audio_dur = 12
 
-    # NO CAP — video is exactly as long as audio
-    total_duration = audio_dur
+    # Video duration = audio duration, capped at 59s (Shorts max)
+    total_duration = max(8.0, min(59.0, audio_dur))
     logger.info(f"Final video duration: {total_duration:.2f}s (audio: {audio_dur:.2f}s)")
 
     words = split_script_into_words(script_text)
-    logger.info(f"Words: {len(words)}")
+    logger.info(f"Total words: {len(words)}")
 
     if not words:
         words = ["Breaking", "News"]
 
-    # NO CAP — show every word
+    # No word cap — show every word, synced to audio
     word_timings = calculate_word_timings(words, total_duration)
 
-    logger.info("Word timing plan (first 10):")
-    for w, t in zip(words[:10], word_timings[:10]):
+    logger.info("Word timing plan (first 12):")
+    for w, t in zip(words[:12], word_timings[:12]):
         logger.info(f"  '{w}' -> {t:.2f}s")
+    if len(words) > 12:
+        logger.info(f"  ... and {len(words)-12} more words")
 
     all_frames = []
     all_durations = []
@@ -634,6 +645,7 @@ def create_text_video(script_data, editor_data=None):
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
         logger.info(f"VIDEO READY: {output_path} ({size_mb:.1f}MB)")
 
+    # Cleanup temp frames
     try:
         for f in glob.glob(os.path.join(PATHS['temp'], "f[0-9]_*.png")):
             os.remove(f)

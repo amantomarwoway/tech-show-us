@@ -1,7 +1,7 @@
 """
-src/config.py - AUTONOMOUS BOT CONFIG v4
-- Duration capped at 20s (memory safety for GitHub Actions)
-- Faster TTS speed
+src/config.py - AUTONOMOUS BOT CONFIG v5
+- Duration expanded to 40-55s for real audience value
+- Word target raised to 120
 """
 
 import os
@@ -34,16 +34,16 @@ STORY_TYPE_WEIGHTS = {
     "news": {"trend_momentum": 0.35, "audience_relevance": 0.20, "news_importance": 0.15, "curiosity": 0.15, "novelty": 0.05, "visual_potential": 0.05, "search_potential": 0.05, "competition_opportunity": 0.00}
 }
 
-# ✅ FIXED: Duration capped at 20s for memory safety
+# ✅ FIXED: Duration expanded to 40-55s, more words for real value
 VIDEO_CONFIG = {
     "WIDTH": 1080, "HEIGHT": 1920, "WHITE_BAR_HEIGHT": 210,
     "BLACK_TOP_STRIP": 180, "BLACK_BOTTOM_STRIP": 200,
     "BLACK_BORDER": 16, "CORNER_RADIUS": 38,
     "CLIP_DENSITY": 0.8,
-    "DURATION_MIN": 12, "DURATION_MAX": 20,   # ← Capped at 20s
+    "DURATION_MIN": 40, "DURATION_MAX": 55,   # ← EXPANDED
     "FPS_CHOICES": [29.97, 29.98, 59.94, 59.95],
     "FIRST_WORDS_PUNCH": 1.4, "KEYWORD_PUNCH": 1.2, "OVERLAP": 0.92,
-    "TTS_SPEED": 1.15, "WORDS_TARGET": 50     # ← 80 → 50 words
+    "TTS_SPEED": 1.08, "WORDS_TARGET": 120    # ← RAISED (was 50)
 }
 
 # ✅ FIXED: Faster TTS speeds for shorter audio
@@ -53,7 +53,7 @@ TTS_CONFIG = {
     "model_path": "models/en_US-ryan-medium.onnx",
     "config_path": "models/en_US-ryan-medium.onnx.json",
     "length_scale": 1.0, "noise_scale": 0.6, "noise_w_scale": 0.75,
-    "speed_choices": [1.15, 1.2, 1.25],        # ← Faster speeds
+    "speed_choices": [1.08, 1.12, 1.15],
     "american_filter": "afftdn=nf=-25,acompressor=threshold=-20dB:ratio=3:attack=50:release=200,volume=1.2"
 }
 
@@ -130,6 +130,7 @@ TOP_REAL_SOURCES = ["google_trends_breakout", "google_trends_trending_now", "goo
 
 AUTONOMOUS_MODE = True
 
+
 def get_api_keys():
     return {
         "gemini": os.getenv("GEMINI_API_KEY", ""),
@@ -143,17 +144,21 @@ def get_api_keys():
         "youtube_refresh_token": os.getenv("YT_REFRESH_TOKEN", "")
     }
 
+
 PATHS = {
     "data": "data", "models": "models", "output": "output",
     "output_videos": "output/videos", "output_thumbnails": "output/thumbnails",
     "temp": "temp", "logs": "logs", "cache": "data/cache"
 }
 
+
 def ensure_directories():
     for path in PATHS.values():
         os.makedirs(path, exist_ok=True)
 
+
 ensure_directories()
+
 
 def get_env(key, default=""):
     return os.getenv(key, default)

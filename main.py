@@ -1,10 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v18
-- Self evolution runs FIRST (learns + repairs)
-- All processing BEFORE upload
-- Uploader ABSOLUTE LAST
-- FORCED 45-55s long-form Shorts
-- PROTECTS script from fact_extractor truncation (via v2 extractor + guards)
+main.py - AUTONOMOUS TEXT BOT - FINAL v19
+- Self evolution FIRST, Uploader LAST
+- FORCED 45-55s long-form
+- PROTECTED script from truncation
+- FIXED duplicate detection (uploaded-only + stricter match)
+- Expanded candidate pool
 """
 
 import os
@@ -28,6 +28,8 @@ logger = setup_logger(__name__)
 FORCED_MIN_DURATION = 45
 FORCED_MAX_DURATION = 55
 MIN_ACCEPTABLE_WORDS = 80
+CANDIDATE_POOL_SIZE = 15        # was 8
+BOSS_FALLBACK_SCORE = 40        # was 50
 
 
 def safe_import(module_path, function_name=None):
@@ -216,7 +218,6 @@ def research_god_main():
             score = check_trends_actual(s.get('title', ''))
             if score >= 40:
                 verified.append(s)
-                logger.info(f"  REAL TREND ({score}): {s.get('title', '')[:50]}")
 
     if not verified:
         logger.error("No verified trending topics")
@@ -242,10 +243,7 @@ def research_god_main():
         ranked = sorted(unique, key=lambda x: x.get('breakout_score', 0), reverse=True)
 
     logger.info(f"LEG 1: {len(ranked)} verified trending")
-    for i, s in enumerate(ranked[:5]):
-        logger.info(f"  #{i+1}: {s.get('title', '')[:60]}")
-
-    return ranked[:10]
+    return ranked[:CANDIDATE_POOL_SIZE]
 
 
 def check_trends_actual(title):
@@ -270,25 +268,12 @@ def check_trends_actual(title):
         return 40
 
 
-def get_fallback_stories():
-    return [
-        {"title": "Apple holds 200 billion in cash reserves", "url": "", "source": "fallback",
-         "breakout_score": 6500, "is_breakout": True, "search_volume": 90},
-        {"title": "SpaceX launches 50th rocket this year", "url": "", "source": "fallback",
-         "breakout_score": 6300, "is_breakout": True, "search_volume": 88},
-    ]
-
-
 def editor_god_main(script_data, candidate):
-    """
-    Extract facts WITHOUT letting the extractor shrink the script.
-    """
     logger.info("=" * 60)
     logger.info("LEG 2: EDITOR - FACT EXTRACTION")
     logger.info("=" * 60)
 
     editor_data = {"facts": [], "visuals": []}
-
     original_script = script_data.get('short_script', '')
     original_wc = len(original_script.split())
     logger.info(f"Original script BEFORE editor: {original_wc} words")
@@ -299,18 +284,14 @@ def editor_god_main(script_data, candidate):
 
         if result:
             editor_data['facts'] = result.get('facts', [])
-
             new_script = result.get('script', '')
             new_wc = len(new_script.split()) if new_script else 0
 
             if new_script and new_wc >= int(original_wc * 0.95):
                 script_data['short_script'] = new_script
-                logger.info(f"Editor script ACCEPTED: {new_wc} words (was {original_wc})")
+                logger.info(f"Editor script ACCEPTED: {new_wc} words")
             elif new_script:
-                logger.warning(
-                    f"Editor tried to shrink script: {original_wc} -> {new_wc} words "
-                    f"- KEEPING ORIGINAL"
-                )
+                logger.warning(f"Editor tried to shrink: {original_wc} -> {new_wc} - KEEPING ORIGINAL")
             else:
                 logger.info("Editor returned no script - keeping original")
 
@@ -339,6 +320,7 @@ def boss_approval_main(video_path, script_data, full_story):
             g = gate(script_data, full_story)
             if not g.get('passed', False):
                 result['reason'] = g.get('reason', 'Quality gate failed')
+                logger.info(f"LEG 3: REJECTED by gate - {result['reason']}")
                 return result
         ranker = safe_import('src.intelligence.story_ranker', 'calculate_publish_score')
         if ranker:
@@ -355,7 +337,7 @@ def boss_approval_main(video_path, script_data, full_story):
         else:
             result['approved'] = True
             result['score'] = 75
-            result['reason'] = "Fallback"
+            result['reason'] = "Fallback (no ranker)"
     except Exception as e:
         logger.error(f"Boss: {e}")
         result['approved'] = True
@@ -417,6 +399,11 @@ def self_evolution_main():
     except Exception as e:
         logger.warning(f"Optimizer: {e}")
     try:
+        from src.learning.self_repair import run_last_diagnostics if False else run_self_diagnostics
+        pass
+    except Exception:
+        pass
+    try:
         from src.learning.self_repair import run_self_diagnostics
         run_self_diagnostics()
     except Exception as e:
@@ -446,40 +433,37 @@ def build_prompt(topic, video_duration=45):
     min_words = int(target_words * 0.85)
     max_words = int(target_words * 1.15)
 
-    return f"""You are a VIRAL YouTube Shorts scriptwriter. Your scripts MUST hit a strict word count.
+    return f"""You are a VIRAL YouTube Shorts scriptwriter. Scripts MUST hit strict word count.
 
 TOPIC: {topic}
-TARGET DURATION: {video_duration} seconds
-REQUIRED WORD COUNT: {target_words} words (minimum {min_words}, maximum {max_words})
+TARGET: {video_duration}s
+WORD COUNT: {target_words} (min {min_words}, max {max_words})
 
-================================================================
-CRITICAL RULES:
-================================================================
-1. Script MUST be {min_words}-{max_words} words. Count before returning.
-2. NO filler. Every sentence adds NEW information.
-3. Include SPECIFIC numbers, dates, dollar amounts, percentages, or counts.
-4. Write in a natural speaking rhythm for TTS (short sentences).
+RULES:
+1. Script MUST be {min_words}-{max_words} words.
+2. NO filler. Every sentence has new info.
+3. Include numbers, dates, amounts, percentages.
+4. Natural TTS rhythm (short sentences).
 
-TITLE (30-50 chars, NO question mark, ends with 1 hashtag):
+TITLE (30-50 chars, NO "?", 1 hashtag):
 Example: "The Reason This Changed Everything #Facts"
 
-HOOK (4-6 words, ALL CAPS, attention-grabbing):
+HOOK (4-6 words ALL CAPS):
 Example: "NOBODY SAW THIS COMING"
 
-SCRIPT STRUCTURE ({target_words} words):
-- Line 1: HOOK (under 8 words, dramatic statement)
-- Lines 2-8: 5-7 surprising facts, EACH with a specific number/date/name
-- Include 1 direct question to the viewer midway ("Did you know...")
-- Include context — WHY this matters to the average person
-- End: mystery tease or "here is what nobody is saying"
-- NO generic phrases like "in conclusion", "stay tuned", "let's dive in"
+SCRIPT ({target_words} words):
+- Line 1: HOOK
+- Then 5-7 surprising facts, each with a number/date/name
+- 1 direct question to viewer midway
+- End with mystery
+- NO "in conclusion", "stay tuned"
 
-VISUAL QUERIES (6 queries, 2-4 words, SPECIFIC):
-GOOD: "stock market chart", "government building"
+VISUAL QUERIES (6, 2-4 words each):
+GOOD: "stock market chart"
 
 OUTPUT JSON ONLY:
 {{
-    "short_script": "the full {target_words}-word script",
+    "short_script": "the {target_words}-word script",
     "seo_youtube_title": "Statement title #Hashtag",
     "description": "SEO description",
     "hashtags": ["#Facts", "#Trending", "#Shorts"],
@@ -557,9 +541,7 @@ def generate_script_god(story):
         topic = raw
 
     video_duration = get_forced_duration()
-    target_words = int(video_duration * 2.3)
-    logger.info(f"Target: {video_duration}s / ~{target_words} words")
-
+    logger.info(f"Target: {video_duration}s / ~{int(video_duration * 2.3)} words")
     prompt = build_prompt(topic, video_duration)
 
     gk = os.getenv("GEMINI_API_KEY", "")
@@ -567,18 +549,14 @@ def generate_script_god(story):
         try:
             from google import genai
             client = genai.Client(api_key=gk)
-
             for attempt in range(1, 4):
                 try:
                     logger.info(f"Gemini 3.6-flash attempt {attempt}/3")
-
                     full_prompt = prompt
                     if attempt > 1:
                         full_prompt = (
-                            "IMPORTANT: Your previous attempt was TOO SHORT. "
-                            f"You MUST write at least {MIN_ACCEPTABLE_WORDS} words this time. "
-                            "Expand every fact with specific numbers, names, dates, and context. "
-                            "Do not return a script shorter than 100 words.\n\n"
+                            f"IMPORTANT: Previous was TOO SHORT. Write at least "
+                            f"{MIN_ACCEPTABLE_WORDS} words this time.\n\n"
                         ) + prompt
 
                     resp = client.models.generate_content(
@@ -587,25 +565,18 @@ def generate_script_god(story):
                     text = getattr(resp, 'text', '')
                     if not text:
                         continue
-
                     data = process_ai_response(text, "Gemini-3.6-flash")
                     if not data:
                         continue
-
                     actual_words = len(data.get('short_script', '').split())
                     logger.info(f"   Script length: {actual_words} words")
-
                     if actual_words < MIN_ACCEPTABLE_WORDS:
-                        logger.warning(
-                            f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) - retrying"
-                        )
+                        logger.warning(f"   TOO SHORT - retrying")
                         if attempt < 3:
                             time.sleep(2)
                         continue
-
                     logger.info(f"   OK: {actual_words} words")
                     return data
-
                 except Exception as e:
                     logger.warning(f"Gemini attempt {attempt}: {str(e)[:80]}")
                     if attempt < 3:
@@ -613,7 +584,7 @@ def generate_script_god(story):
         except Exception as e:
             logger.error(f"Gemini client failed: {e}")
 
-    logger.warning("Gemini failed all attempts - using fallback")
+    logger.warning("Gemini failed - using fallback")
     return get_fallback_script(topic)
 
 
@@ -661,7 +632,6 @@ def create_video_god(script_data, editor_data):
     logger.info("=" * 60)
     logger.info("VIDEO GENERATION - TEXT MODE")
     logger.info("=" * 60)
-
     wc_before = len(script_data.get('short_script', '').split())
     logger.info(f"Script going into video builder: {wc_before} words")
 
@@ -701,31 +671,72 @@ def create_thumbnail(candidate, script_data):
         return None
 
 
+# ============================================================
+# FIXED DUPLICATE DETECTION
+# ============================================================
+
+def _significant_words(title):
+    """Extract significant words (len > 4) from a title."""
+    clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
+    return set(w for w in clean.split() if len(w) > 4)
+
+
 def is_duplicate(title):
+    """
+    Check if title duplicates a RECENTLY UPLOADED story.
+    - Only compares against UPLOADED stories (not pending/saved-in-this-run)
+    - Requires 4+ overlapping significant words
+    - Or 3+ if that covers 60%+ of the shorter title
+    """
     if not title:
         return False
     try:
         from src.database import get_connection
-        clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
-        words = [w for w in clean.split() if len(w) > 3][:5]
-        key = ' '.join(words)
-        if not key:
+        key_words = _significant_words(title)
+        if len(key_words) < 3:
             return False
+
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute('''SELECT title FROM stories WHERE created_at > datetime('now', '-3 days')''')
+        # ONLY compare against UPLOADED stories within last 2 days
+        cur.execute('''
+            SELECT s.title FROM stories s
+            INNER JOIN uploads u ON u.story_id = s.id
+            WHERE s.created_at > datetime('now', '-2 days')
+        ''')
         rows = cur.fetchall()
         conn.close()
+
         for row in rows:
-            ex = re.sub(r'[^\w\s]', '', row[0].lower()).strip()
-            ex_words = [w for w in ex.split() if len(w) > 3][:5]
-            ex_key = ' '.join(ex_words)
-            if key and ex_key:
-                if len(set(key.split()) & set(ex_key.split())) >= 3:
+            ex_words = _significant_words(row[0])
+            if not ex_words:
+                continue
+            overlap = len(key_words & ex_words)
+            # Require 4+ overlap
+            if overlap >= 4:
+                logger.info(f"   Duplicate vs uploaded: {overlap} words match")
+                return True
+            # Or 3+ with 60%+ coverage of shorter
+            if overlap >= 3:
+                min_len = min(len(key_words), len(ex_words))
+                if min_len > 0 and overlap / min_len >= 0.6:
+                    logger.info(f"   Duplicate (60% match): {overlap}/{min_len}")
                     return True
         return False
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Duplicate check failed: {e}")
         return False
+
+
+def is_similar_this_run(title, seen_sets):
+    """Check if title is similar to any title processed earlier in THIS run."""
+    key_words = _significant_words(title)
+    if len(key_words) < 3:
+        return False
+    for prev in seen_sets:
+        if len(key_words & prev) >= 4:
+            return True
+    return False
 
 
 def main():
@@ -767,7 +778,7 @@ def main():
     logger.info("=" * 60)
 
     active = []
-    for s in stories[:10]:
+    for s in stories[:12]:
         is_active, score = is_audience_active(s)
         s['activity_score'] = score
         if is_active:
@@ -777,22 +788,30 @@ def main():
             logger.info(f"   SKIP ({score:.0f}): {s.get('title', '')[:50]}")
 
     if not active:
-        logger.warning("No active - using top 3")
-        active = stories[:3]
-    else:
-        logger.info(f"{len(active)} ACTIVE topics")
+        logger.warning("No active - using top 5")
+        active = stories[:5]
 
     stories = active
 
     approved = None
     best_rejected = None
     skipped = 0
+    seen_this_run = []   # sets of significant words from this run
 
-    for i, candidate in enumerate(stories[:8]):
-        logger.info(f"\nCANDIDATE {i+1}: {candidate.get('title', '')[:60]}")
+    for i, candidate in enumerate(stories[:CANDIDATE_POOL_SIZE]):
+        title = candidate.get('title', '')
+        logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
 
-        if is_duplicate(candidate.get('title', '')):
-            logger.warning("Duplicate")
+        # In-run similarity check
+        if is_similar_this_run(title, seen_this_run):
+            logger.warning("Similar topic already processed this run - skip")
+            skipped += 1
+            continue
+        seen_this_run.append(_significant_words(title))
+
+        # DB duplicate check (uploaded-only)
+        if is_duplicate(title):
+            logger.warning("Duplicate of recent upload")
             skipped += 1
             continue
 
@@ -806,9 +825,8 @@ def main():
             continue
         if script_data.get('confidence_score', 0) < 60:
             continue
-
         if wc_gen < MIN_ACCEPTABLE_WORDS:
-            logger.warning(f"Script too short ({wc_gen} words) - skipping candidate")
+            logger.warning(f"Script too short ({wc_gen}) - skip candidate")
             continue
 
         fc = safe_import('src.verification.claim_checker', 'fact_check')
@@ -823,7 +841,7 @@ def main():
         wc_final = len(script_data.get('short_script', '').split())
         logger.info(f"FINAL script before video: {wc_final} words")
         if wc_final < MIN_ACCEPTABLE_WORDS:
-            logger.error(f"Script truncated to {wc_final} words - skipping candidate")
+            logger.error(f"Script truncated to {wc_final} - skip candidate")
             continue
 
         full_story = {**candidate, **script_data}
@@ -831,7 +849,7 @@ def main():
         video_path = create_video_god(script_data, editor_data)
 
         if not video_path or not os.path.exists(video_path):
-            logger.warning("Video missing - skipping candidate")
+            logger.warning("Video missing - skip candidate")
             continue
 
         boss_data = boss_approval_main(video_path, script_data, full_story)
@@ -845,11 +863,13 @@ def main():
         approved = (candidate, script_data, editor_data, boss_data, story_id, video_path)
         break
 
-    if not approved and best_rejected and best_rejected[3].get('score', 0) >= 50:
+    # Fallback to best rejected if score >= BOSS_FALLBACK_SCORE
+    if not approved and best_rejected and best_rejected[3].get('score', 0) >= BOSS_FALLBACK_SCORE:
+        logger.info(f"Using best rejected (score {best_rejected[3].get('score', 0):.1f})")
         approved = best_rejected
 
     if not approved:
-        logger.error("All rejected - no upload")
+        logger.error(f"All rejected - no upload (skipped {skipped} duplicates)")
         return
 
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved

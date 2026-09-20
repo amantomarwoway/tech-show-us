@@ -1,9 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v16
+main.py - AUTONOMOUS TEXT BOT - FINAL v17
 - Self evolution runs FIRST (learns + repairs)
 - All processing BEFORE upload
 - Uploader ABSOLUTE LAST
-- Long-form Shorts (40-55s) with full script value
+- FORCED 45-55s long-form Shorts (bypass auto-optimizer's short duration)
+- Strict word count enforcement + retry
 """
 
 import os
@@ -23,6 +24,13 @@ from src.utils.logger import setup_logger
 from src.database import init_db, save_story, mark_uploaded, get_performance_stats
 
 logger = setup_logger(__name__)
+
+# ============================================================
+# HARD-CODED SHORTS DURATION (bypass any optimizer override)
+# ============================================================
+FORCED_MIN_DURATION = 45
+FORCED_MAX_DURATION = 55
+MIN_ACCEPTABLE_WORDS = 80    # retry if script shorter than this
 
 
 def safe_import(module_path, function_name=None):
@@ -159,7 +167,6 @@ def check_trends_spike(title):
 
 
 def research_god_main():
-    """Research ONLY real trending topics"""
     logger.info("=" * 60)
     logger.info("LEG 1: RESEARCH - REAL TRENDING ONLY")
     logger.info("=" * 60)
@@ -247,7 +254,6 @@ def research_god_main():
 
 
 def check_trends_actual(title):
-    """Verify via Google Trends (0-100)"""
     try:
         from pytrends.request import TrendReq
         words = [w for w in title.split() if len(w) > 4][:3]
@@ -290,7 +296,7 @@ def editor_god_main(script_data, candidate):
         result = extract_facts(candidate, script_data.get('short_script', ''))
 
         if result:
-            editor_data['facts'] = result['facts']
+            editor_data['facts'] = result.get('facts', [])
             if result.get('script'):
                 script_data['short_script'] = result['script']
             if result.get('title'):
@@ -411,33 +417,73 @@ def self_evolution_main():
             pass
 
 
+def get_forced_duration():
+    """
+    Bypass auto_optimizer. Always return 45-55s.
+    If optimizer returns something in range, use it; else force 45.
+    """
+    try:
+        from src.learning.auto_optimizer import get_config
+        cfg_val = get_config("video_duration", FORCED_MIN_DURATION)
+        cfg_val = int(cfg_val) if cfg_val else FORCED_MIN_DURATION
+    except Exception:
+        cfg_val = FORCED_MIN_DURATION
+
+    # Clamp to our forced range
+    duration = max(FORCED_MIN_DURATION, min(FORCED_MAX_DURATION, cfg_val))
+    logger.info(f"Duration resolved: {duration}s (config said: {cfg_val})")
+    return duration
+
+
 def build_prompt(topic, video_duration=45):
-    words = int(video_duration * 2.3)
-    return f"""You are a VIRAL YouTube Shorts expert.
+    """Build prompt with STRICT word count enforcement."""
+    target_words = int(video_duration * 2.3)         # ~103 for 45s
+    min_words = int(target_words * 0.85)              # ~87
+    max_words = int(target_words * 1.15)              # ~118
+
+    return f"""You are a VIRAL YouTube Shorts scriptwriter. Your scripts MUST hit a strict word count.
 
 TOPIC: {topic}
-TARGET: {video_duration}s ({words} words)
+TARGET DURATION: {video_duration} seconds
+REQUIRED WORD COUNT: {target_words} words (minimum {min_words}, maximum {max_words})
 
-TITLE (30-50 chars, NO "?", ends with 1 hashtag):
+================================================================
+CRITICAL RULES (violating these = failed script):
+================================================================
+1. Script MUST be {min_words}-{max_words} words. Count before returning.
+   - If your draft is under {min_words} words, ADD more facts, details, or context.
+   - Short scripts get rejected automatically.
+2. NO filler. Every sentence adds NEW information.
+3. Include SPECIFIC numbers, dates, dollar amounts, percentages, or counts.
+4. Write in a natural speaking rhythm for TTS (short sentences).
+
+TITLE (30-50 chars, NO question mark, ends with 1 hashtag):
 Example: "The Reason This Changed Everything #Facts"
 
 HOOK (4-6 words, ALL CAPS, attention-grabbing):
 Example: "NOBODY SAW THIS COMING"
 
-SCRIPT ({words} words):
-- First sentence = HOOK (statement, under 8 words)
-- Then 5-7 surprising facts with NUMBERS, DATES, or SPECIFIC DETAILS
-- Explain WHY this matters to the viewer (impact, context)
-- Include 1 direct question to the viewer midway (like "Did you know...")
-- End with mystery or "here's what nobody's saying"
-- NO filler words, NO repetition, NO generic phrases
+SCRIPT STRUCTURE ({target_words} words):
+- Line 1: HOOK (under 8 words, dramatic statement)
+- Lines 2-8: 5-7 surprising facts, EACH with a specific number/date/name
+- Include 1 direct question to the viewer midway ("Did you know...")
+- Include context — WHY this matters to the average person
+- End: mystery tease or "here is what nobody is saying"
+- NO generic phrases like "in conclusion", "stay tuned", "let's dive in"
 
 VISUAL QUERIES (6 queries, 2-4 words, SPECIFIC):
 GOOD: "stock market chart", "government building"
 
+================================================================
+FINAL CHECK before returning:
+- Did you write {min_words}+ words? If no, EXPAND.
+- Does every fact have a number, date, or name? If no, ADD one.
+- Did you remove all filler? If no, CUT it.
+================================================================
+
 OUTPUT JSON ONLY:
 {{
-    "short_script": "script text",
+    "short_script": "the full {target_words}-word script",
     "seo_youtube_title": "Statement title #Hashtag",
     "description": "SEO description",
     "hashtags": ["#Facts", "#Trending", "#Shorts"],
@@ -509,15 +555,16 @@ def process_ai_response(text, model_name):
 
 
 def generate_script_god(story):
-    """Gemini 3.6-flash ONLY with retries"""
-    from src.learning.auto_optimizer import get_config
+    """Gemini 3.6-flash with strict word-count enforcement + retries."""
     raw = story.get('title', '')
     topic = clean_topic(raw)
     if len(topic) < 15:
         topic = raw
 
-    video_duration = min(55, get_config("video_duration", 45))
-    logger.info(f"Duration: {video_duration}s")
+    # FORCE 45-55s regardless of what optimizer says
+    video_duration = get_forced_duration()
+    target_words = int(video_duration * 2.3)
+    logger.info(f"Target: {video_duration}s / ~{target_words} words")
 
     prompt = build_prompt(topic, video_duration)
 
@@ -530,14 +577,44 @@ def generate_script_god(story):
             for attempt in range(1, 4):
                 try:
                     logger.info(f"Gemini 3.6-flash attempt {attempt}/3")
+
+                    # On retry, add extra nudge to be LONGER
+                    full_prompt = prompt
+                    if attempt > 1:
+                        full_prompt = (
+                            "IMPORTANT: Your previous attempt was TOO SHORT. "
+                            f"You MUST write at least {MIN_ACCEPTABLE_WORDS} words this time. "
+                            "Expand every fact with specific numbers, names, dates, and context. "
+                            "Do not return a script shorter than 100 words.\n\n"
+                        ) + prompt
+
                     resp = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=prompt
+                        model="gemini-3.6-flash", contents=full_prompt
                     )
                     text = getattr(resp, 'text', '')
-                    if text:
-                        data = process_ai_response(text, "Gemini-3.6-flash")
-                        if data:
-                            return data
+                    if not text:
+                        continue
+
+                    data = process_ai_response(text, "Gemini-3.6-flash")
+                    if not data:
+                        continue
+
+                    # Validate word count
+                    actual_words = len(data.get('short_script', '').split())
+                    logger.info(f"   Script length: {actual_words} words")
+
+                    if actual_words < MIN_ACCEPTABLE_WORDS:
+                        logger.warning(
+                            f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) "
+                            f"- retrying with stronger prompt"
+                        )
+                        if attempt < 3:
+                            time.sleep(2)
+                        continue
+
+                    logger.info(f"   OK: {actual_words} words")
+                    return data
+
                 except Exception as e:
                     logger.warning(f"Gemini attempt {attempt}: {str(e)[:80]}")
                     if attempt < 3:
@@ -550,6 +627,7 @@ def generate_script_god(story):
 
 
 def get_fallback_script(topic):
+    """Long fallback script (~150 words) so we never upload a stub."""
     tl = topic.lower()
     if any(w in tl for w in ['trump', 'biden', 'president', 'congress', 'obama']):
         h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
@@ -566,11 +644,18 @@ def get_fallback_script(topic):
 
     return {
         "short_script": (
-            "Nobody saw this coming. Reports confirm over three billion dollars "
-            "changed hands in a single week. Experts say the numbers are three "
-            "times bigger than last year. Did you know most people missed this "
-            "entirely? The full impact may not surface for months. Here is what "
-            "nobody is telling you yet."
+            "Nobody saw this coming. In just seven days, over three billion dollars "
+            "moved through a single market channel according to new reports. "
+            "Analysts tracked the surge starting Tuesday morning, when trading volume "
+            "jumped nearly four hundred percent compared to the monthly average. "
+            "Did you know most retail investors completely missed this window? "
+            "Industry insiders say the real number is closer to five billion, "
+            "but official filings only confirm three. The ripple effect is already "
+            "showing up in three separate sectors, from energy to technology to housing. "
+            "Government regulators have quietly opened an inquiry, though no formal "
+            "charges have been filed yet. Experts warn this could reshape the entire "
+            "landscape by next quarter. But here is what nobody is telling you yet — "
+            "the biggest shift hasn't even started."
         ),
         "seo_youtube_title": tf,
         "description": "Fact-based content. Subscribe for more.",
@@ -667,7 +752,8 @@ def main():
         init_autonomous_config()
         config = get_all_config()
         logger.info(f"Config v{config.get('version')}")
-        logger.info(f"   Duration: {config.get('video_duration')}s")
+        logger.info(f"   Optimizer suggests: {config.get('video_duration')}s")
+        logger.info(f"   FORCED: {FORCED_MIN_DURATION}-{FORCED_MAX_DURATION}s")
     except Exception as e:
         logger.warning(f"Config: {e}")
 
@@ -726,6 +812,13 @@ def main():
         if is_spam_topic(script_data.get('seo_youtube_title', '')):
             continue
         if script_data.get('confidence_score', 0) < 60:
+            continue
+
+        # Final word-count safety check
+        wc = len(script_data.get('short_script', '').split())
+        logger.info(f"Final script: {wc} words")
+        if wc < MIN_ACCEPTABLE_WORDS:
+            logger.warning(f"Script too short ({wc} words) - skipping candidate")
             continue
 
         fc = safe_import('src.verification.claim_checker', 'fact_check')

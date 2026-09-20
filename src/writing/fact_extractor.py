@@ -1,6 +1,8 @@
 """
-src/writing/fact_extractor.py - Extract SPECIFIC facts from story
-Returns: facts list + script + title + hook
+src/writing/fact_extractor.py - v2
+- Extracts facts + title + hook from story
+- NEVER returns a script shorter than the original
+- Returns None on AI failure so caller keeps original script intact
 """
 
 import os
@@ -14,51 +16,41 @@ logger = setup_logger(__name__)
 
 def extract_facts(story, raw_script=""):
     """
-    Extract 2-4 SPECIFIC facts from a story
-    Returns: dict with facts/title/hook/script OR None
+    Extract facts + title + hook.
+    IMPORTANT: This function will NEVER return a shorter script than raw_script.
+    On AI failure, returns None (caller keeps original).
     """
     topic = story.get('title', '')
     url = story.get('url', '')
-    
+    original_wc = len(raw_script.split())
+
     prompt = f"""Extract SPECIFIC FACTS from this news story.
 
 TOPIC: {topic}
 SOURCE: {url}
-CONTEXT: {raw_script[:500]}
+CONTEXT: {raw_script[:800]}
 
-Extract 3 SPECIFIC FACTS in this format:
+Extract 3 SPECIFIC FACTS:
 - Each fact must have a NUMBER or SPECIFIC DETAIL
 - NO generic statements
-- Facts should be interesting, surprising, valuable
+- Must be interesting and surprising
 
-GOOD FACTS:
-- "Apple holds $200 billion in cash reserves"
-- "That is more than 100 countries' combined GDP"
-- "They are spending $50 billion on AI research in 2026"
-
-BAD FACTS:
-- "This is a developing story"
-- "People are talking about it"
-- "It affects millions of people"
+GOOD: "Apple holds 200 billion in cash reserves"
+BAD:  "This is a developing story"
 
 Also create:
 - TITLE: 30-50 chars, statement (NO "?"), ends with 1 hashtag
-- HOOK: 4-5 words ALL CAPS for top of video
-- SCRIPT: 40-50 words spoken narrative (voiceover)
+- HOOK: 4-6 words, ALL CAPS
 
 OUTPUT JSON ONLY:
 {{
-    "facts": [
-        "fact 1 with specific number",
-        "fact 2 with specific detail",
-        "fact 3 with specific number"
-    ],
+    "facts": ["fact 1 with number", "fact 2 with detail", "fact 3 with number"],
     "title": "Statement title #Hashtag",
-    "hook": "TOP HOOK TEXT HERE",
-    "script": "40-50 word voiceover script"
-}}"""
-    
-    # Try Gemini 3.6
+    "hook": "TOP HOOK TEXT HERE"
+}}
+
+DO NOT include a "script" field. Only facts, title, hook."""
+
     gk = os.getenv("GEMINI_API_KEY", "")
     if gk:
         try:
@@ -72,7 +64,7 @@ OUTPUT JSON ONLY:
                         contents=prompt
                     )
                     text = getattr(resp, 'text', '')
-                    result = parse_response(text)
+                    result = parse_response(text, original_wc)
                     if result:
                         return result
                 except Exception as e:
@@ -81,8 +73,7 @@ OUTPUT JSON ONLY:
                         time.sleep(3)
         except Exception as e:
             logger.warning(f"Gemini client failed: {e}")
-    
-    # Try GitHub Models
+
     gh = os.getenv("GITHUB_TOKEN", "")
     if gh:
         for endpoint in ["https://models.inference.ai.azure.com",
@@ -96,7 +87,7 @@ OUTPUT JSON ONLY:
                         r = client.chat.completions.create(
                             model=model,
                             messages=[
-                                {"role": "system", "content": "Extract facts from news. JSON only."},
+                                {"role": "system", "content": "Extract facts. JSON only."},
                                 {"role": "user", "content": prompt}
                             ],
                             temperature=0.7,
@@ -104,7 +95,7 @@ OUTPUT JSON ONLY:
                             response_format={"type": "json_object"}
                         )
                         text = r.choices[0].message.content
-                        result = parse_response(text)
+                        result = parse_response(text, original_wc)
                         if result:
                             return result
                     except Exception as e:
@@ -113,13 +104,13 @@ OUTPUT JSON ONLY:
             except Exception as e:
                 logger.warning(f"GH endpoint failed: {e}")
                 continue
-    
-    # Fallback
-    logger.info("Using fallback facts")
-    return get_fallback_facts(topic)
+
+    # CRITICAL: Return None on failure — caller keeps original script
+    logger.info("Fact extraction failed - keeping original script")
+    return None
 
 
-def parse_response(text):
+def parse_response(text, original_wc):
     if not text:
         return None
     m = re.search(r'\{.*\}', text, re.DOTALL)
@@ -130,59 +121,40 @@ def parse_response(text):
         facts = data.get('facts', [])
         if not isinstance(facts, list) or len(facts) < 2:
             return None
-        
+
         clean_facts = []
         for f in facts[:4]:
             if isinstance(f, str) and len(f.strip()) > 15:
                 clean_facts.append(f.strip())
-        
+
         if len(clean_facts) < 2:
             return None
-        
+
         title = data.get('title', '').strip()
         hook = data.get('hook', '').strip()
-        script = data.get('script', '').strip()
-        
-        if not title or not script:
+
+        if not title:
             return None
-        
-        # Clean title
+
         title = re.sub(r'#\w+', '', title).strip()
         title = title.replace('?', '').strip()
         hashtags = re.findall(r'#\w+', data.get('title', ''))
         hashtag = hashtags[0] if hashtags else '#Facts'
-        
+
         title = f"{title} {hashtag}"
         if len(title) > 55:
             title = title[:52].rsplit(' ', 1)[0] + f" {hashtag}"
-        
+
         logger.info(f"Extracted {len(clean_facts)} facts")
         for i, f in enumerate(clean_facts):
             logger.info(f"   Fact {i+1}: {f[:70]}")
-        
+
+        # NOTE: NO script returned — main.py keeps original 128-word script
         return {
             'facts': clean_facts,
             'title': title,
-            'hook': hook.upper() if hook else "DID YOU KNOW",
-            'script': script
+            'hook': hook.upper() if hook else "DID YOU KNOW"
         }
     except Exception as e:
         logger.warning(f"Parse failed: {e}")
         return None
-
-
-def get_fallback_facts(topic):
-    """Fallback when AI fails"""
-    words = [w for w in topic.split() if len(w) > 4][:3]
-    key = " ".join(words) if words else "this story"
-    
-    return {
-        'facts': [
-            f"Reports say {key} is bigger than expected",
-            f"Experts confirm the numbers are rising quickly",
-            f"Officials say more details will emerge soon"
-        ],
-        'title': f"The Truth About This Story #Facts",
-        'hook': "DID YOU KNOW THIS",
-        'script': f"Here is what you need to know about {key}. Reports confirm the details nobody expected. Experts say this story is getting bigger. Here is what happens next."
-    }

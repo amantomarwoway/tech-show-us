@@ -1,9 +1,5 @@
 """
-src/media/text_video_builder.py - CINEMATIC TEXT VIDEO
-- Rich visual design (no Pexels needed)
-- Animated background, big numbers, disclaimers
-- FFmpeg powered
-- 100% free, GitHub Actions compatible
+src/media/text_video_builder.py - CINEMATIC TEXT VIDEO (FIXED PATHS)
 """
 
 import os
@@ -25,7 +21,6 @@ BOTTOM_BAR = 200
 SIDE_BAR = 70
 
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 SCHEMES = [
     {"name": "crimson", "bg1": (15, 5, 5), "bg2": (45, 10, 15), "accent": (220, 30, 50), "gold": (255, 200, 50)},
@@ -99,33 +94,27 @@ def generate_audio(text, voice):
 
 
 def make_background(scheme):
-    """Rich gradient background with texture"""
     img = Image.new('RGB', (WIDTH, HEIGHT), scheme['bg1'])
     draw = ImageDraw.Draw(img)
     bg1, bg2 = scheme['bg1'], scheme['bg2']
-    
-    # Vertical gradient
+
     for y in range(HEIGHT):
         ratio = y / HEIGHT
         r = int(bg1[0] * (1 - ratio) + bg2[0] * ratio)
         g = int(bg1[1] * (1 - ratio) + bg2[1] * ratio)
         b = int(bg1[2] * (1 - ratio) + bg2[2] * ratio)
         draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
-    
-    # Diagonal texture lines
+
     line_color = tuple(min(255, c + 10) for c in bg2)
     for i in range(-HEIGHT, WIDTH + HEIGHT, 60):
         draw.line([(i, 0), (i + HEIGHT, HEIGHT)], fill=line_color, width=1)
-    
-    # Top-left accent triangle
+
     draw.polygon([(0, TOP_BAR), (WIDTH // 3, TOP_BAR), (0, HEIGHT // 3)],
                  fill=tuple(int(c * 0.3) for c in scheme['accent']))
-    
-    # Bottom-right accent triangle
     draw.polygon([(WIDTH, HEIGHT - BOTTOM_BAR), (2 * WIDTH // 3, HEIGHT - BOTTOM_BAR),
                   (WIDTH, 2 * HEIGHT // 3)],
                  fill=tuple(int(c * 0.3) for c in scheme['accent']))
-    
+
     path = os.path.join(PATHS['temp'], f"bg_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
     return path
@@ -170,11 +159,11 @@ def find_font_for_text(text, max_w, max_h, max_lines, start_size):
 def draw_top_bar(draw, scheme):
     draw.rectangle([0, 0, WIDTH, TOP_BAR], fill=(0, 0, 0))
     draw.rectangle([0, TOP_BAR - 6, WIDTH, TOP_BAR], fill=scheme['accent'])
-    
+
     font_brand = load_font(FONT_BOLD, 46)
     draw.text((40, TOP_BAR // 2), "UNCOVERED USA",
               font=font_brand, fill=(255, 255, 255), anchor='lm')
-    
+
     dot_x = WIDTH - SIDE_BAR - 180
     dot_y = TOP_BAR // 2
     draw.ellipse([dot_x - 14, dot_y - 14, dot_x + 14, dot_y + 14], fill=(255, 30, 30))
@@ -186,7 +175,7 @@ def draw_top_bar(draw, scheme):
 def draw_side_disclaimer(draw, scheme):
     x_start = WIDTH - SIDE_BAR
     draw.rectangle([x_start, TOP_BAR, WIDTH, HEIGHT - BOTTOM_BAR], fill=(180, 0, 0))
-    
+
     font = load_font(FONT_BOLD, 28)
     text = "FACT BASED · TEXT · NO VISUALS · "
     char_y = TOP_BAR + 30
@@ -203,12 +192,12 @@ def draw_bottom_bar(draw, scheme, ticker_text):
     y_start = HEIGHT - BOTTOM_BAR
     draw.rectangle([0, y_start, WIDTH, HEIGHT], fill=(0, 0, 0))
     draw.rectangle([0, y_start, WIDTH, y_start + 6], fill=scheme['accent'])
-    
+
     font_ticker = load_font(FONT_BOLD, 34)
     ticker = ticker_text[:55]
     draw.text((40, y_start + 55), f"▶ {ticker}",
               font=font_ticker, fill=scheme['gold'], anchor='lm')
-    
+
     font_cta = load_font(FONT_BOLD, 32)
     draw.text((WIDTH // 2, y_start + 140), "SUBSCRIBE FOR MORE FACTS",
               font=font_cta, fill=(220, 220, 220), anchor='mm')
@@ -221,65 +210,55 @@ def draw_corner_decorations(draw, scheme):
     cl = WIDTH - SIDE_BAR - 20
     ct = TOP_BAR + 20
     cb = HEIGHT - BOTTOM_BAR - 20
-    
-    # Top left
+
     draw.rectangle([20, ct, 20 + size, ct + thick], fill=color)
     draw.rectangle([20, ct, 20 + thick, ct + size], fill=color)
-    # Top right
     draw.rectangle([cl - size, ct, cl, ct + thick], fill=color)
     draw.rectangle([cl - thick, ct, cl, ct + size], fill=color)
-    # Bottom left
     draw.rectangle([20, cb - thick, 20 + size, cb], fill=color)
     draw.rectangle([20, cb - size, 20 + thick, cb], fill=color)
-    # Bottom right
     draw.rectangle([cl - size, cb - thick, cl, cb], fill=color)
     draw.rectangle([cl - thick, cb - size, cl, cb], fill=color)
 
 
 def make_slide(shot_text, detail_text, number_text, scheme, slide_num, total):
-    """Build one slide"""
     bg_path = make_background(scheme)
     img = Image.open(bg_path).convert('RGB')
     draw = ImageDraw.Draw(img)
-    
+
     content_w = WIDTH - SIDE_BAR - 60
     cx = content_w // 2 + 30
-    
+
     draw_corner_decorations(draw, scheme)
-    
-    # Big number
+
     if number_text:
         num_font = load_font(FONT_BOLD, 150)
         y_num = 380
-        # Glow
         for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4)]:
             draw.text((cx + dx, y_num + dy), number_text,
                       font=num_font, fill=(0, 0, 0), anchor='mm')
         draw.text((cx, y_num), number_text,
                   font=num_font, fill=scheme['gold'], anchor='mm')
-    
-    # Main shot text
+
     max_w = content_w - 80
     shot_font, shot_lines, size = find_font_for_text(shot_text, max_w, 700, 4, 100)
-    
+
     y = 700 if number_text else 550
     for line in shot_lines:
         bbox = draw.textbbox((0, 0), line, font=shot_font)
         lw = bbox[2] - bbox[0]
         x = cx - lw // 2
-        # Multi-directional shadow
         for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3),
                        (0, -3), (0, 3), (-3, 0), (3, 0)]:
             draw.text((x + dx, y + dy), line, font=shot_font, fill=(0, 0, 0))
         draw.text((x, y), line, font=shot_font, fill=(255, 255, 255))
         y += size + 20
-    
-    # Divider + detail
+
     if detail_text and detail_text != shot_text:
         y += 30
         draw.rectangle([cx - 200, y, cx + 200, y + 4], fill=scheme['accent'])
         y += 40
-        
+
         detail_font, detail_lines, dsize = find_font_for_text(
             detail_text, max_w, 400, 4, 55
         )
@@ -291,23 +270,21 @@ def make_slide(shot_text, detail_text, number_text, scheme, slide_num, total):
                 draw.text((x + dx, y + dy), line, font=detail_font, fill=(0, 0, 0))
             draw.text((x, y), line, font=detail_font, fill=scheme['gold'])
             y += dsize + 15
-    
-    # Counter
+
     counter_font = load_font(FONT_BOLD, 28)
     draw.text((WIDTH - SIDE_BAR - 40, TOP_BAR + 40), f"{slide_num + 1}/{total}",
               font=counter_font, fill=(150, 150, 150), anchor='rt')
-    
+
     draw_top_bar(draw, scheme)
     draw_side_disclaimer(draw, scheme)
     draw_bottom_bar(draw, scheme, shot_text)
-    
+
     path = os.path.join(PATHS['temp'], f"slide_{slide_num}_{random.randint(1, 999999)}.png")
     img.save(path, quality=95)
     return path
 
 
 def parse_facts_to_slides(facts):
-    """Parse facts to (shot, detail, number) tuples"""
     slides = []
     for fact in facts:
         numbers = re.findall(
@@ -315,10 +292,10 @@ def parse_facts_to_slides(facts):
             fact, re.IGNORECASE
         )
         number_text = numbers[0].strip() if numbers else ""
-        
+
         words = fact.split()
         shot = " ".join(words[:7]) if len(words) > 8 else fact
-        
+
         slides.append({
             "shot": shot,
             "detail": fact,
@@ -328,23 +305,26 @@ def parse_facts_to_slides(facts):
 
 
 def render_with_ffmpeg(slide_paths, audio_path, output_path, slide_duration):
-    """Composite slides with FFmpeg (safe version)"""
+    """Uses ABSOLUTE paths to avoid temp/temp bug"""
     total_duration = slide_duration * len(slide_paths)
-    
-    # Build concat file
+
     concat_file = os.path.join(PATHS['temp'], "concat.txt")
     with open(concat_file, 'w') as f:
         for p in slide_paths:
-            f.write(f"file '{p}'\n")
+            abs_path = os.path.abspath(p)
+            f.write(f"file '{abs_path}'\n")
             f.write(f"duration {slide_duration}\n")
-        f.write(f"file '{slide_paths[-1]}'\n")
-    
-    # Simple, safe filter: crossfade + subtle zoom
-    # No complex moving overlays (avoid FFmpeg crashes)
+        abs_last = os.path.abspath(slide_paths[-1])
+        f.write(f"file '{abs_last}'\n")
+
+    abs_audio = os.path.abspath(audio_path)
+    abs_output = os.path.abspath(output_path)
+    abs_concat = os.path.abspath(concat_file)
+
     cmd = [
         "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_file,
-        "-i", audio_path,
+        "-f", "concat", "-safe", "0", "-i", abs_concat,
+        "-i", abs_audio,
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-crf", "22",
@@ -353,67 +333,64 @@ def render_with_ffmpeg(slide_paths, audio_path, output_path, slide_duration):
         "-b:a", "128k",
         "-shortest",
         "-t", str(total_duration),
-        output_path
+        abs_output
     ]
-    
-    logger.info("Running FFmpeg compose...")
+
+    logger.info("Running FFmpeg (absolute paths)...")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    
+
     if r.returncode != 0:
         logger.error(f"FFmpeg failed: {r.stderr[-500:]}")
         return False
-    
+
     return True
 
 
 def create_text_video(script_data, editor_data=None):
-    """Main entry - cinematic text video"""
     logger.info("=" * 50)
     logger.info("CINEMATIC TEXT VIDEO")
     logger.info("=" * 50)
-    
+
     os.makedirs(PATHS['output_videos'], exist_ok=True)
     os.makedirs(PATHS['temp'], exist_ok=True)
-    
+
     output_path = os.path.join(PATHS['output_videos'],
                                f"text_{random.randint(1000, 9999)}.mp4")
-    
+
     scheme = random.choice(SCHEMES)
     logger.info(f"Scheme: {scheme['name']}")
-    
+
     facts = script_data.get('facts', [])
     script_text = script_data.get('short_script', '')
-    
+
     if not facts:
         sentences = re.split(r'[.!?]+', script_text)
         facts = [s.strip() for s in sentences if len(s.strip()) > 15][:3]
-    
+
     if not facts:
         facts = [
             "This story has 3 surprising facts",
             "Most people do not know the details",
             "Here is what you need to know"
         ]
-    
+
     logger.info(f"Facts: {len(facts)}")
     for i, f in enumerate(facts):
         logger.info(f"  {i+1}. {f[:65]}")
-    
-    # Audio
+
     voice = get_tts_voice()
     audio_path = generate_audio(script_text, voice)
-    
+
     if not audio_path or not os.path.exists(audio_path):
         logger.warning("Silent audio fallback")
         audio_path = os.path.join(PATHS['temp'], 'silent.wav')
         subprocess.run([
             "ffmpeg", "-y", "-f", "lavfi",
             "-i", "anullsrc=r=22050:cl=mono",
-            "-t", str(len(facts) * 4),
+            "-t", str(len(facts) * 5),
             "-c:a", "pcm_s16le", audio_path
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
-    # Duration
+
     try:
         probe = subprocess.run([
             "ffprobe", "-v", "error",
@@ -422,16 +399,15 @@ def create_text_video(script_data, editor_data=None):
         ], capture_output=True, text=True, timeout=30)
         audio_dur = float(probe.stdout.strip())
     except:
-        audio_dur = len(facts) * 4
-    
+        audio_dur = len(facts) * 5
+
     total_duration = max(12, min(20, audio_dur))
     slide_duration = total_duration / len(facts)
     logger.info(f"Total: {total_duration:.1f}s | Per slide: {slide_duration:.1f}s")
-    
-    # Build slides
+
     slides_data = parse_facts_to_slides(facts)
     slide_paths = []
-    
+
     for i, sd in enumerate(slides_data):
         path = make_slide(
             sd['shot'], sd['detail'], sd['number'],
@@ -439,19 +415,17 @@ def create_text_video(script_data, editor_data=None):
         )
         slide_paths.append(path)
         logger.info(f"  Slide {i+1}: {sd['shot'][:40]}")
-    
-    # Render
+
     success = render_with_ffmpeg(slide_paths, audio_path, output_path, slide_duration)
-    
+
     if not success:
         logger.error("Render failed")
         return output_path
-    
+
     if os.path.exists(output_path):
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
         logger.info(f"VIDEO READY: {output_path} ({size_mb:.1f}MB)")
-    
-    # Cleanup
+
     try:
         for f in glob.glob(os.path.join(PATHS['temp'], "slide_*.png")):
             os.remove(f)
@@ -459,5 +433,5 @@ def create_text_video(script_data, editor_data=None):
             os.remove(f)
     except:
         pass
-    
+
     return output_path

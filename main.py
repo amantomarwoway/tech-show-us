@@ -1,10 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v17
+main.py - AUTONOMOUS TEXT BOT - FINAL v18
 - Self evolution runs FIRST (learns + repairs)
 - All processing BEFORE upload
 - Uploader ABSOLUTE LAST
-- FORCED 45-55s long-form Shorts (bypass auto-optimizer's short duration)
-- Strict word count enforcement + retry
+- FORCED 45-55s long-form Shorts
+- PROTECTS script from fact_extractor truncation (via v2 extractor + guards)
 """
 
 import os
@@ -25,12 +25,9 @@ from src.database import init_db, save_story, mark_uploaded, get_performance_sta
 
 logger = setup_logger(__name__)
 
-# ============================================================
-# HARD-CODED SHORTS DURATION (bypass any optimizer override)
-# ============================================================
 FORCED_MIN_DURATION = 45
 FORCED_MAX_DURATION = 55
-MIN_ACCEPTABLE_WORDS = 80    # retry if script shorter than this
+MIN_ACCEPTABLE_WORDS = 80
 
 
 def safe_import(module_path, function_name=None):
@@ -209,14 +206,12 @@ def research_god_main():
     verified = []
     for s in all_stories:
         source = s.get('source', '').lower()
-
         if 'reddit' in source:
             upvotes = s.get('reddit_score', 0)
             if upvotes >= 500:
                 verified.append(s)
                 logger.info(f"  REAL REDDIT: {s.get('title', '')[:50]} ({upvotes} up)")
             continue
-
         if 'trends' in source or 'trending' in source or 'google' in source:
             score = check_trends_actual(s.get('title', ''))
             if score >= 40:
@@ -285,20 +280,40 @@ def get_fallback_stories():
 
 
 def editor_god_main(script_data, candidate):
+    """
+    Extract facts WITHOUT letting the extractor shrink the script.
+    """
     logger.info("=" * 60)
     logger.info("LEG 2: EDITOR - FACT EXTRACTION")
     logger.info("=" * 60)
 
     editor_data = {"facts": [], "visuals": []}
 
+    original_script = script_data.get('short_script', '')
+    original_wc = len(original_script.split())
+    logger.info(f"Original script BEFORE editor: {original_wc} words")
+
     try:
         from src.writing.fact_extractor import extract_facts
-        result = extract_facts(candidate, script_data.get('short_script', ''))
+        result = extract_facts(candidate, original_script)
 
         if result:
             editor_data['facts'] = result.get('facts', [])
-            if result.get('script'):
-                script_data['short_script'] = result['script']
+
+            new_script = result.get('script', '')
+            new_wc = len(new_script.split()) if new_script else 0
+
+            if new_script and new_wc >= int(original_wc * 0.95):
+                script_data['short_script'] = new_script
+                logger.info(f"Editor script ACCEPTED: {new_wc} words (was {original_wc})")
+            elif new_script:
+                logger.warning(
+                    f"Editor tried to shrink script: {original_wc} -> {new_wc} words "
+                    f"- KEEPING ORIGINAL"
+                )
+            else:
+                logger.info("Editor returned no script - keeping original")
+
             if result.get('title'):
                 script_data['seo_youtube_title'] = result['title']
             if result.get('hook'):
@@ -308,6 +323,8 @@ def editor_god_main(script_data, candidate):
     except Exception as e:
         logger.error(f"Fact extraction failed: {e}")
 
+    final_wc = len(script_data.get('short_script', '').split())
+    logger.info(f"Script AFTER editor: {final_wc} words")
     return editor_data
 
 
@@ -384,31 +401,26 @@ def self_evolution_main():
     logger.info("=" * 60)
     logger.info("SELF EVOLUTION (PRE-PIPELINE)")
     logger.info("=" * 60)
-
     try:
         from src.youtube.analytics_collector import collect_analytics
         collect_analytics()
     except Exception as e:
         logger.warning(f"Analytics: {e}")
-
     try:
         from src.learning.retention_analyzer import analyze_retention
         analyze_retention()
     except Exception as e:
         logger.warning(f"Retention: {e}")
-
     try:
         from src.learning.auto_optimizer import analyze_and_optimize
         analyze_and_optimize()
     except Exception as e:
         logger.warning(f"Optimizer: {e}")
-
     try:
         from src.learning.self_repair import run_self_diagnostics
         run_self_diagnostics()
     except Exception as e:
         logger.warning(f"Repair: {e}")
-
     learner = safe_import('src.learning.performance_learner', 'learn_from_performance')
     if learner:
         try:
@@ -418,28 +430,21 @@ def self_evolution_main():
 
 
 def get_forced_duration():
-    """
-    Bypass auto_optimizer. Always return 45-55s.
-    If optimizer returns something in range, use it; else force 45.
-    """
     try:
         from src.learning.auto_optimizer import get_config
         cfg_val = get_config("video_duration", FORCED_MIN_DURATION)
         cfg_val = int(cfg_val) if cfg_val else FORCED_MIN_DURATION
     except Exception:
         cfg_val = FORCED_MIN_DURATION
-
-    # Clamp to our forced range
     duration = max(FORCED_MIN_DURATION, min(FORCED_MAX_DURATION, cfg_val))
     logger.info(f"Duration resolved: {duration}s (config said: {cfg_val})")
     return duration
 
 
 def build_prompt(topic, video_duration=45):
-    """Build prompt with STRICT word count enforcement."""
-    target_words = int(video_duration * 2.3)         # ~103 for 45s
-    min_words = int(target_words * 0.85)              # ~87
-    max_words = int(target_words * 1.15)              # ~118
+    target_words = int(video_duration * 2.3)
+    min_words = int(target_words * 0.85)
+    max_words = int(target_words * 1.15)
 
     return f"""You are a VIRAL YouTube Shorts scriptwriter. Your scripts MUST hit a strict word count.
 
@@ -448,11 +453,9 @@ TARGET DURATION: {video_duration} seconds
 REQUIRED WORD COUNT: {target_words} words (minimum {min_words}, maximum {max_words})
 
 ================================================================
-CRITICAL RULES (violating these = failed script):
+CRITICAL RULES:
 ================================================================
 1. Script MUST be {min_words}-{max_words} words. Count before returning.
-   - If your draft is under {min_words} words, ADD more facts, details, or context.
-   - Short scripts get rejected automatically.
 2. NO filler. Every sentence adds NEW information.
 3. Include SPECIFIC numbers, dates, dollar amounts, percentages, or counts.
 4. Write in a natural speaking rhythm for TTS (short sentences).
@@ -473,13 +476,6 @@ SCRIPT STRUCTURE ({target_words} words):
 
 VISUAL QUERIES (6 queries, 2-4 words, SPECIFIC):
 GOOD: "stock market chart", "government building"
-
-================================================================
-FINAL CHECK before returning:
-- Did you write {min_words}+ words? If no, EXPAND.
-- Does every fact have a number, date, or name? If no, ADD one.
-- Did you remove all filler? If no, CUT it.
-================================================================
 
 OUTPUT JSON ONLY:
 {{
@@ -555,13 +551,11 @@ def process_ai_response(text, model_name):
 
 
 def generate_script_god(story):
-    """Gemini 3.6-flash with strict word-count enforcement + retries."""
     raw = story.get('title', '')
     topic = clean_topic(raw)
     if len(topic) < 15:
         topic = raw
 
-    # FORCE 45-55s regardless of what optimizer says
     video_duration = get_forced_duration()
     target_words = int(video_duration * 2.3)
     logger.info(f"Target: {video_duration}s / ~{target_words} words")
@@ -578,7 +572,6 @@ def generate_script_god(story):
                 try:
                     logger.info(f"Gemini 3.6-flash attempt {attempt}/3")
 
-                    # On retry, add extra nudge to be LONGER
                     full_prompt = prompt
                     if attempt > 1:
                         full_prompt = (
@@ -599,14 +592,12 @@ def generate_script_god(story):
                     if not data:
                         continue
 
-                    # Validate word count
                     actual_words = len(data.get('short_script', '').split())
                     logger.info(f"   Script length: {actual_words} words")
 
                     if actual_words < MIN_ACCEPTABLE_WORDS:
                         logger.warning(
-                            f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) "
-                            f"- retrying with stronger prompt"
+                            f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) - retrying"
                         )
                         if attempt < 3:
                             time.sleep(2)
@@ -627,7 +618,6 @@ def generate_script_god(story):
 
 
 def get_fallback_script(topic):
-    """Long fallback script (~150 words) so we never upload a stub."""
     tl = topic.lower()
     if any(w in tl for w in ['trump', 'biden', 'president', 'congress', 'obama']):
         h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
@@ -671,9 +661,14 @@ def create_video_god(script_data, editor_data):
     logger.info("=" * 60)
     logger.info("VIDEO GENERATION - TEXT MODE")
     logger.info("=" * 60)
+
+    wc_before = len(script_data.get('short_script', '').split())
+    logger.info(f"Script going into video builder: {wc_before} words")
+
     try:
         from src.media.text_video_builder import create_text_video
         merged = {**script_data, **editor_data}
+        merged['short_script'] = script_data.get('short_script', '')
         merged['full_script'] = script_data.get('short_script', '')
         merged['title'] = script_data.get('seo_youtube_title', '')
 
@@ -760,16 +755,13 @@ def main():
     stats = get_performance_stats()
     logger.info(f"Stats: {stats}")
 
-    # STEP 1: Self evolution FIRST
     self_evolution_main()
 
-    # STEP 2: Research
     stories = research_god_main()
     if not stories:
         logger.error("No stories - exit")
         return
 
-    # STEP 3: Activity filter
     logger.info("=" * 60)
     logger.info("ACTIVITY FILTER")
     logger.info("=" * 60)
@@ -792,7 +784,6 @@ def main():
 
     stories = active
 
-    # STEP 4: Process candidates
     approved = None
     best_rejected = None
     skipped = 0
@@ -806,6 +797,8 @@ def main():
             continue
 
         script_data = generate_script_god(candidate)
+        wc_gen = len(script_data.get('short_script', '').split())
+        logger.info(f"After generation: {wc_gen} words")
 
         if has_publisher_name(script_data.get('seo_youtube_title', '')):
             continue
@@ -814,11 +807,8 @@ def main():
         if script_data.get('confidence_score', 0) < 60:
             continue
 
-        # Final word-count safety check
-        wc = len(script_data.get('short_script', '').split())
-        logger.info(f"Final script: {wc} words")
-        if wc < MIN_ACCEPTABLE_WORDS:
-            logger.warning(f"Script too short ({wc} words) - skipping candidate")
+        if wc_gen < MIN_ACCEPTABLE_WORDS:
+            logger.warning(f"Script too short ({wc_gen} words) - skipping candidate")
             continue
 
         fc = safe_import('src.verification.claim_checker', 'fact_check')
@@ -829,6 +819,13 @@ def main():
                 continue
 
         editor_data = editor_god_main(script_data, candidate)
+
+        wc_final = len(script_data.get('short_script', '').split())
+        logger.info(f"FINAL script before video: {wc_final} words")
+        if wc_final < MIN_ACCEPTABLE_WORDS:
+            logger.error(f"Script truncated to {wc_final} words - skipping candidate")
+            continue
+
         full_story = {**candidate, **script_data}
         story_id = save_story(full_story)
         video_path = create_video_god(script_data, editor_data)
@@ -855,7 +852,6 @@ def main():
         logger.error("All rejected - no upload")
         return
 
-    # STEP 5: UPLOADER (LAST - nothing after)
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved
     thumb = create_thumbnail(candidate, script_data)
     video_id = uploader_god_main(video_path, thumb, script_data, candidate, boss_data)

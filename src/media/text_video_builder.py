@@ -1,9 +1,9 @@
 """
-src/media/text_video_builder.py - WARRIOR LETTER-BY-LETTER VISUAL
-- Each letter = its own unique visual (color, size, rotation, font)
-- Letters arranged like warrior formation
-- Word-by-word display
-- Trending topic focused
+src/media/text_video_builder.py - WARRIOR LETTER BATTLE
+- Extended white bar (top)
+- Letters fight with weapons to form words
+- Word drops with explosion
+- Final warrior display
 """
 
 import os
@@ -21,30 +21,23 @@ logger = setup_logger(__name__)
 
 WIDTH = 1080
 HEIGHT = 1920
+WHITE_BAR_TOP = 0
+WHITE_BAR_BOTTOM = 420  # Extended bar (double)
+MAIN_TOP = 420
+MAIN_HEIGHT = HEIGHT - MAIN_TOP
 
-# Multiple fonts = warrior variety
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
 FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 FONTS = [FONT_BOLD, FONT_BOLD_ITALIC, FONT_REGULAR]
 
-# Warrior color palette (aggressive + bold)
 WARRIOR_COLORS = [
-    (255, 30, 30),     # Blood red
-    (255, 200, 0),     # Gold
-    (0, 220, 255),     # Electric cyan
-    (255, 100, 200),   # Hot pink
-    (100, 255, 100),   # Neon green
-    (255, 130, 0),     # Orange fire
-    (180, 80, 255),    # Electric purple
-    (255, 255, 255),   # Pure white
-    (255, 240, 80),    # Bright yellow
-    (50, 255, 180),    # Teal
-    (220, 40, 40),     # Dark red
-    (255, 170, 20),    # Amber
+    (255, 30, 30), (255, 200, 0), (0, 220, 255),
+    (255, 100, 200), (100, 255, 100), (255, 130, 0),
+    (180, 80, 255), (255, 255, 255), (255, 240, 80),
+    (50, 255, 180), (220, 40, 40), (255, 170, 20),
 ]
 
-# Background schemes (dark, cinematic)
 BG_SCHEMES = [
     {"bg1": (5, 0, 10), "bg2": (25, 5, 35), "accent": (220, 30, 80)},
     {"bg1": (0, 5, 20), "bg2": (8, 20, 55), "accent": (50, 130, 255)},
@@ -54,12 +47,7 @@ BG_SCHEMES = [
     {"bg1": (2, 2, 2), "bg2": (18, 18, 22), "accent": (200, 200, 200)},
 ]
 
-# Words that get FULL WARRIOR treatment
-WARRIOR_WORDS = ['breaking', 'shocking', 'secret', 'leaked', 'exposed',
-                 'billion', 'million', 'trillion', 'dead', 'died', 'killed',
-                 'arrested', 'war', 'crisis', 'massive', 'huge', 'never',
-                 'first', 'record', 'warning', 'danger', 'viral', 'trending',
-                 'everyone', 'nobody', 'why', 'how', 'what', 'real', 'truth']
+WEAPON_TYPES = ['sword', 'hammer', 'axe', 'spear', 'mace']
 
 
 def load_font(path, size):
@@ -127,250 +115,416 @@ def generate_audio(text, voice):
 # BACKGROUND
 # ============================================================
 
-def make_background(scheme):
-    """Cinematic dark background with radial glow"""
-    img = Image.new('RGB', (WIDTH, HEIGHT), scheme['bg1'])
+def draw_dark_background(img, scheme):
+    """Dark cinematic background for main area"""
     draw = ImageDraw.Draw(img)
     bg1, bg2 = scheme['bg1'], scheme['bg2']
-
-    # Vertical gradient
-    for y in range(HEIGHT):
-        ratio = y / HEIGHT
+    for y in range(MAIN_TOP, HEIGHT):
+        ratio = (y - MAIN_TOP) / MAIN_HEIGHT
         r = int(bg1[0] * (1 - ratio) + bg2[0] * ratio)
         g = int(bg1[1] * (1 - ratio) + bg2[1] * ratio)
         b = int(bg1[2] * (1 - ratio) + bg2[2] * ratio)
         draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
-
-    # Diagonal slashes (warrior armor pattern)
-    slash_color = tuple(min(255, c + 12) for c in bg2)
+    # Diagonal slashes
+    slash_color = tuple(min(255, c + 10) for c in bg2)
     for i in range(-HEIGHT, WIDTH + HEIGHT, 90):
-        draw.line([(i, 0), (i + HEIGHT, HEIGHT)], fill=slash_color, width=2)
+        draw.line([(i, MAIN_TOP), (i + HEIGHT, HEIGHT)], fill=slash_color, width=1)
 
-    # Center radial glow
-    cx, cy = WIDTH // 2, HEIGHT // 2
-    for radius in range(700, 0, -40):
-        alpha = int(18 * (1 - radius / 700))
-        color = (min(255, bg2[0] + alpha),
-                 min(255, bg2[1] + alpha),
-                 min(255, bg2[2] + alpha))
-        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius],
-                     outline=color, width=30)
 
-    # Vignette
-    for i in range(100):
-        draw.rectangle([0, 0, WIDTH, i], fill=(0, 0, 0))
-        draw.rectangle([0, i, i, HEIGHT], fill=(0, 0, 0))
-        draw.rectangle([WIDTH - i, 0, WIDTH, HEIGHT], fill=(0, 0, 0))
-        draw.rectangle([0, HEIGHT - i, WIDTH, HEIGHT], fill=(0, 0, 0))
+def draw_white_bar(img, scheme):
+    """Extended white bar at top"""
+    draw = ImageDraw.Draw(img)
+    # White bar
+    draw.rectangle([0, WHITE_BAR_TOP, WIDTH, WHITE_BAR_BOTTOM], fill=(248, 248, 252))
+    # Bottom accent line
+    draw.rectangle([0, WHITE_BAR_BOTTOM, WIDTH, WHITE_BAR_BOTTOM + 8], fill=scheme['accent'])
+    # Top black strip
+    draw.rectangle([0, 0, WIDTH, 90], fill=(0, 0, 0))
 
-    path = os.path.join(PATHS['temp'], f"bg_{random.randint(1, 999999)}.png")
-    img.save(path, quality=95)
+
+def draw_branding(img, scheme):
+    """Top + bottom branding"""
+    draw = ImageDraw.Draw(img)
+    # Top text inside black strip
+    font = load_font(FONT_BOLD, 42)
+    draw.text((40, 45), "UNCOVERED USA", font=font, fill=(255, 255, 255), anchor='lm')
+    # LIVE dot
+    dot_x = WIDTH - 180
+    draw.ellipse([dot_x - 12, 33, dot_x + 12, 57], fill=(255, 30, 30))
+    font_live = load_font(FONT_BOLD, 36)
+    draw.text((dot_x + 24, 45), "LIVE", font=font_live, fill=(255, 255, 255), anchor='lm')
+    # Bottom bar
+    draw.rectangle([0, HEIGHT - 120, WIDTH, HEIGHT], fill=(0, 0, 0, 220))
+    draw.rectangle([0, HEIGHT - 128, WIDTH, HEIGHT - 120], fill=scheme['accent'])
+    font_cta = load_font(FONT_BOLD, 38)
+    draw.text((WIDTH // 2, HEIGHT - 60), "SUBSCRIBE FOR MORE",
+              font=font_cta, fill=(220, 220, 220), anchor='mm')
+
+
+# ============================================================
+# WEAPON DRAWING
+# ============================================================
+
+def draw_weapon(draw, x, y, size, angle_deg, color):
+    """Draw a simple weapon (sword/hammer/axe) as line + shape"""
+    angle = math.radians(angle_deg)
+    length = size
+
+    # Weapon line from letter
+    end_x = x + int(length * math.cos(angle))
+    end_y = y + int(length * math.sin(angle))
+
+    # Handle line
+    draw.line([(x, y), (end_x, end_y)], fill=(60, 30, 10), width=10)
+
+    # Weapon head (depends on type)
+    weapon_type = random.choice(WEAPON_TYPES)
+
+    if weapon_type == 'sword':
+        # Blade tip
+        tip_x = end_x + int(40 * math.cos(angle))
+        tip_y = end_y + int(40 * math.sin(angle))
+        # Blade triangle
+        perp = angle + math.pi / 2
+        px = int(15 * math.cos(perp))
+        py = int(15 * math.sin(perp))
+        draw.polygon([
+            (end_x + px, end_y + py),
+            (end_x - px, end_y - py),
+            (tip_x, tip_y)
+        ], fill=(200, 210, 220), outline=(100, 110, 120))
+    elif weapon_type == 'hammer':
+        # Hammer head (rectangle)
+        perp = angle + math.pi / 2
+        px = int(30 * math.cos(perp))
+        py = int(30 * math.sin(perp))
+        draw.rectangle([
+            end_x - abs(px), end_y - abs(py),
+            end_x + abs(px), end_y + abs(py)
+        ], fill=(80, 80, 90), outline=(40, 40, 50))
+    elif weapon_type == 'axe':
+        # Axe head (triangle)
+        perp = angle + math.pi / 2
+        px = int(35 * math.cos(perp))
+        py = int(35 * math.sin(perp))
+        draw.polygon([
+            (end_x, end_y),
+            (end_x + px, end_y + py),
+            (end_x + int(30 * math.cos(angle)), end_y + int(30 * math.sin(angle)))
+        ], fill=(190, 190, 200), outline=(90, 90, 100))
+    elif weapon_type == 'spear':
+        # Spear tip (small triangle)
+        tip_x = end_x + int(60 * math.cos(angle))
+        tip_y = end_y + int(60 * math.sin(angle))
+        perp = angle + math.pi / 2
+        px = int(12 * math.cos(perp))
+        py = int(12 * math.sin(perp))
+        draw.polygon([
+            (end_x + px, end_y + py),
+            (end_x - px, end_y - py),
+            (tip_x, tip_y)
+        ], fill=(220, 220, 230), outline=(120, 120, 130))
+    else:  # mace
+        # Mace (circle)
+        draw.ellipse([end_x - 20, end_y - 20, end_x + 20, end_y + 20],
+                     fill=(80, 80, 90), outline=(40, 40, 50))
+
+
+# ============================================================
+# FRAME TYPES
+# ============================================================
+
+def frame_fight(word, scheme, letters_scattered):
+    """
+    Frame 1: Letters scattered on white bar, weapons out, fighting
+    """
+    img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
+    draw_dark_background(img, scheme)
+    draw_white_bar(img, scheme)
+
+    # Header text on top
+    draw = ImageDraw.Draw(img)
+    font_hdr = load_font(FONT_BOLD_ITALIC, 40)
+    draw.text((WIDTH // 2, 220), "⚔  BATTLE BEGINS  ⚔",
+              font=font_hdr, fill=(180, 180, 190), anchor='mm')
+
+    # Draw each scattered letter with weapon
+    font = None
+    for item in letters_scattered:
+        char = item['char']
+        x = item['x']
+        y = item['y']
+        size = item['size']
+        color = item['color']
+        weapon_angle = item['weapon_angle']
+
+        # Draw weapon first (behind)
+        draw_weapon(draw, x + 30, y + 30, size * 0.9, weapon_angle, (150, 150, 160))
+
+        # Draw letter
+        font = load_font(random.choice(FONTS), size)
+
+        # Shadow
+        for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5)]:
+            draw.text((x + dx, y + dy), char, font=font, fill=(0, 0, 0))
+        # Outline
+        for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
+            draw.text((x + dx, y + dy), char, font=font, fill=(0, 0, 0))
+        # Main
+        draw.text((x, y), char, font=font, fill=color)
+
+    # Add small sparks
+    for _ in range(20):
+        sx = random.randint(50, WIDTH - 50)
+        sy = random.randint(100, WHITE_BAR_BOTTOM - 50)
+        draw.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=(255, 220, 100))
+
+    draw_branding(img, scheme)
+
+    path = os.path.join(PATHS['temp'], f"f1_{random.randint(1,999999)}.png")
+    img.save(path, quality=92)
     return path
 
 
-# ============================================================
-# LETTER RENDERER (WARRIOR)
-# ============================================================
-
-def render_letter_warrior(char, base_size, force_color=None):
+def frame_clash(word, scheme, letters_scattered):
     """
-    Render ONE letter as a warrior visual.
-    Each letter gets:
-    - Random font
-    - Random color from palette
-    - Random rotation (-15 to +15)
-    - Random size variation (±25%)
-    - Multi-layer shadow
-    - Glow effect
+    Frame 2: Mid-fight, sparks flying, weapons crossing
     """
-    if not char or char == ' ':
-        return None, 0, 0
-
-    # Random font per letter
-    font_path = random.choice(FONTS)
-
-    # Size variation
-    size_variation = random.uniform(0.85, 1.25)
-    font_size = int(base_size * size_variation)
-
-    # Random color
-    if force_color:
-        color = force_color
-    else:
-        color = random.choice(WARRIOR_COLORS)
-
-    # Random rotation
-    rotation = random.uniform(-15, 15)
-
-    font = load_font(font_path, font_size)
-
-    # Measure letter
-    temp = Image.new('RGBA', (10, 10), (0, 0, 0, 0))
-    td = ImageDraw.Draw(temp)
-    bbox = td.textbbox((0, 0), char, font=font)
-    text_w = bbox[2] - bbox[0] + 40
-    text_h = bbox[3] - bbox[1] + 40
-
-    # Canvas with padding for rotation
-    pad = 100
-    canvas = Image.new('RGBA', (text_w + pad * 2, text_h + pad * 2), (0, 0, 0, 0))
-    cd = ImageDraw.Draw(canvas)
-
-    base_x = pad
-    base_y = pad
-
-    # Multi-layer shadow (warrior depth)
-    for dx, dy in [(-8, -8), (8, -8), (-8, 8), (8, 8),
-                   (0, -8), (0, 8), (-8, 0), (8, 0),
-                   (-5, -5), (5, -5), (-5, 5), (5, 5)]:
-        cd.text((base_x + dx, base_y + dy), char,
-                font=font, fill=(0, 0, 0, 220))
-
-    # Outline stroke
-    for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3),
-                   (0, -3), (0, 3), (-3, 0), (3, 0),
-                   (-2, -2), (2, -2), (-2, 2), (2, 2)]:
-        cd.text((base_x + dx, base_y + dy), char,
-                font=font, fill=(0, 0, 0, 255))
-
-    # Main letter
-    cd.text((base_x, base_y), char, font=font, fill=color + (255,))
-
-    # Rotate
-    canvas = canvas.rotate(rotation, resample=Image.BICUBIC, expand=True)
-
-    return canvas, color, font_size
-
-
-def render_word_warrior(word, scheme, is_emphasis=False):
-    """
-    Render one word as a WARRIOR SQUAD.
-    Each letter is a warrior with unique style, but they stand together.
-    """
-    bg = make_background(scheme)
-    img = Image.open(bg).convert('RGBA')
+    img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
+    draw_dark_background(img, scheme)
+    draw_white_bar(img, scheme)
     draw = ImageDraw.Draw(img)
 
-    clean_word = word.strip()
-    if not clean_word:
-        clean_word = word
+    # Sparks in center
+    center_x = WIDTH // 2
+    center_y = 210
 
-    # Base size (bigger for emphasis)
-    if is_emphasis:
-        base_size = random.randint(200, 260)
-    else:
-        base_size = random.randint(130, 180)
+    for _ in range(40):
+        sx = center_x + random.randint(-200, 200)
+        sy = center_y + random.randint(-80, 80)
+        size = random.randint(3, 8)
+        color = random.choice([(255, 220, 100), (255, 150, 50), (255, 255, 200)])
+        draw.ellipse([sx - size, sy - size, sx + size, sy + size], fill=color)
 
-    # Render each letter
-    letter_imgs = []
-    max_letter_h = 0
-
-    for char in clean_word:
-        if char == ' ':
-            letter_imgs.append(None)
-            continue
-
-        letter_img, color, size = render_letter_warrior(char, base_size)
-        if letter_img:
-            letter_imgs.append({
-                'img': letter_img,
-                'color': color,
-                'size': size,
-                'rotation': random.uniform(-15, 15)
-            })
-            max_letter_h = max(max_letter_h, letter_img.height)
-
-    if not letter_imgs:
-        return None
-
-    # Calculate total width (letters stand shoulder to shoulder)
-    gap = random.randint(2, 10)  # Random gaps between warriors
-    total_w = 0
-    for item in letter_imgs:
-        if item:
-            total_w += item['img'].width + gap
-
-    # Scale if too wide
-    max_w = WIDTH - 80
-    if total_w > max_w:
-        scale = max_w / total_w
-        # Re-render letters smaller... simple: just reduce alpha
-        # Skip scaling for now, adjust later
-
-    # Center position with slight random offset
-    x_start = (WIDTH - total_w) // 2 + random.randint(-20, 20)
-    y_center = HEIGHT // 2 + random.randint(-40, 40) - max_letter_h // 2
-
-    # Paste each letter
-    current_x = x_start
-    for item in letter_imgs:
-        if not item:
-            current_x += base_size // 3
-            continue
-
-        # Random vertical offset per letter (warrior stance variation)
-        y_offset = random.randint(-30, 30)
-
-        letter_img = item['img']
-        paste_y = y_center + y_offset
-
-        # Paste letter (with alpha)
-        img.paste(letter_img,
-                  (current_x, paste_y),
-                  letter_img)
-
-        # Add glow behind letter
-        glow = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
-        gd = ImageDraw.Draw(glow)
-        glow_cx = current_x + letter_img.width // 2
-        glow_cy = paste_y + letter_img.height // 2
+    # Letters fighting - weapons clashing in center
+    for item in letters_scattered:
+        char = item['char']
+        x = item['x'] + random.randint(-50, 50)
+        y = item['y'] + random.randint(-40, 40)
+        size = item['size']
         color = item['color']
 
-        for r in range(250, 0, -25):
-            alpha = int(40 * (1 - r / 250))
-            gd.ellipse([glow_cx - r, glow_cy - r, glow_cx + r, glow_cy + r],
-                       fill=color + (alpha,))
+        draw_weapon(draw, x + 40, y + 30, size * 0.9, item['weapon_angle'] + 45, (200, 200, 210))
 
-        img = Image.alpha_composite(img, glow)
+        font = load_font(random.choice(FONTS), size)
 
-        current_x += letter_img.width + gap
+        for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5)]:
+            draw.text((x + dx, y + dy), char, font=font, fill=(0, 0, 0))
+        draw.text((x, y), char, font=font, fill=color)
 
-    # Re-draw on the composited image
+    # Battle header
+    font_hdr = load_font(FONT_BOLD_ITALIC, 44)
+    draw.text((WIDTH // 2, 220), "⚔ CLASH! CLASH! ⚔",
+              font=font_hdr, fill=(255, 100, 100), anchor='mm')
+
+    draw_branding(img, scheme)
+
+    path = os.path.join(PATHS['temp'], f"f2_{random.randint(1,999999)}.png")
+    img.save(path, quality=92)
+    return path
+
+
+def frame_forming(word, scheme):
+    """
+    Frame 3: Letters forming the word on white bar
+    """
+    img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
+    draw_dark_background(img, scheme)
+    draw_white_bar(img, scheme)
     draw = ImageDraw.Draw(img)
 
-    # Top branding bar
-    draw.rectangle([0, 0, WIDTH, 120], fill=(0, 0, 0, 230))
-    draw.rectangle([0, 120, WIDTH, 128], fill=scheme['accent'] + (255,))
+    # Word on white bar - LARGE black letters
+    clean_word = word.strip()[:14]
+    size = 110
+    if len(clean_word) > 8:
+        size = 90
+    if len(clean_word) > 11:
+        size = 75
 
-    font_brand = load_font(FONT_BOLD, 46)
-    draw.text((40, 60), "UNCOVERED USA",
-              font=font_brand, fill=(255, 255, 255, 255), anchor='lm')
+    font = load_font(FONT_BOLD, size)
 
-    dot_x = WIDTH - 180
-    draw.ellipse([dot_x - 14, 46, dot_x + 14, 74], fill=(255, 30, 30, 255))
-    font_live = load_font(FONT_BOLD, 40)
-    draw.text((dot_x + 28, 60), "LIVE",
-              font=font_live, fill=(255, 255, 255, 255), anchor='lm')
+    # Measure
+    temp = Image.new('RGB', (10, 10))
+    td = ImageDraw.Draw(temp)
+    bbox = td.textbbox((0, 0), clean_word, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
 
-    # Bottom bar
-    draw.rectangle([0, HEIGHT - 160, WIDTH, HEIGHT], fill=(0, 0, 0, 230))
-    draw.rectangle([0, HEIGHT - 168, WIDTH, HEIGHT - 160], fill=scheme['accent'] + (255,))
+    x = (WIDTH - tw) // 2
+    y = (WHITE_BAR_BOTTOM // 2) + 20 - th // 2
 
-    font_cta = load_font(FONT_BOLD, 38)
-    draw.text((WIDTH // 2, HEIGHT - 80), "SUBSCRIBE FOR MORE",
-              font=font_cta, fill=(220, 220, 220, 255), anchor='mm')
+    # Big black word with shine effect
+    for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4), (0, -4), (0, 4), (-4, 0), (4, 0)]:
+        draw.text((x + dx, y + dy), clean_word, font=font, fill=(60, 60, 70))
 
-    path = os.path.join(PATHS['temp'], f"ww_{random.randint(1, 999999)}.png")
-    img.convert('RGB').save(path, quality=95)
+    draw.text((x, y), clean_word, font=font, fill=(5, 5, 10))
+
+    # Underline swoosh
+    draw.rectangle([x - 20, y + th + 20, x + tw + 20, y + th + 28], fill=scheme['accent'])
+
+    # Small "VICTORY" tag
+    font_tag = load_font(FONT_BOLD, 32)
+    draw.text((WIDTH // 2, WHITE_BAR_BOTTOM - 40), "★ VICTORY ★",
+              font=font_tag, fill=(200, 100, 50), anchor='mm')
+
+    draw_branding(img, scheme)
+
+    path = os.path.join(PATHS['temp'], f"f3_{random.randint(1,999999)}.png")
+    img.save(path, quality=92)
+    return path
+
+
+def frame_explosion(word, scheme, progress=0.5):
+    """
+    Frame 4: Explosion - word breaking off from bar with particles
+    """
+    img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
+    draw_dark_background(img, scheme)
+    draw_white_bar(img, scheme)
+    draw = ImageDraw.Draw(img)
+
+    # Fading word on bar (with damage)
+    clean_word = word.strip()[:14]
+    font = load_font(FONT_BOLD, 90)
+    temp = Image.new('RGB', (10, 10))
+    td = ImageDraw.Draw(temp)
+    bbox = td.textbbox((0, 0), clean_word, font=font)
+    tw = bbox[2] - bbox[0]
+    x = (WIDTH - tw) // 2
+    y = (WHITE_BAR_BOTTOM // 2) + 20 - 40
+    draw.text((x, y), clean_word, font=font, fill=(150, 150, 150))
+
+    # Explosion center
+    cx = WIDTH // 2
+    cy = WHITE_BAR_BOTTOM + 30
+
+    # Big radial burst
+    for _ in range(60):
+        angle = random.uniform(0, 2 * math.pi)
+        dist = random.uniform(30, 350 * progress)
+        px = cx + int(dist * math.cos(angle))
+        py = cy + int(dist * math.sin(angle))
+        size = random.randint(4, 14)
+        color = random.choice([
+            (255, 200, 60), (255, 130, 30), (255, 255, 200),
+            (255, 80, 80), (200, 200, 200)
+        ])
+        draw.ellipse([px - size, py - size, px + size, py + size], fill=color)
+
+    # Central burst
+    draw.ellipse([cx - 80, cy - 80, cx + 80, cy + 80], fill=(255, 220, 80))
+    draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], fill=(255, 255, 255))
+
+    # Word falling (below bar)
+    word_y = WHITE_BAR_BOTTOM + 100 + int(300 * progress)
+    if word_y < HEIGHT - 200:
+        font_w = load_font(FONT_BOLD, 110)
+        temp2 = Image.new('RGB', (10, 10))
+        td2 = ImageDraw.Draw(temp2)
+        bbox2 = td2.textbbox((0, 0), clean_word, font=font_w)
+        tw2 = bbox2[2] - bbox2[0]
+        x2 = (WIDTH - tw2) // 2
+        # Shadow
+        for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5)]:
+            draw.text((x2 + dx, word_y + dy), clean_word, font=font_w, fill=(0, 0, 0))
+        draw.text((x2, word_y), clean_word, font=font_w, fill=random.choice(WARRIOR_COLORS))
+
+    draw_branding(img, scheme)
+
+    path = os.path.join(PATHS['temp'], f"f4_{random.randint(1,999999)}.png")
+    img.save(path, quality=92)
+    return path
+
+
+def frame_final(word, scheme):
+    """
+    Frame 5: Final word displayed with warrior art on main area
+    """
+    img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
+    draw_dark_background(img, scheme)
+    draw_white_bar(img, scheme)
+    draw = ImageDraw.Draw(img)
+
+    # Small faded word on white bar
+    clean_word = word.strip()[:14]
+    font_sm = load_font(FONT_BOLD, 60)
+    temp = Image.new('RGB', (10, 10))
+    td = ImageDraw.Draw(temp)
+    bbox = td.textbbox((0, 0), clean_word, font=font_sm)
+    tw = bbox[2] - bbox[0]
+    x = (WIDTH - tw) // 2
+    y = (WHITE_BAR_BOTTOM // 2) + 20 - 30
+    draw.text((x, y), clean_word, font=font_sm, fill=(120, 120, 130))
+
+    # Big warrior word on main area (letter-by-letter)
+    display_word = clean_word
+    size = 170
+    if len(display_word) > 8:
+        size = 140
+    if len(display_word) > 11:
+        size = 110
+
+    # Calculate layout
+    letters_data = []
+    total_w = 0
+    gap = 8
+    for char in display_word:
+        if char == ' ':
+            letters_data.append((' ', 40, None))
+            total_w += 40
+            continue
+        font = load_font(random.choice(FONTS), size)
+        td2 = ImageDraw.Draw(Image.new('RGB', (10, 10)))
+        bb = td2.textbbox((0, 0), char, font=font)
+        w = bb[2] - bb[0] + 20
+        color = random.choice(WARRIOR_COLORS)
+        letters_data.append((char, w, (font, color)))
+        total_w += w + gap
+
+    x_start = (WIDTH - total_w) // 2
+    y_base = MAIN_TOP + (MAIN_HEIGHT // 2) - size // 2
+
+    current_x = x_start
+    for char, w, data in letters_data:
+        if char == ' ':
+            current_x += w
+            continue
+        font, color = data
+        y_off = random.randint(-25, 25)
+
+        # Shadow
+        for dx, dy in [(-8, -8), (8, -8), (-8, 8), (8, 8), (0, -8), (0, 8), (-8, 0), (8, 0)]:
+            draw.text((current_x + dx, y_base + y_off + dy), char, font=font, fill=(0, 0, 0))
+        # Outline
+        for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, -3), (0, 3), (-3, 0), (3, 0)]:
+            draw.text((current_x + dx, y_base + y_off + dy), char, font=font, fill=(0, 0, 0))
+        # Main
+        draw.text((current_x, y_base + y_off), char, font=font, fill=color)
+
+        current_x += w + gap
+
+    draw_branding(img, scheme)
+
+    path = os.path.join(PATHS['temp'], f"f5_{random.randint(1,999999)}.png")
+    img.save(path, quality=92)
     return path
 
 
 # ============================================================
-# SPLIT SCRIPT INTO WORDS
+# SCRIPT SPLIT
 # ============================================================
 
 def split_script_into_words(script_text):
-    """Split into words, keep numbers together"""
     words = script_text.split()
     result = []
     i = 0
@@ -379,35 +533,34 @@ def split_script_into_words(script_text):
         if not word:
             i += 1
             continue
-
-        # Number + unit combo
         if re.match(r'^\$?\d+(\.\d+)?$', word.replace(',', '')) and i + 1 < len(words):
             nxt = words[i + 1].lower().strip('.,!?')
-            if nxt in ['billion', 'million', 'trillion', 'thousand', 'percent', '%',
-                       'dollars', 'years', 'days']:
+            if nxt in ['billion', 'million', 'trillion', 'thousand', 'percent',
+                       '%', 'dollars', 'years', 'days']:
                 result.append(f"{word} {words[i+1]}")
                 i += 2
                 continue
-
         result.append(word)
         i += 1
     return result
 
 
 # ============================================================
-# FFMPEG: BUILD VIDEO FROM WORD IMAGES
+# BUILD VIDEO
 # ============================================================
 
-def build_video_from_word_images(word_images, audio_path, output_path, word_duration):
-    total_duration = word_duration * len(word_images)
+def build_video(frame_paths, frame_durations, audio_path, output_path):
+    """Build video from sequence of frames with individual durations"""
+    total_duration = sum(frame_durations)
 
-    concat_file = os.path.join(PATHS['temp'], "word_concat.txt")
+    concat_file = os.path.join(PATHS['temp'], "seq_concat.txt")
     with open(concat_file, 'w') as f:
-        for p in word_images:
-            abs_path = os.path.abspath(p)
+        for path, dur in zip(frame_paths, frame_durations):
+            abs_path = os.path.abspath(path)
             f.write(f"file '{abs_path}'\n")
-            f.write(f"duration {word_duration}\n")
-        f.write(f"file '{os.path.abspath(word_images[-1])}'\n")
+            f.write(f"duration {dur}\n")
+        # Last frame repeat to ensure duration
+        f.write(f"file '{os.path.abspath(frame_paths[-1])}'\n")
 
     abs_audio = os.path.abspath(audio_path)
     abs_output = os.path.abspath(output_path)
@@ -429,8 +582,8 @@ def build_video_from_word_images(word_images, audio_path, output_path, word_dura
         abs_output
     ]
 
-    logger.info(f"FFmpeg: {len(word_images)} words @ {word_duration:.2f}s each")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    logger.info(f"FFmpeg: {len(frame_paths)} frames, {total_duration:.1f}s total")
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
 
     if r.returncode != 0:
         logger.error(f"FFmpeg failed: {r.stderr[-400:]}")
@@ -444,14 +597,14 @@ def build_video_from_word_images(word_images, audio_path, output_path, word_dura
 
 def create_text_video(script_data, editor_data=None):
     logger.info("=" * 50)
-    logger.info("WARRIOR LETTER-BY-LETTER VISUAL")
+    logger.info("WARRIOR LETTER BATTLE VIDEO")
     logger.info("=" * 50)
 
     os.makedirs(PATHS['output_videos'], exist_ok=True)
     os.makedirs(PATHS['temp'], exist_ok=True)
 
     output_path = os.path.join(PATHS['output_videos'],
-                               f"ww_{random.randint(1000, 9999)}.mp4")
+                               f"battle_{random.randint(1000, 9999)}.mp4")
 
     scheme = random.choice(BG_SCHEMES)
     logger.info(f"Scheme accent: {scheme['accent']}")
@@ -485,37 +638,86 @@ def create_text_video(script_data, editor_data=None):
     except:
         audio_dur = 12
 
-    total_duration = max(10, min(18, audio_dur))
+    total_duration = max(10, min(20, audio_dur))
     logger.info(f"Audio: {audio_dur:.2f}s | Video: {total_duration:.2f}s")
 
     words = split_script_into_words(script_text)
     logger.info(f"Words: {len(words)}")
 
     if not words:
-        words = ["Breaking", "News", "Update"]
+        words = ["Breaking", "News"]
 
-    word_duration = total_duration / len(words)
-    logger.info(f"Per word: {word_duration:.2f}s")
+    # Limit to first 5 words
+    words = words[:5]
 
-    word_images = []
+    # Build full frame sequence
+    all_frames = []
+    all_durations = []
+
+    # For each word: 5 frames
+    word_time = total_duration / len(words)
+    per_frame = word_time / 5
+
     for i, word in enumerate(words):
-        clean = re.sub(r'[^\w]', '', word.lower())
-        is_emphasis = clean in WARRIOR_WORDS or bool(re.search(r'\d', word))
+        logger.info(f"Word {i+1}/{len(words)}: '{word}'")
 
+        # Scattered letters for fight scene
+        letters_scattered = []
+        clean_word = word.strip()[:14]
+        base_x = 100
+        for j, char in enumerate(clean_word):
+            if char == ' ':
+                continue
+            letters_scattered.append({
+                'char': char,
+                'x': random.randint(50, WIDTH - 150),
+                'y': random.randint(80, WHITE_BAR_BOTTOM - 120),
+                'size': random.randint(70, 100),
+                'color': random.choice(WARRIOR_COLORS),
+                'weapon_angle': random.uniform(-60, 60)
+            })
+
+        # Frame 1: Battle begins
         try:
-            path = render_word_warrior(word, scheme, is_emphasis)
-            if path:
-                word_images.append(path)
-                logger.info(f"  [{i+1}/{len(words)}] '{word}'")
+            all_frames.append(frame_fight(word, scheme, letters_scattered))
+            all_durations.append(per_frame)
         except Exception as e:
-            logger.warning(f"Word render failed for '{word}': {e}")
-            continue
+            logger.warning(f"F1 fail: {e}")
 
-    if not word_images:
-        logger.error("No word images generated")
+        # Frame 2: Clash
+        try:
+            all_frames.append(frame_clash(word, scheme, letters_scattered))
+            all_durations.append(per_frame)
+        except Exception as e:
+            logger.warning(f"F2 fail: {e}")
+
+        # Frame 3: Word formed on bar
+        try:
+            all_frames.append(frame_forming(word, scheme))
+            all_durations.append(per_frame)
+        except Exception as e:
+            logger.warning(f"F3 fail: {e}")
+
+        # Frame 4: Explosion
+        try:
+            all_frames.append(frame_explosion(word, scheme, 0.5))
+            all_durations.append(per_frame)
+        except Exception as e:
+            logger.warning(f"F4 fail: {e}")
+
+        # Frame 5: Final display
+        try:
+            all_frames.append(frame_final(word, scheme))
+            all_durations.append(per_frame)
+        except Exception as e:
+            logger.warning(f"F5 fail: {e}")
+
+    if not all_frames:
+        logger.error("No frames generated")
         return output_path
 
-    success = build_video_from_word_images(word_images, audio_path, output_path, word_duration)
+    logger.info(f"Total frames: {len(all_frames)}")
+    success = build_video(all_frames, all_durations, audio_path, output_path)
 
     if not success:
         logger.error("Video build failed")
@@ -525,10 +727,9 @@ def create_text_video(script_data, editor_data=None):
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
         logger.info(f"VIDEO READY: {output_path} ({size_mb:.1f}MB)")
 
+    # Cleanup
     try:
-        for f in glob.glob(os.path.join(PATHS['temp'], "ww_*.png")):
-            os.remove(f)
-        for f in glob.glob(os.path.join(PATHS['temp'], "bg_*.png")):
+        for f in glob.glob(os.path.join(PATHS['temp'], "f[0-9]_*.png")):
             os.remove(f)
     except:
         pass

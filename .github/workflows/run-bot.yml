@@ -1,6 +1,6 @@
 name: GOD LEVEL BOT - AUTONOMOUS
 
-on:
+"on":
   schedule:
     - cron: '0 13 * * *'
     - cron: '0 17 * * *'
@@ -19,16 +19,13 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ============================================================
-      # PERSISTENT CACHE — key is FIXED (not per-run)
-      # This ensures snapshots persist across runs for rising score
-      # ============================================================
-      - name: Cache Data (persistent across runs)
+      - name: Cache Data (persistent)
         uses: actions/cache@v4
         with:
           path: |
@@ -47,10 +44,7 @@ jobs:
       - name: Install System Deps
         run: |
           sudo apt-get update || true
-          sudo apt-get install -y \
-            imagemagick ffmpeg \
-            fonts-dejavu fonts-dejavu-extra fonts-liberation \
-            fonts-noto-color-emoji fonts-noto-core fonts-symbola
+          sudo apt-get install -y imagemagick ffmpeg fonts-dejavu fonts-dejavu-extra fonts-liberation fonts-noto-color-emoji fonts-noto-core fonts-symbola
           fc-cache -f -v
 
       - name: Install Python Deps
@@ -100,14 +94,7 @@ jobs:
         run: |
           echo "=== SNAPSHOTS ==="
           if [ -f data/trending_snapshots.json ]; then
-            python -c "
-import json
-with open('data/trending_snapshots.json') as f:
-    d = json.load(f)
-print(f'Total videos tracked: {len(d)}')
-multi = sum(1 for v in d.values() if len(v) >= 2)
-print(f'Videos with 2+ snapshots (rising ready): {multi}')
-" || cat data/trending_snapshots.json
+            python -c "import json; d=json.load(open('data/trending_snapshots.json')); print(f'Total videos tracked: {len(d)}'); multi=sum(1 for v in d.values() if len(v)>=2); print(f'Rising ready (2+ snapshots): {multi}')" || cat data/trending_snapshots.json
           else
             echo "No snapshots yet"
           fi

@@ -1,8 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v21
+main.py - AUTONOMOUS TEXT BOT - FINAL v22
 - YOUTUBE TRENDING AS ONLY SOURCE
 - Self evolution FIRST, Uploader LAST
 - FORCED 45-55s long-form Shorts
+- FIXED: Boss score 0.0 fallback
+- FIXED: Trending override (high velocity accepts even if boss rejects)
 """
 
 import os
@@ -30,6 +32,7 @@ MAX_ACCEPTABLE_WORDS = 200
 CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 MIN_VIEWS_FOR_TREND = 50000
+TRENDING_OVERRIDE_SCORE = 70
 
 
 def safe_import(module_path, function_name=None):
@@ -244,8 +247,17 @@ def boss_approval_main(video_path, script_data, full_story):
 
         ranker = safe_import('src.intelligence.story_ranker', 'calculate_publish_score')
         if ranker:
-            score = ranker(full_story)
-            result['score'] = score
+            try:
+                score = ranker(full_story)
+                if not score or score <= 0:
+                    logger.warning(f"Ranker returned {score} - using fallback 55")
+                    score = 55
+                result['score'] = score
+            except Exception as e:
+                logger.warning(f"Ranker failed: {e} - using fallback 55")
+                score = 55
+                result['score'] = 55
+
             if score >= 60:
                 result['approved'] = True
                 result['reason'] = f"Score: {score:.1f}"
@@ -514,7 +526,7 @@ def get_fallback_script(topic):
         h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
     elif any(w in tl for w in ['ai', 'tech', 'apple', 'google', 'musk', 'iphone']):
         h, t, hk = "#Tech", "What The Tech World Missed", "THIS CHANGES EVERYTHING"
-    elif any(w in tl for w in ['music', 'song', 'drake', 'taylor', 'album']):
+    elif any(w in tl for w in ['music', 'song', 'drake', 'taylor', 'album', 'rosé', 'lisa']):
         h, t, hk = "#Music", "What Really Happened Here", "THIS CHANGED EVERYTHING"
     elif any(w in tl for w in ['game', 'gaming', 'minecraft', 'gta', 'fortnite']):
         h, t, hk = "#Gaming", "The Story Behind This Update", "NOBODY SAW THIS COMING"
@@ -735,6 +747,18 @@ def main():
             continue
 
         boss_data = boss_approval_main(video_path, script_data, full_story)
+
+        # 🔥 Trending override — high velocity topics skip strict ranking
+        if not boss_data.get('approved'):
+            trend_score = candidate.get('breakout_score', 0)
+            if trend_score >= TRENDING_OVERRIDE_SCORE:
+                logger.info(
+                    f"🔥 Trending override — velocity score {trend_score:.1f} >= "
+                    f"{TRENDING_OVERRIDE_SCORE}, accepting despite boss rejection"
+                )
+                boss_data['approved'] = True
+                boss_data['score'] = max(boss_data.get('score', 0), 55)
+                boss_data['reason'] = f"Trending override (velocity {trend_score:.1f})"
 
         if not best_rejected or boss_data.get('score', 0) > best_rejected[3].get('score', 0):
             best_rejected = (candidate, script_data, editor_data, boss_data, story_id, video_path)

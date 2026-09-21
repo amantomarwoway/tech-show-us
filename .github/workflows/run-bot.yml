@@ -24,14 +24,19 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ============================================================
+      # PERSISTENT CACHE — key is FIXED (not per-run)
+      # This ensures snapshots persist across runs for rising score
+      # ============================================================
       - name: Cache Data (persistent across runs)
         uses: actions/cache@v4
         with:
           path: |
             data/
             models/
-          key: god-data-${{ github.run_id }}
+          key: god-data-v1
           restore-keys: |
+            god-data-v1
             god-data-
 
       - name: Setup Python
@@ -93,10 +98,23 @@ jobs:
       - name: Debug Output
         if: always()
         run: |
+          echo "=== SNAPSHOTS ==="
+          if [ -f data/trending_snapshots.json ]; then
+            python -c "
+import json
+with open('data/trending_snapshots.json') as f:
+    d = json.load(f)
+print(f'Total videos tracked: {len(d)}')
+multi = sum(1 for v in d.values() if len(v) >= 2)
+print(f'Videos with 2+ snapshots (rising ready): {multi}')
+" || cat data/trending_snapshots.json
+          else
+            echo "No snapshots yet"
+          fi
+          echo ""
           echo "=== OUTPUT ==="
           ls -lh output/ || true
-          echo "=== VIDEOS ==="
-          ls -lh output/videos/ 2>/dev/null | tail -5 || true
+          echo ""
           echo "=== LOGS (last 30) ==="
           tail -30 logs/bot.log || true
 

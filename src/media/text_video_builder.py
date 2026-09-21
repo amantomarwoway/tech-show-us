@@ -1,11 +1,10 @@
 """
-src/media/text_video_builder.py - WARRIOR LETTER BATTLE v3
-- Top white bar: word formation via letter battle
-- NEW: Yellow bottom bar with 26 letters (A-Z) in eternal 13v13 war
-- Weapons: guns, bombs, tanks, missiles
-- Letters die & revive in endless loop
-- Smooth time-based animation (higher FPS per word)
-- Full script shown, synced to audio
+src/media/text_video_builder.py - WARRIOR LETTER BATTLE v4
+- Removed top branding (UNCOVERED USA / LIVE)
+- Slower battle animation in top white bar
+- Proper captions in main dark area (current word highlighted)
+- Caption speed synced to audio
+- Yellow bottom bar (13v13 letters) unchanged
 """
 
 import os
@@ -29,11 +28,9 @@ WHITE_BAR_BOTTOM = 420
 MAIN_TOP = 420
 MAIN_HEIGHT = HEIGHT - MAIN_TOP
 
-# ============================================================
-# YELLOW BATTLE BAR (bottom of Shorts frame)
-# ============================================================
-YELLOW_BAR_TOP = HEIGHT - 460      # 1460
-YELLOW_BAR_BOTTOM = HEIGHT - 240   # 1680
+# Yellow bottom bar
+YELLOW_BAR_TOP = HEIGHT - 460
+YELLOW_BAR_BOTTOM = HEIGHT - 240
 YELLOW_BAR_HEIGHT = YELLOW_BAR_BOTTOM - YELLOW_BAR_TOP
 YELLOW_COLOR = (255, 215, 0)
 YELLOW_DARK = (200, 160, 0)
@@ -41,11 +38,11 @@ RED_TEAM_COLOR = (200, 30, 30)
 BLUE_TEAM_COLOR = (30, 80, 200)
 
 # ============================================================
-# SMOOTHNESS KNOBS — tune here
+# SPEED KNOBS — slower battle
 # ============================================================
-TARGET_FPS = 15               # frames per second of video
-MIN_FRAMES_PER_WORD = 4       # fast words still get a few
-MAX_FRAMES_PER_WORD = 25      # cap to avoid explosion
+TARGET_FPS = 8              # was 15 — slower
+MIN_FRAMES_PER_WORD = 3     # was 4
+MAX_FRAMES_PER_WORD = 14    # was 25
 
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_BOLD_ITALIC = "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf"
@@ -70,10 +67,6 @@ BG_SCHEMES = [
 
 WEAPON_TYPES = ['sword', 'hammer', 'axe', 'spear', 'mace']
 
-
-# ============================================================
-# HELPERS
-# ============================================================
 
 def load_font(path, size):
     try:
@@ -163,19 +156,14 @@ def draw_dark_background(img, scheme):
 
 def draw_white_bar(img, scheme):
     draw = ImageDraw.Draw(img)
+    # White bar (no black top strip anymore)
     draw.rectangle([0, WHITE_BAR_TOP, WIDTH, WHITE_BAR_BOTTOM], fill=(248, 248, 252))
     draw.rectangle([0, WHITE_BAR_BOTTOM, WIDTH, WHITE_BAR_BOTTOM + 8], fill=scheme['accent'])
-    draw.rectangle([0, 0, WIDTH, 90], fill=(0, 0, 0))
 
 
 def draw_top_branding(img):
-    draw = ImageDraw.Draw(img)
-    font = load_font(FONT_BOLD, 42)
-    draw.text((40, 45), "UNCOVERED USA", font=font, fill=(255, 255, 255), anchor='lm')
-    dot_x = WIDTH - 180
-    draw.ellipse([dot_x - 12, 33, dot_x + 12, 57], fill=(255, 30, 30))
-    font_live = load_font(FONT_BOLD, 36)
-    draw.text((dot_x + 24, 45), "LIVE", font=font_live, fill=(255, 255, 255), anchor='lm')
+    """REMOVED — no branding as per user request."""
+    return
 
 
 def draw_bottom_cta(img, scheme):
@@ -185,6 +173,72 @@ def draw_bottom_cta(img, scheme):
     font_cta = load_font(FONT_BOLD, 38)
     draw.text((WIDTH // 2, HEIGHT - 60), "SUBSCRIBE FOR MORE",
               font=font_cta, fill=(220, 220, 220), anchor='mm')
+
+
+# ============================================================
+# CAPTION SYSTEM (main dark area)
+# ============================================================
+
+def draw_caption_overlay(img, words, idx, scheme):
+    """
+    Draw captions in the main dark area.
+    Previous words: grey, small, above center.
+    Current word: BIG, bright, centered.
+    Synced to audio via frame timing.
+    """
+    if not words or idx < 0 or idx >= len(words):
+        return
+
+    draw = ImageDraw.Draw(img)
+    main_center_y = MAIN_TOP + (MAIN_HEIGHT // 2)
+
+    current_word = words[idx].strip()
+    if not current_word:
+        return
+
+    # Previous 3 words (grey, small)
+    prev_words = words[max(0, idx - 3):idx]
+    if prev_words:
+        prev_text = " ".join(prev_words)
+        if len(prev_text) > 28:
+            prev_text = "..." + prev_text[-25:]
+        font_prev = load_font(FONT_REGULAR, 56)
+        bbox = draw.textbbox((0, 0), prev_text, font=font_prev)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        px = (WIDTH - tw) // 2
+        py = main_center_y - 180
+        for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3)]:
+            draw.text((px + dx, py + dy), prev_text, font=font_prev, fill=(0, 0, 0))
+        draw.text((px, py), prev_text, font=font_prev, fill=(140, 140, 155))
+
+    # Current word — size depends on length
+    cw_len = len(current_word)
+    if cw_len > 12:
+        font_size = 88
+    elif cw_len > 8:
+        font_size = 120
+    else:
+        font_size = 150
+    font_curr = load_font(FONT_BOLD, font_size)
+
+    bbox = draw.textbbox((0, 0), current_word, font=font_curr)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    x = (WIDTH - tw) // 2
+    y = main_center_y - th // 2 + 10
+
+    # Big outline shadow
+    for dx, dy in [(-8, -8), (8, -8), (-8, 8), (8, 8),
+                   (0, -8), (0, 8), (-8, 0), (8, 0),
+                   (-5, -5), (5, -5), (-5, 5), (5, 5)]:
+        draw.text((x + dx, y + dy), current_word, font=font_curr, fill=(0, 0, 0))
+
+    # Main text — white bright
+    draw.text((x, y), current_word, font=font_curr, fill=(255, 255, 255))
+
+    # Accent underline
+    draw.rectangle([x - 20, y + th + 30, x + tw + 20, y + th + 38], fill=scheme['accent'])
 
 
 # ============================================================
@@ -232,24 +286,22 @@ def draw_weapon(draw, x, y, size, angle_deg, color):
 # ============================================================
 
 def _compute_letter_positions():
-    """Return dict char -> {'x','y','side'} for all 26 letters."""
     positions = {}
     spacing = 64
     top_row_y = YELLOW_BAR_TOP + 60
     bot_row_y = YELLOW_BAR_TOP + 155
 
-    left_top = "ABCDEFG"    # 7
-    left_bot = "HIJKLM"     # 6
-    right_top = "NOPQRST"   # 7
-    right_bot = "UVWXYZ"    # 6
+    left_top = "ABCDEFG"
+    left_bot = "HIJKLM"
+    right_top = "NOPQRST"
+    right_bot = "UVWXYZ"
 
     for i, c in enumerate(left_top):
         positions[c] = {'x': 30 + i * spacing, 'y': top_row_y, 'side': 'left'}
     for i, c in enumerate(left_bot):
         positions[c] = {'x': 30 + i * spacing, 'y': bot_row_y, 'side': 'left'}
 
-    # Right side: align end near WIDTH-30
-    right_end = WIDTH - 30 - 45   # 45 approx letter width
+    right_end = WIDTH - 30 - 45
     right_start = right_end - 6 * spacing
     for i, c in enumerate(right_top):
         positions[c] = {'x': right_start + i * spacing, 'y': top_row_y, 'side': 'right'}
@@ -263,22 +315,17 @@ LETTER_POSITIONS = _compute_letter_positions()
 
 
 # ============================================================
-# YELLOW BAR — BATTLE ANIMATION STATE (time-based)
+# YELLOW BAR — BATTLE ANIMATION STATE
 # ============================================================
 
 def get_letter_anim(char, t):
-    """Deterministic animation state for a letter at time t."""
     h = _stable_hash(char)
     rng = random.Random(h)
-
-    cycle_len = 7.0 + rng.random() * 4.0        # 7-11 seconds
+    cycle_len = 7.0 + rng.random() * 4.0
     phase = ((t * 0.5) + rng.random() * cycle_len) % cycle_len
-    phase = phase / cycle_len                    # 0..1
-
-    # Bob
+    phase = phase / cycle_len
     bob = math.sin(t * 4 + h * 0.01) * 4
 
-    # Life state
     if phase < 0.62:
         status, prog = 'alive', phase / 0.62
     elif phase < 0.70:
@@ -288,31 +335,18 @@ def get_letter_anim(char, t):
     else:
         status, prog = 'reviving', (phase - 0.84) / 0.16
 
-    # Shooting pulse
     shoot_t = (t * 1.8 + h * 0.03) % 1.0
     shooting = shoot_t < 0.12 and status == 'alive'
-
     weapon = ['gun', 'bomb', 'tank', 'missile'][h % 4]
-    return {
-        'status': status,
-        'progress': prog,
-        'bob': bob,
-        'shooting': shooting,
-        'weapon': weapon,
-    }
+    return {'status': status, 'progress': prog, 'bob': bob,
+            'shooting': shooting, 'weapon': weapon}
 
-
-# ============================================================
-# YELLOW BAR — WEAPONS/PROJECTILES
-# ============================================================
 
 def _get_projectiles(t):
-    """Return list of currently-flying projectiles."""
     projectiles = []
     slot_len = 0.28
     current_slot = int(t / slot_len)
-
-    for i in range(7):  # track 7 most recent slots
+    for i in range(7):
         slot = current_slot - i
         if slot < 0:
             continue
@@ -320,25 +354,20 @@ def _get_projectiles(t):
         age = t - spawn_t
         if age > slot_len * 6:
             continue
-
         rng = random.Random(slot * 7919)
         direction = rng.choice([1, -1])
         start_y = rng.randint(YELLOW_BAR_TOP + 45, YELLOW_BAR_BOTTOM - 55)
         ptype = rng.choice(['bullet', 'missile', 'bomb', 'missile'])
-
         progress = min(1.0, age / (slot_len * 5))
         if direction == 1:
             x = int(-20 + progress * (WIDTH + 40))
         else:
             x = int(WIDTH + 20 - progress * (WIDTH + 40))
-
         y = start_y
         if ptype == 'missile':
             y += int(math.sin(age * 30) * 10)
-
         projectiles.append({'type': ptype, 'x': x, 'y': y,
                             'dir': direction, 'age': age})
-
     return projectiles
 
 
@@ -349,39 +378,27 @@ def draw_projectile(draw, p):
         draw.ellipse([x - 4, y - 3, x + 4, y + 3], fill=(255, 240, 120))
         draw.ellipse([x - 2, y - 2, x + 2, y + 2], fill=(255, 255, 200))
     elif p['type'] == 'missile':
-        # Body
         draw.ellipse([x - 8, y - 5, x + 8, y + 5], fill=(200, 60, 60))
-        # Flame tail
         tail_x = x - d * 14
         draw.polygon([(x - d * 6, y - 4), (tail_x, y), (x - d * 6, y + 4)],
                      fill=(255, 180, 60))
-    else:  # bomb
+    else:
         draw.ellipse([x - 10, y - 10, x + 10, y + 10], fill=(30, 30, 40))
         draw.ellipse([x - 10, y - 10, x + 10, y + 10], outline=(120, 120, 130), width=2)
-        # fuse
         draw.line([(x + 8, y - 8), (x + 14, y - 14)], fill=(255, 200, 100), width=3)
 
 
-# ============================================================
-# YELLOW BAR — MAIN RENDER
-# ============================================================
-
 def draw_yellow_bar(img, t):
-    """Draw the yellow 26-letter battle bar at time t."""
     draw = ImageDraw.Draw(img)
-
-    # Background
     draw.rectangle([0, YELLOW_BAR_TOP, WIDTH, YELLOW_BAR_BOTTOM], fill=YELLOW_COLOR)
     draw.rectangle([0, YELLOW_BAR_TOP, WIDTH, YELLOW_BAR_TOP + 6], fill=(0, 0, 0))
     draw.rectangle([0, YELLOW_BAR_BOTTOM - 6, WIDTH, YELLOW_BAR_BOTTOM], fill=(0, 0, 0))
 
-    # Diagonal yellow stripes for texture
     stripe_color = (255, 235, 90)
     for i in range(-YELLOW_BAR_HEIGHT, WIDTH + YELLOW_BAR_HEIGHT, 120):
         draw.line([(i, YELLOW_BAR_TOP), (i + YELLOW_BAR_HEIGHT, YELLOW_BAR_BOTTOM)],
                   fill=stripe_color, width=2)
 
-    # Title tag
     font_tag = load_font(FONT_BOLD, 22)
     tag_w = 340
     tag_x = (WIDTH - tag_w) // 2
@@ -391,21 +408,17 @@ def draw_yellow_bar(img, t):
               "LIVE LETTER BATTLE  13v13",
               font=font_tag, fill=(255, 215, 0), anchor='mm')
 
-    # VS in middle
     font_vs = load_font(FONT_BOLD, 34)
     draw.text((WIDTH // 2, YELLOW_BAR_TOP + YELLOW_BAR_HEIGHT // 2 + 10), "VS",
               font=font_vs, fill=(180, 20, 20), anchor='mm')
 
-    # Projectiles behind letters
     for p in _get_projectiles(t):
         draw_projectile(draw, p)
 
-    # Letters
     for char, pos in LETTER_POSITIONS.items():
         anim = get_letter_anim(char, t)
         _draw_battle_letter(draw, char, pos, anim)
 
-    # Explosions (deterministic per time)
     for i in range(3):
         slot = int(t / 1.2) + i
         rng = random.Random(slot * 3301)
@@ -415,8 +428,6 @@ def draw_yellow_bar(img, t):
             age = (t - slot * 1.2) / 0.6
             if 0 <= age <= 1:
                 r = int(8 + 40 * age)
-                a = int(255 * (1 - age))
-                # star burst
                 for k in range(6):
                     ang = k * math.pi / 3 + age * 2
                     exr = ex + int(r * math.cos(ang))
@@ -431,12 +442,10 @@ def _draw_battle_letter(draw, char, pos, anim):
     x, y = pos['x'], pos['y']
     side = pos['side']
     base_color = RED_TEAM_COLOR if side == 'left' else BLUE_TEAM_COLOR
-
     status = anim['status']
     prog = anim['progress']
     bob = anim['bob']
 
-    # Size and color depending on life state
     if status == 'dying':
         size = int(48 - 30 * prog)
         color = tuple(int(c * (1 - 0.5 * prog)) for c in base_color)
@@ -456,23 +465,18 @@ def _draw_battle_letter(draw, char, pos, anim):
 
     cx = x + int(bob)
     cy = y + y_off
-
-    # Muzzle flash direction
     muzzle_dir = 1 if side == 'left' else -1
 
-    # Draw weapon muzzle if shooting
     if anim['shooting']:
         mx = cx + muzzle_dir * 26
         draw.ellipse([mx - 12, cy - 12, mx + 12, cy + 12], fill=(255, 255, 120))
         draw.ellipse([mx - 6, cy - 6, mx + 6, cy + 6], fill=(255, 255, 255))
 
-    # Letter with outline
     font = load_font(FONT_BOLD, size)
     for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, -3), (0, 3), (-3, 0), (3, 0)]:
         draw.text((cx + dx, cy + dy), char, font=font, fill=(0, 0, 0), anchor='mm')
     draw.text((cx, cy), char, font=font, fill=color, anchor='mm')
 
-    # Skull for dead
     if status == 'dead':
         draw.ellipse([cx - 8, cy - 6, cx + 8, cy + 6], fill=(230, 230, 230))
         draw.ellipse([cx - 4, cy - 3, cx - 1, cy], fill=(0, 0, 0))
@@ -480,10 +484,10 @@ def _draw_battle_letter(draw, char, pos, anim):
 
 
 # ============================================================
-# TOP BAR FRAMES (word formation)
+# TOP BAR FRAMES (word formation) — caption overlay included
 # ============================================================
 
-def frame_fight(word, scheme, letters_scattered):
+def frame_fight(word, scheme, letters_scattered, words=None, idx=0):
     img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
     draw_dark_background(img, scheme)
     draw_white_bar(img, scheme)
@@ -508,14 +512,17 @@ def frame_fight(word, scheme, letters_scattered):
         sy = random.randint(100, WHITE_BAR_BOTTOM - 50)
         draw.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=(255, 220, 100))
 
-    draw_top_branding(img)
+    # Caption overlay in main area
+    if words:
+        draw_caption_overlay(img, words, idx, scheme)
+
     draw_bottom_cta(img, scheme)
     path = os.path.join(PATHS['temp'], f"f1_{random.randint(1,999999)}.png")
     img.save(path, quality=92)
     return path
 
 
-def frame_clash(word, scheme, letters_scattered):
+def frame_clash(word, scheme, letters_scattered, words=None, idx=0):
     img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
     draw_dark_background(img, scheme)
     draw_white_bar(img, scheme)
@@ -531,8 +538,8 @@ def frame_clash(word, scheme, letters_scattered):
 
     for item in letters_scattered:
         char = item['char']
-        x = item['x'] + random.randint(-50, 50)
-        y = item['y'] + random.randint(-40, 40)
+        x = item['x'] + random.randint(-30, 30)
+        y = item['y'] + random.randint(-25, 25)
         size = item['size']; color = item['color']
         draw_weapon(draw, x + 40, y + 30, size * 0.9, item['weapon_angle'] + 45, (200, 200, 210))
         font = load_font(random.choice(FONTS), size)
@@ -543,14 +550,17 @@ def frame_clash(word, scheme, letters_scattered):
     font_hdr = load_font(FONT_BOLD_ITALIC, 44)
     draw.text((WIDTH // 2, 220), "CLASH! CLASH!",
               font=font_hdr, fill=(255, 100, 100), anchor='mm')
-    draw_top_branding(img)
+
+    if words:
+        draw_caption_overlay(img, words, idx, scheme)
+
     draw_bottom_cta(img, scheme)
     path = os.path.join(PATHS['temp'], f"f2_{random.randint(1,999999)}.png")
     img.save(path, quality=92)
     return path
 
 
-def frame_forming(word, scheme, shine_phase=0.0):
+def frame_forming(word, scheme, shine_phase=0.0, words=None, idx=0):
     img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
     draw_dark_background(img, scheme)
     draw_white_bar(img, scheme)
@@ -570,7 +580,6 @@ def frame_forming(word, scheme, shine_phase=0.0):
         draw.text((x + dx, y + dy), clean_word, font=font, fill=(60, 60, 70))
     draw.text((x, y), clean_word, font=font, fill=(5, 5, 10))
 
-    # Moving shine
     shine_x = int(x + (tw + 80) * shine_phase) - 40
     if x <= shine_x <= x + tw:
         draw.rectangle([shine_x, y - 10, shine_x + 25, y + th + 10],
@@ -580,14 +589,17 @@ def frame_forming(word, scheme, shine_phase=0.0):
     font_tag = load_font(FONT_BOLD, 32)
     draw.text((WIDTH // 2, WHITE_BAR_BOTTOM - 40), "VICTORY",
               font=font_tag, fill=(200, 100, 50), anchor='mm')
-    draw_top_branding(img)
+
+    if words:
+        draw_caption_overlay(img, words, idx, scheme)
+
     draw_bottom_cta(img, scheme)
     path = os.path.join(PATHS['temp'], f"f3_{random.randint(1,999999)}.png")
     img.save(path, quality=92)
     return path
 
 
-def frame_explosion(word, scheme, progress=0.5):
+def frame_explosion(word, scheme, progress=0.5, words=None, idx=0):
     img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
     draw_dark_background(img, scheme)
     draw_white_bar(img, scheme)
@@ -615,25 +627,17 @@ def frame_explosion(word, scheme, progress=0.5):
         draw.ellipse([px - sz, py - sz, px + sz, py + sz], fill=color)
     draw.ellipse([cx - 80, cy - 80, cx + 80, cy + 80], fill=(255, 220, 80))
     draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], fill=(255, 255, 255))
-    word_y = WHITE_BAR_BOTTOM + 100 + int(300 * progress)
-    if word_y < HEIGHT - 200:
-        font_w = load_font(FONT_BOLD, 110)
-        temp2 = Image.new('RGB', (10, 10))
-        td2 = ImageDraw.Draw(temp2)
-        bbox2 = td2.textbbox((0, 0), clean_word, font=font_w)
-        tw2 = bbox2[2] - bbox2[0]
-        x2 = (WIDTH - tw2) // 2
-        for dx, dy in [(-5, -5), (5, -5), (-5, 5), (5, 5)]:
-            draw.text((x2 + dx, word_y + dy), clean_word, font=font_w, fill=(0, 0, 0))
-        draw.text((x2, word_y), clean_word, font=font_w, fill=random.choice(WARRIOR_COLORS))
-    draw_top_branding(img)
+
+    if words:
+        draw_caption_overlay(img, words, idx, scheme)
+
     draw_bottom_cta(img, scheme)
     path = os.path.join(PATHS['temp'], f"f4_{random.randint(1,999999)}.png")
     img.save(path, quality=92)
     return path
 
 
-def frame_final(word, scheme):
+def frame_final(word, scheme, words=None, idx=0):
     img = Image.new('RGB', (WIDTH, HEIGHT), (10, 5, 15))
     draw_dark_background(img, scheme)
     draw_white_bar(img, scheme)
@@ -647,37 +651,10 @@ def frame_final(word, scheme):
     x = (WIDTH - tw) // 2
     y = (WHITE_BAR_BOTTOM // 2) + 20 - 30
     draw.text((x, y), clean_word, font=font_sm, fill=(120, 120, 130))
-    size = 170
-    if len(clean_word) > 8: size = 140
-    if len(clean_word) > 11: size = 110
-    letters_data = []
-    total_w = 0
-    gap = 8
-    for char in clean_word:
-        if char == ' ':
-            letters_data.append((' ', 40, None)); total_w += 40; continue
-        font = load_font(random.choice(FONTS), size)
-        td2 = ImageDraw.Draw(Image.new('RGB', (10, 10)))
-        bb = td2.textbbox((0, 0), char, font=font)
-        w = bb[2] - bb[0] + 20
-        color = random.choice(WARRIOR_COLORS)
-        letters_data.append((char, w, (font, color)))
-        total_w += w + gap
-    x_start = (WIDTH - total_w) // 2
-    y_base = MAIN_TOP + (MAIN_HEIGHT // 2) - size // 2
-    current_x = x_start
-    for char, w, data in letters_data:
-        if char == ' ':
-            current_x += w; continue
-        font, color = data
-        y_off = random.randint(-25, 25)
-        for dx, dy in [(-8, -8), (8, -8), (-8, 8), (8, 8), (0, -8), (0, 8), (-8, 0), (8, 0)]:
-            draw.text((current_x + dx, y_base + y_off + dy), char, font=font, fill=(0, 0, 0))
-        for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, -3), (0, 3), (-3, 0), (3, 0)]:
-            draw.text((current_x + dx, y_base + y_off + dy), char, font=font, fill=(0, 0, 0))
-        draw.text((current_x, y_base + y_off), char, font=font, fill=color)
-        current_x += w + gap
-    draw_top_branding(img)
+
+    if words:
+        draw_caption_overlay(img, words, idx, scheme)
+
     draw_bottom_cta(img, scheme)
     path = os.path.join(PATHS['temp'], f"f5_{random.randint(1,999999)}.png")
     img.save(path, quality=92)
@@ -724,43 +701,33 @@ def get_frames_per_word(word_time):
 
 
 def get_frame_sequence(word_time, frames_per_word):
-    """
-    Return list of (frame_type, duration_seconds) for a word.
-    Higher frames_per_word → smoother transitions.
-    """
-    # Target proportions
-    proportions = [
-        ("fight", 0.10),
-        ("clash", 0.10),
-        ("form",  0.46),
-        ("expl",  0.14),
-        ("final", 0.20),
-    ]
-    frames = []
-    for ftype, prop in proportions:
-        n = max(1, int(round(frames_per_word * prop)))
-        for _ in range(n):
-            frames.append(ftype)
-    # Trim / pad to match frames_per_word
-    if len(frames) > frames_per_word:
-        frames = frames[:frames_per_word]
-    while len(frames) < frames_per_word:
-        frames.append("form")
-    # Duration per frame
-    dur = word_time / len(frames)
-    return [(ft, dur) for ft in frames]
+    """Return list of (frame_type, duration)."""
+    if frames_per_word <= 3:
+        seq = ['form', 'form', 'final']
+    elif frames_per_word <= 5:
+        seq = ['fight', 'form', 'form', 'form', 'final']
+    elif frames_per_word <= 8:
+        seq = ['fight', 'clash', 'form', 'form', 'form', 'form', 'final', 'final']
+    else:
+        seq = ['fight', 'clash', 'form', 'form', 'form', 'form', 'form',
+               'expl', 'final', 'final']
+        while len(seq) < frames_per_word:
+            seq.insert(-2, 'form')
+
+    if len(seq) > frames_per_word:
+        seq = seq[:frames_per_word]
+    while len(seq) < frames_per_word:
+        seq.append('form')
+
+    dur = word_time / len(seq)
+    return [(ft, dur) for ft in seq]
 
 
 # ============================================================
-# BUILD VIDEO (with yellow bar overlay)
+# BUILD VIDEO
 # ============================================================
 
 def build_video(frame_paths, frame_durations, audio_path, output_path, cumulative_times):
-    """
-    Concatenate frames + audio via FFmpeg.
-    frames: list of PNG paths (already have yellow bar drawn)
-    cumulative_times: list of start times for each frame (unused for FFmpeg but kept for reference)
-    """
     total_duration = sum(frame_durations)
     concat_file = os.path.join(PATHS['temp'], "seq_concat.txt")
     with open(concat_file, 'w') as f:
@@ -804,7 +771,7 @@ def build_video(frame_paths, frame_durations, audio_path, output_path, cumulativ
 
 def create_text_video(script_data, editor_data=None):
     logger.info("=" * 50)
-    logger.info("WARRIOR LETTER BATTLE v3")
+    logger.info("WARRIOR LETTER BATTLE v4")
     logger.info("=" * 50)
 
     os.makedirs(PATHS['output_videos'], exist_ok=True)
@@ -867,7 +834,6 @@ def create_text_video(script_data, editor_data=None):
 
         logger.info(f"Word {i+1}/{len(words)}: '{word}' ({word_time:.2f}s, {n_frames} frames)")
 
-        # Precompute scatter once per word
         clean_word = word.strip()[:14]
         scatter_base = []
         for ch in clean_word:
@@ -883,34 +849,33 @@ def create_text_video(script_data, editor_data=None):
             })
 
         for j, (ftype, dur) in enumerate(frame_seq):
-            t = cumulative  # time of this frame
+            t = cumulative
             phase = j / max(1, len(frame_seq) - 1)
 
-            # Build scattered list with slight variation
+            # Slower, smaller scatter motion
             letters_scattered = []
             for s in scatter_base:
                 letters_scattered.append({
                     'char': s['char'],
-                    'x': s['bx'] + int(math.sin(phase * 6.28 + j) * 12),
-                    'y': s['by'] + int(math.cos(phase * 6.28 + j) * 8),
+                    'x': s['bx'] + int(math.sin(phase * 3.14 + j * 0.5) * 6),
+                    'y': s['by'] + int(math.cos(phase * 3.14 + j * 0.5) * 4),
                     'size': s['size'],
                     'color': s['color'],
-                    'weapon_angle': s['wa'] + phase * 40,
+                    'weapon_angle': s['wa'] + phase * 20,
                 })
 
             try:
                 if ftype == 'fight':
-                    fp = frame_fight(word, scheme, letters_scattered)
+                    fp = frame_fight(word, scheme, letters_scattered, words, i)
                 elif ftype == 'clash':
-                    fp = frame_clash(word, scheme, letters_scattered)
+                    fp = frame_clash(word, scheme, letters_scattered, words, i)
                 elif ftype == 'form':
-                    fp = frame_forming(word, scheme, shine_phase=phase)
+                    fp = frame_forming(word, scheme, shine_phase=phase, words=words, idx=i)
                 elif ftype == 'expl':
-                    fp = frame_explosion(word, scheme, progress=phase)
-                else:  # final
-                    fp = frame_final(word, scheme)
+                    fp = frame_explosion(word, scheme, progress=phase, words=words, idx=i)
+                else:
+                    fp = frame_final(word, scheme, words=words, idx=i)
 
-                # *** Overlay yellow battle bar on this frame ***
                 img = Image.open(fp).convert('RGB')
                 draw_yellow_bar(img, t)
                 img.save(fp, quality=92)

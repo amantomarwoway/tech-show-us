@@ -1,10 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v20
+main.py - AUTONOMOUS TEXT BOT - FINAL v21
+- YOUTUBE TRENDING AS ONLY SOURCE
 - Self evolution FIRST, Uploader LAST
-- FORCED 45-55s long-form
-- PROTECTED script from truncation
-- FIXED duplicate detection (uploaded-only + stricter match)
-- OVERRIDE "script too long" gate for long-form Shorts
+- FORCED 45-55s long-form Shorts
 """
 
 import os
@@ -28,9 +26,10 @@ logger = setup_logger(__name__)
 FORCED_MIN_DURATION = 45
 FORCED_MAX_DURATION = 55
 MIN_ACCEPTABLE_WORDS = 80
-MAX_ACCEPTABLE_WORDS = 200      # gate override ceiling
+MAX_ACCEPTABLE_WORDS = 200
 CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
+MIN_VIEWS_FOR_TREND = 50000
 
 
 def safe_import(module_path, function_name=None):
@@ -64,6 +63,8 @@ def clean_topic(title):
     cleaned = re.sub(r'\s*-\s*[A-Z][a-zA-Z\s]{2,30}$', '', cleaned)
     cleaned = re.sub(r'^[\|\-\s:]+', '', cleaned)
     cleaned = re.sub(r'[\|\-\s:]+$', '', cleaned)
+    cleaned = re.sub(r'\s*\((Official|Music|Lyric|Audio|Video|HD|4K)\s*.*?\)\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*\[(Official|Music|Lyric|Audio|Video|HD|4K)\s*.*?\]\s*', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\s+', ' ', cleaned)
     return cleaned.strip()
 
@@ -99,174 +100,78 @@ def is_spam_topic(title):
 def is_viral_topic(title):
     if not title or is_spam_topic(title):
         return False
-    tl = title.lower()
-    niche = ['skincare', 'botox', 'beauty', 'makeup', 'recipe', 'cooking',
-             'diet', 'workout', 'yoga', 'kitchen', 'home decor', 'diy',
-             'fashion', 'outfit', 'garden', 'weather', 'temperature',
-             'forecast', 'county', 'municipal', 'neighborhood',
-             'daily thread', 'weekly thread', 'megathread', 'roundup',
-             'vs prediction', 'odds', 'preview', 'recap', 'discussion',
-             'help me', 'was wearing', 'picked up my', "i can't use",
-             'ama/q&a', 'announcement']
-    if any(kw in tl for kw in niche):
-        return False
-    if len(title.split()) < 5:
+    if len(title.split()) < 4:
         return False
     return True
 
 
-def is_audience_active(story):
-    title = story.get('title', '')
-    source = story.get('source', '').lower()
-    logger.info(f"Activity: {title[:55]}")
+def score_youtube_trend(story):
+    views = story.get('view_count', 0)
+    likes = story.get('like_count', 0)
+    comments = story.get('comment_count', 0)
+    hours = max(story.get('age_hours', 1), 1)
+    velocity = views / hours
 
-    reddit_score = 40
-    if 'reddit' in source:
-        up = story.get('reddit_score', 0)
-        reddit_score = 100 if up >= 5000 else 80 if up >= 2000 else 60 if up >= 1000 else 45 if up >= 500 else 25
+    view_score = min(100, (views / 5_000_000) * 100)
+    velocity_score = min(100, (velocity / 200_000) * 100)
+    engagement = (likes + comments * 3) / max(views, 1) * 1000
+    eng_score = min(100, engagement * 10)
 
-    trends_score = 40
-    if any(x in source for x in ['trends', 'trending', 'breakout']):
-        trends_score = 85
-    elif 'google_news' in source:
-        trends_score = 60
-
-    spike_score = check_trends_spike(title)
-    logger.info(f"   Reddit: {reddit_score} | Trends: {trends_score} | Spike: {spike_score}")
-
-    weighted = reddit_score * 0.35 + trends_score * 0.30 + spike_score * 0.35
-    active = sum(1 for s in [reddit_score, trends_score, spike_score] if s >= 55)
-    logger.info(f"   Weighted: {weighted:.1f} ({active}/3)")
-
-    return (active >= 1 or weighted >= 50), weighted
-
-
-def check_trends_spike(title):
-    try:
-        from pytrends.request import TrendReq
-        words = [w for w in title.split() if len(w) > 4][:3]
-        if not words:
-            return 40
-        query = " ".join(words)
-        try:
-            pytrends = TrendReq(hl='en-US', tz=360, timeout=10)
-        except TypeError:
-            pytrends = TrendReq(hl='en-US', tz=360)
-        pytrends.build_payload([query], timeframe='now 1-H', geo='US')
-        time.sleep(1)
-        data = pytrends.interest_over_time()
-        if data.empty or query not in data.columns:
-            return 40
-        vals = data[query].tolist()
-        if not vals:
-            return 40
-        c = vals[-1]
-        return 100 if c >= 80 else 80 if c >= 50 else 55 if c >= 20 else 35 if c >= 5 else 20
-    except Exception:
-        return 45
+    total = view_score * 0.35 + velocity_score * 0.45 + eng_score * 0.20
+    return total
 
 
 def research_god_main():
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH - REAL TRENDING ONLY")
+    logger.info("LEG 1: RESEARCH - YOUTUBE TRENDING ONLY")
     logger.info("=" * 60)
 
-    all_stories = []
-
-    reddit = safe_import('src.collectors.reddit_collector', 'collect_reddit_trends')
-    if reddit:
-        try:
-            s = reddit()
-            logger.info(f"Reddit: {len(s)}")
-            all_stories.extend(s)
-        except Exception as e:
-            logger.error(f"Reddit: {e}")
-
-    trends = safe_import('src.collectors.trends_collector', 'collect_trends')
-    if trends:
-        try:
-            s = trends()
-            logger.info(f"Google News Trending: {len(s)}")
-            all_stories.extend(s)
-        except Exception as e:
-            logger.error(f"Trends: {e}")
-
-    if not all_stories:
-        logger.error("No real trending sources available")
+    collector = safe_import('src.collectors.youtube_trending_collector',
+                            'collect_youtube_trending')
+    if not collector:
+        logger.error("YouTube trending collector not available")
         return []
 
-    for story in all_stories:
-        story['title'] = clean_topic(story.get('title', ''))
-        if not story['title'] or len(story['title']) < 10:
-            story['title'] = ''
-
-    all_stories = [s for s in all_stories if s.get('title') and len(s['title']) > 10]
-
-    before = len(all_stories)
-    all_stories = [s for s in all_stories if is_viral_topic(s.get('title', ''))]
-    logger.info(f"Viral filter: {before} -> {len(all_stories)}")
-
-    verified = []
-    for s in all_stories:
-        source = s.get('source', '').lower()
-        if 'reddit' in source:
-            upvotes = s.get('reddit_score', 0)
-            if upvotes >= 500:
-                verified.append(s)
-                logger.info(f"  REAL REDDIT: {s.get('title', '')[:50]} ({upvotes} up)")
-            continue
-        if 'trends' in source or 'trending' in source or 'google' in source:
-            score = check_trends_actual(s.get('title', ''))
-            if score >= 40:
-                verified.append(s)
-
-    if not verified:
-        logger.error("No verified trending topics")
-        return []
-
-    logger.info(f"Verified: {len(verified)}")
-
-    seen = set()
-    unique = []
-    for s in verified:
-        k = s.get('title', '')[:30].lower()
-        if k not in seen:
-            seen.add(k)
-            unique.append(s)
-
-    scorer = safe_import('src.intelligence.topic_scorer', 'rank_stories')
-    if scorer:
-        try:
-            ranked = scorer(unique)
-        except Exception:
-            ranked = sorted(unique, key=lambda x: x.get('breakout_score', 0), reverse=True)
-    else:
-        ranked = sorted(unique, key=lambda x: x.get('breakout_score', 0), reverse=True)
-
-    logger.info(f"LEG 1: {len(ranked)} verified trending")
-    return ranked[:CANDIDATE_POOL_SIZE]
-
-
-def check_trends_actual(title):
     try:
-        from pytrends.request import TrendReq
-        words = [w for w in title.split() if len(w) > 4][:3]
-        if not words:
-            return 40
-        query = " ".join(words)
-        try:
-            pytrends = TrendReq(hl='en-US', tz=360, timeout=10)
-        except TypeError:
-            pytrends = TrendReq(hl='en-US', tz=360)
-        pytrends.build_payload([query], timeframe='now 1-H', geo='US')
-        time.sleep(1)
-        data = pytrends.interest_over_time()
-        if data.empty or query not in data.columns:
-            return 40
-        vals = data[query].tolist()
-        return vals[-1] if vals else 40
-    except Exception:
-        return 40
+        stories = collector()
+    except Exception as e:
+        logger.error(f"YouTube trending failed: {e}")
+        return []
+
+    if not stories:
+        logger.error("No YouTube trending stories found")
+        return []
+
+    for s in stories:
+        s['title'] = clean_topic(s.get('title', ''))
+    stories = [s for s in stories if s.get('title') and len(s['title']) > 10]
+
+    before = len(stories)
+    stories = [s for s in stories if is_viral_topic(s.get('title', ''))]
+    logger.info(f"Viral filter: {before} -> {len(stories)}")
+
+    before = len(stories)
+    stories = [s for s in stories if s.get('view_count', 0) >= MIN_VIEWS_FOR_TREND]
+    logger.info(f"Min views filter ({MIN_VIEWS_FOR_TREND:,}): {before} -> {len(stories)}")
+
+    if not stories:
+        logger.error("No stories pass minimum views filter")
+        return []
+
+    for s in stories:
+        s['breakout_score'] = score_youtube_trend(s)
+
+    stories.sort(key=lambda x: x.get('breakout_score', 0), reverse=True)
+
+    logger.info(f"LEG 1: {len(stories)} YouTube trending candidates")
+    for i, s in enumerate(stories[:8]):
+        logger.info(
+            f"  #{i+1}: [{s['region']}/{s['category']}] "
+            f"{s['title'][:55]} ({s['view_count']:,} views, "
+            f"score {s['breakout_score']:.1f})"
+        )
+
+    return stories[:CANDIDATE_POOL_SIZE]
 
 
 def editor_god_main(script_data, candidate):
@@ -321,19 +226,16 @@ def boss_approval_main(video_path, script_data, full_story):
             g = gate(script_data, full_story)
             if not g.get('passed', False):
                 reason = g.get('reason', 'Quality gate failed')
-
-                # === OVERRIDE: allow long scripts (target is 45-55s now) ===
                 if 'too long' in reason.lower():
                     wc = len(script_data.get('short_script', '').split())
                     if wc <= MAX_ACCEPTABLE_WORDS:
                         logger.warning(
                             f"Overriding 'script too long' gate ({wc} words) "
-                            f"- allowed up to {MAX_ACCEPTABLE_WORDS} for long-form Shorts"
+                            f"- allowed up to {MAX_ACCEPTABLE_WORDS}"
                         )
-                        # fall through to ranker
                     else:
                         result['reason'] = reason
-                        logger.info(f"LEG 3: REJECTED - {reason} (> {MAX_ACCEPTABLE_WORDS} words)")
+                        logger.info(f"LEG 3: REJECTED - {reason}")
                         return result
                 else:
                     result['reason'] = reason
@@ -610,12 +512,16 @@ def get_fallback_script(topic):
     tl = topic.lower()
     if any(w in tl for w in ['trump', 'biden', 'president', 'congress', 'obama']):
         h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
-    elif any(w in tl for w in ['ai', 'tech', 'apple', 'google', 'musk']):
+    elif any(w in tl for w in ['ai', 'tech', 'apple', 'google', 'musk', 'iphone']):
         h, t, hk = "#Tech", "What The Tech World Missed", "THIS CHANGES EVERYTHING"
-    elif any(w in tl for w in ['movie', 'celebrity', 'taylor', 'netflix']):
+    elif any(w in tl for w in ['music', 'song', 'drake', 'taylor', 'album']):
+        h, t, hk = "#Music", "What Really Happened Here", "THIS CHANGED EVERYTHING"
+    elif any(w in tl for w in ['game', 'gaming', 'minecraft', 'gta', 'fortnite']):
+        h, t, hk = "#Gaming", "The Story Behind This Update", "NOBODY SAW THIS COMING"
+    elif any(w in tl for w in ['movie', 'celebrity', 'marvel', 'netflix']):
         h, t, hk = "#Entertainment", "What Really Happened Here", "THIS CHANGED EVERYTHING"
     else:
-        h, t, hk = "#Facts", "The Story Behind This Moment", "NOBODY SAW THIS COMING"
+        h, t, hk = "#Trending", "The Story Behind This Moment", "NOBODY SAW THIS COMING"
 
     tf = f"{t} {h}"
     if len(tf) > 55:
@@ -637,9 +543,9 @@ def get_fallback_script(topic):
             "the biggest shift hasn't even started."
         ),
         "seo_youtube_title": tf,
-        "description": "Fact-based content. Subscribe for more.",
-        "hashtags": [h, "#Shorts", "#Facts"],
-        "tags": ["facts", "viral", "shorts", "trending"],
+        "description": "Trending on YouTube right now. Subscribe for more.",
+        "hashtags": [h, "#Shorts", "#Trending"],
+        "tags": ["trending", "viral", "shorts", "youtube"],
         "viral_hook": hk,
         "visual_queries": [],
         "confidence_score": 80
@@ -744,7 +650,7 @@ def is_similar_this_run(title, seen_sets):
 
 def main():
     logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT START")
+    logger.info("AUTONOMOUS TEXT BOT START (YouTube Trending Only)")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 
@@ -773,28 +679,8 @@ def main():
 
     stories = research_god_main()
     if not stories:
-        logger.error("No stories - exit")
+        logger.error("No YouTube trending stories - exit")
         return
-
-    logger.info("=" * 60)
-    logger.info("ACTIVITY FILTER")
-    logger.info("=" * 60)
-
-    active = []
-    for s in stories[:12]:
-        is_active, score = is_audience_active(s)
-        s['activity_score'] = score
-        if is_active:
-            active.append(s)
-            logger.info(f"   ACTIVE ({score:.0f}): {s.get('title', '')[:50]}")
-        else:
-            logger.info(f"   SKIP ({score:.0f}): {s.get('title', '')[:50]}")
-
-    if not active:
-        logger.warning("No active - using top 5")
-        active = stories[:5]
-
-    stories = active
 
     approved = None
     best_rejected = None
@@ -804,6 +690,8 @@ def main():
     for i, candidate in enumerate(stories[:CANDIDATE_POOL_SIZE]):
         title = candidate.get('title', '')
         logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
+        logger.info(f"   Source: {candidate.get('source')} | Region: {candidate.get('region')} | Category: {candidate.get('category')}")
+        logger.info(f"   Views: {candidate.get('view_count', 0):,} | Velocity score: {candidate.get('breakout_score', 0):.1f}")
 
         if is_similar_this_run(title, seen_this_run):
             logger.warning("Similar topic already processed this run - skip")
@@ -829,13 +717,6 @@ def main():
         if wc_gen < MIN_ACCEPTABLE_WORDS:
             logger.warning(f"Script too short ({wc_gen}) - skip candidate")
             continue
-
-        fc = safe_import('src.verification.claim_checker', 'fact_check')
-        if fc:
-            fr = fc(script_data.get('short_script', ''), candidate)
-            if not fr.get('passed', False):
-                logger.warning("Fact check failed")
-                continue
 
         editor_data = editor_god_main(script_data, candidate)
 

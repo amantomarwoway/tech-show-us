@@ -1,8 +1,5 @@
 """
-src/learning/self_repair.py - Self-repair + diagnostics
-- Gemini / GitHub Models checks REMOVED (no AI in pipeline)
-- AI code repair REMOVED (was Gemini-based)
-- Only local checks remain
+src/learning/self_repair.py - local diagnostics only
 """
 
 import os
@@ -21,7 +18,6 @@ def run_self_diagnostics():
     logger.info("=" * 60)
 
     status = {
-        "pexels": check_pexels(),
         "youtube": check_youtube(),
         "database": check_database(),
         "disk": check_disk(),
@@ -33,38 +29,15 @@ def run_self_diagnostics():
         emoji = "OK" if ok else "FAIL"
         logger.info(f"   [{emoji}] {name}")
 
-    failed = [k for k, v in status.items() if not v]
-    if failed:
-        logger.warning(f"{len(failed)} failed: {failed}")
-        attempt_basic_repairs(failed)
-
     clean_old_files()
     free_memory()
-
     return status
 
 
-def check_pexels():
-    try:
-        key = os.getenv("PEXELS_API_KEY", "")
-        if not key:
-            return False
-        import requests
-        r = requests.get(
-            "https://api.pexels.com/videos/search?query=test&per_page=1",
-            headers={"Authorization": key},
-            timeout=10
-        )
-        return r.status_code == 200
-    except Exception:
-        return False
-
-
 def check_youtube():
-    cid = os.getenv("YT_CLIENT_ID", "")
-    csec = os.getenv("YT_CLIENT_SECRET", "")
-    rt = os.getenv("YT_REFRESH_TOKEN", "")
-    return all([cid, csec, rt])
+    return all([os.getenv("YT_CLIENT_ID", ""),
+                os.getenv("YT_CLIENT_SECRET", ""),
+                os.getenv("YT_REFRESH_TOKEN", "")])
 
 
 def check_database():
@@ -105,50 +78,22 @@ def check_ffmpeg():
         return False
 
 
-def attempt_basic_repairs(failed):
-    for comp in failed:
-        if comp == "database":
-            repair_database()
-        elif comp == "disk":
-            clean_old_files()
-
-
-def repair_database():
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("VACUUM")
-        conn.commit()
-        conn.close()
-        logger.info("   Database VACUUM'd")
-    except Exception as e:
-        logger.error(f"   DB repair: {e}")
-
-
 def clean_old_files():
     try:
         from src.config import PATHS
         cutoff = datetime.now() - timedelta(days=2)
         cleaned = 0
-
-        patterns = [
-            os.path.join(PATHS['temp'], '*'),
-        ]
-
-        for pattern in patterns:
-            for file in glob.glob(pattern):
-                try:
-                    mtime = datetime.fromtimestamp(os.path.getmtime(file))
-                    if mtime < cutoff:
-                        os.remove(file)
-                        cleaned += 1
-                except Exception:
-                    pass
-
+        for file in glob.glob(os.path.join(PATHS['temp'], '*')):
+            try:
+                if datetime.fromtimestamp(os.path.getmtime(file)) < cutoff:
+                    os.remove(file)
+                    cleaned += 1
+            except Exception:
+                pass
         if cleaned > 0:
             logger.info(f"   Cleaned {cleaned} old files")
     except Exception as e:
-        logger.error(f"   Cleanup: {e}")
+        logger.error(f"Cleanup: {e}")
 
 
 def free_memory():
@@ -163,11 +108,10 @@ def free_memory():
                 except Exception:
                     pass
         if freed > 0:
-            logger.info(f"   Memory freed: {freed} files")
-    except Exception as e:
-        logger.debug(f"Memory free: {e}")
+            logger.info(f"   Freed {freed} files")
+    except Exception:
+        pass
 
 
 def verify_last_fix():
-    """No-op — AI code repair removed."""
     return

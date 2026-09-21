@@ -1,8 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v26
+main.py - AUTONOMOUS TEXT BOT - FINAL v27
 - YOUTUBE TRENDING AS ONLY SOURCE
 - Script built from YouTube metadata (title, description, hashtags, tags, transcript)
-- NO GEMINI — zero AI, zero cost, zero quota
+- 100% AI-FREE — no Gemini, no OpenAI, no quota
 - Self evolution FIRST, Uploader LAST
 - FORCED 45-55s long-form Shorts
 """
@@ -178,44 +178,14 @@ def research_god_main():
 
 
 def editor_god_main(script_data, candidate):
+    """
+    Editor skipped — script already built from YouTube metadata.
+    No AI, no fact extraction needed.
+    """
     logger.info("=" * 60)
-    logger.info("LEG 2: EDITOR - FACT EXTRACTION")
+    logger.info("LEG 2: EDITOR - SKIPPED (YouTube metadata mode)")
     logger.info("=" * 60)
-
-    editor_data = {"facts": [], "visuals": []}
-    original_script = script_data.get('short_script', '')
-    original_wc = len(original_script.split())
-    logger.info(f"Original script BEFORE editor: {original_wc} words")
-
-    try:
-        from src.writing.fact_extractor import extract_facts
-        result = extract_facts(candidate, original_script)
-
-        if result:
-            editor_data['facts'] = result.get('facts', [])
-            new_script = result.get('script', '')
-            new_wc = len(new_script.split()) if new_script else 0
-
-            if new_script and new_wc >= int(original_wc * 0.95):
-                script_data['short_script'] = new_script
-                logger.info(f"Editor script ACCEPTED: {new_wc} words")
-            elif new_script:
-                logger.warning(f"Editor tried to shrink: {original_wc} -> {new_wc} - KEEPING ORIGINAL")
-            else:
-                logger.info("Editor returned no script - keeping original")
-
-            if result.get('title'):
-                script_data['seo_youtube_title'] = result['title']
-            if result.get('hook'):
-                script_data['viral_hook'] = result['hook']
-
-        logger.info(f"Extracted {len(editor_data['facts'])} facts")
-    except Exception as e:
-        logger.error(f"Fact extraction failed: {e}")
-
-    final_wc = len(script_data.get('short_script', '').split())
-    logger.info(f"Script AFTER editor: {final_wc} words")
-    return editor_data
+    return {"facts": [], "visuals": []}
 
 
 def boss_approval_main(video_path, script_data, full_story):

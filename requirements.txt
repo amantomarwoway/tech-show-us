@@ -7,17 +7,17 @@ feedparser>=6.0.10
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
 
-# Google Trends (pin to working version)
+# Google Trends
 pytrends==4.9.2
 urllib3<2.0.0
 
-# YouTube transcript (NO AI needed)
-youtube-transcript-api>=0.6.2
+# YouTube transcript (v1.x for new API)
+youtube-transcript-api>=1.0.0
 
 # TTS
 piper-tts>=1.2.0
 
-# Video - PIN TO 1.0.3 (moviepy.editor ONLY exists in 1.x)
+# Video
 moviepy==1.0.3
 Pillow==10.3.0
 numpy>=1.24.0,<2.0.0

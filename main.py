@@ -1,8 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v24
+main.py - AUTONOMOUS TEXT BOT - FINAL v25
 - YOUTUBE TRENDING AS ONLY SOURCE
 - NO FALLBACK ANYWHERE — Gemini fail = skip candidate
-- Model updated: gemini-3.6-flash-tiered
+- Model: gemini-3.6-flash (correct GA name, no -tiered suffix)
 - FIXED: Boss score fallback + trending override
 """
 
@@ -32,7 +32,7 @@ CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 MIN_VIEWS_FOR_TREND = 50000
 TRENDING_OVERRIDE_SCORE = 70
-GEMINI_MODEL = "gemini-3.6-flash-tiered"
+GEMINI_MODEL = "gemini-3.6-flash"   # ✅ Correct GA model name
 
 
 def safe_import(module_path, function_name=None):

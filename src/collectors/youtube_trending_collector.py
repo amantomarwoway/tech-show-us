@@ -1,9 +1,9 @@
 """
 src/collectors/youtube_trending_collector.py
-- Trending videos with RISING views (compares with last snapshot)
-- English-only filter
-- No education (404), no score cap
-- Stores snapshots for velocity comparison
+- Only informative categories (news, tech, sports, gaming)
+- English + non-Hindi filter
+- Music/entertainment/comedy rejection
+- Snapshot persist fixed
 """
 
 import os
@@ -15,23 +15,42 @@ from src.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 CATEGORIES = {
-    "music": "10",
-    "gaming": "20",
-    "entertainment": "24",
-    "sports": "17",
     "news": "25",
     "tech": "28",
-    "comedy": "23",
+    "sports": "17",
+    "gaming": "20",
 }
+
 REGIONS = ["US", "GB", "CA", "AU"]
 SNAPSHOT_FILE = "data/trending_snapshots.json"
 SNAPSHOT_KEEP_HOURS = 72
+
+BAD_TITLE_PATTERNS = [
+    r'\b(official\s+)?music\s+video\b', r'\bofficial\s+video\b',
+    r'\bofficial\s+audio\b', r'\blyric\s+video\b', r'\blyrics?\b',
+    r'\bfeat\.?\b', r'\bft\.?\b', r'\(audio\)', r'\[audio\]',
+    r'\bremix\b', r'\bcover\b', r'\bremaster(ed)?\b', r'\bmashup\b',
+    r'\bkaraoke\b', r'\bmixtape\b', r'\balbum\b', r'\bsingle\b',
+    r'\bMV\b', r'#shorts\b', r'\bvlog\b', r'\bprank\b',
+    r'\breaction\b', r'\bmeme\b', r'\bcomedy\b', r'\bfunny\b',
+]
+
+# ✅ Hindi/regional artist name blacklist (Romanized)
+HINDI_ARTIST_NAMES = [
+    'yoyo honey', 'honey singh', 'arijit', 'shreya', 'rahman',
+    'kumar sanu', 'sonu nigam', 'neha kakkar', 'shreya ghoshal',
+    'pritam', 'amitabh', 'ranbir', 'deepika', 'priyanka',
+    'badshah', 'raftaar', 'divine', 'eminem hd', 'romantic hindi',
+    'bollywood', 't-series', 'tseries', 'zee music', 'sony music india',
+    'saregama', 'speed records', 'tips official',
+]
+
+BAD_TITLE_REGEX = re.compile("|".join(BAD_TITLE_PATTERNS), re.IGNORECASE)
 
 
 def _get_youtube_client():
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
-
     cid = os.getenv("YT_CLIENT_ID", "")
     cs = os.getenv("YT_CLIENT_SECRET", "")
     rt = os.getenv("YT_REFRESH_TOKEN", "")
@@ -59,18 +78,31 @@ def _age_hours(ts):
 
 
 def _is_english(title):
-    """Reject non-English (Hindi, Arabic, CJK, etc.)."""
     if not title:
         return False
-    ascii_chars = sum(1 for c in title if ord(c) < 128)
-    if ascii_chars / max(len(title), 1) < 0.75:
+    ratio = sum(1 for c in title if ord(c) < 128) / max(len(title), 1)
+    if ratio < 0.75:
         return False
-    # Reject Devanagari, Arabic, Chinese, Japanese, Korean, Cyrillic, Thai
     if re.search(r'[\u0900-\u097F\u0600-\u06FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0400-\u04FF\u0E00-\u0E7F]', title):
         return False
-    # Must have at least 2 English words
     words = re.findall(r'\b[a-zA-Z]{3,}\b', title)
     return len(words) >= 2
+
+
+def _is_not_hindi(title):
+    tl = title.lower()
+    for name in HINDI_ARTIST_NAMES:
+        if name in tl:
+            return False
+    return True
+
+
+def _is_informative(title):
+    if not title:
+        return False
+    if BAD_TITLE_REGEX.search(title):
+        return False
+    return True
 
 
 def _load_snapshots():
@@ -89,6 +121,7 @@ def _save_snapshots(data):
     try:
         with open(SNAPSHOT_FILE, "w") as f:
             json.dump(data, f)
+        logger.info(f"Snapshots saved: {len(data)} videos")
     except Exception as e:
         logger.warning(f"Snapshot save failed: {e}")
 
@@ -104,50 +137,42 @@ def _prune_snapshots(data):
 
 
 def _rising_score(video_id, current_views, snapshots):
-    """
-    Compare current views with previous snapshots.
-    Return rising score (0-100) based on view growth rate.
-    """
     snaps = snapshots.get(video_id, [])
     if not snaps:
-        return 50  # neutral, no history yet
-
-    # Find oldest snapshot in window
+        return 50
     oldest = snaps[0]
     old_views = oldest.get("views", 0)
     old_ts = oldest.get("ts", 0)
     if old_views <= 0:
         return 50
-
     hours_diff = (datetime.now().timestamp() - old_ts) / 3600
     if hours_diff < 1:
         return 50
-
-    growth_rate = (current_views - old_views) / old_views  # fraction
+    growth_rate = (current_views - old_views) / old_views
     growth_per_hour = growth_rate / hours_diff
-
-    # Score: 100 for 5%+ growth per hour, 0 for negative
     if growth_per_hour <= 0:
         return 10
-    score = min(100, growth_per_hour * 2000)
-    return score
+    return min(100, growth_per_hour * 2000)
 
 
 def collect_youtube_trending():
     logger.info("=" * 60)
-    logger.info("YOUTUBE TRENDING COLLECTOR (rising + English only)")
+    logger.info("YOUTUBE TRENDING COLLECTOR (informative + non-Hindi)")
     logger.info("=" * 60)
 
     yt = _get_youtube_client()
     if not yt:
-        logger.error("YouTube client failed")
         return []
 
     snapshots = _prune_snapshots(_load_snapshots())
+    logger.info(f"Loaded snapshots for {len(snapshots)} videos")
     now_ts = datetime.now().timestamp()
 
     raw = []
     seen_ids = set()
+    skipped_music = 0
+    skipped_lang = 0
+    skipped_hindi = 0
 
     for region in REGIONS:
         for cat_name, cat_id in CATEGORIES.items():
@@ -163,6 +188,7 @@ def collect_youtube_trending():
                 logger.warning(f"  {region}/{cat_name} fail: {str(e)[:80]}")
                 continue
 
+            kept = 0
             for item in resp.get("items", []):
                 vid = item.get("id", "")
                 if not vid or vid in seen_ids:
@@ -176,6 +202,15 @@ def collect_youtube_trending():
                     continue
 
                 if not _is_english(title):
+                    skipped_lang += 1
+                    continue
+
+                if not _is_not_hindi(title):
+                    skipped_hindi += 1
+                    continue
+
+                if not _is_informative(title):
+                    skipped_music += 1
                     continue
 
                 views = int(st.get("viewCount", 0) or 0)
@@ -185,10 +220,8 @@ def collect_youtube_trending():
                 if hours > 336:
                     continue
 
-                # Rising score
                 rising = _rising_score(vid, views, snapshots)
 
-                # Update snapshot
                 snaps = snapshots.setdefault(vid, [])
                 snaps.append({"views": views, "ts": now_ts, "title": title[:80]})
                 if len(snaps) > 20:
@@ -212,12 +245,14 @@ def collect_youtube_trending():
                     "thumbnail": sn.get("thumbnails", {}).get("high", {}).get("url", ""),
                     "description": sn.get("description", "")[:500],
                 })
+                kept += 1
 
-            logger.info(f"  {region}/{cat_name}: {len(resp.get('items', []))} items")
+            logger.info(f"  {region}/{cat_name}: {kept} kept")
 
     _save_snapshots(snapshots)
 
-    # Dedupe by title
+    logger.info(f"Skipped: music={skipped_music}, lang={skipped_lang}, hindi={skipped_hindi}")
+
     seen_titles = set()
     unique = []
     for v in raw:
@@ -227,24 +262,21 @@ def collect_youtube_trending():
         seen_titles.add(k)
         unique.append(v)
 
-    # Score: view + velocity + rising + engagement (NO cap)
     for v in unique:
         views = v["view_count"]
         velocity = v["view_velocity"]
         rising = v["rising_score"]
         eng = (v["like_count"] + v["comment_count"] * 3) / max(views, 1) * 1000
-
         v["breakout_score"] = (
-            min(150, views / 50000) * 0.20        # views (0-150)
-            + min(150, velocity / 3000) * 0.35    # velocity (0-150)
-            + rising * 0.35                        # rising 0-100
-            + min(100, eng * 5) * 0.10            # engagement
+            min(100, views / 100000) * 0.20
+            + min(100, velocity / 5000) * 0.35
+            + rising * 0.35
+            + min(100, eng * 5) * 0.10
         )
 
     unique.sort(key=lambda x: x["breakout_score"], reverse=True)
 
     logger.info(f"YouTube trending total: {len(unique)}")
-    logger.info("Top 5 by rising+velocity:")
     for v in unique[:5]:
         logger.info(
             f"  [{v['region']}/{v['category']}] {v['title'][:45]} "

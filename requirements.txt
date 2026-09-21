@@ -11,7 +11,7 @@ lxml>=4.9.0
 pytrends==4.9.2
 urllib3<2.0.0
 
-# YouTube transcript (v1.x for new API)
+# YouTube transcript
 youtube-transcript-api>=1.0.0
 
 # TTS

@@ -1,10 +1,9 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v22
+main.py - AUTONOMOUS TEXT BOT - FINAL v24
 - YOUTUBE TRENDING AS ONLY SOURCE
-- Self evolution FIRST, Uploader LAST
-- FORCED 45-55s long-form Shorts
-- FIXED: Boss score 0.0 fallback
-- FIXED: Trending override (high velocity accepts even if boss rejects)
+- NO FALLBACK ANYWHERE — Gemini fail = skip candidate
+- Model updated: gemini-3.6-flash-tiered
+- FIXED: Boss score fallback + trending override
 """
 
 import os
@@ -33,6 +32,7 @@ CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 MIN_VIEWS_FOR_TREND = 50000
 TRENDING_OVERRIDE_SCORE = 70
+GEMINI_MODEL = "gemini-3.6-flash-tiered"
 
 
 def safe_import(module_path, function_name=None):
@@ -250,11 +250,11 @@ def boss_approval_main(video_path, script_data, full_story):
             try:
                 score = ranker(full_story)
                 if not score or score <= 0:
-                    logger.warning(f"Ranker returned {score} - using fallback 55")
+                    logger.warning(f"Ranker returned {score} - using 55")
                     score = 55
                 result['score'] = score
             except Exception as e:
-                logger.warning(f"Ranker failed: {e} - using fallback 55")
+                logger.warning(f"Ranker failed: {e} - using 55")
                 score = 55
                 result['score'] = 55
 
@@ -269,7 +269,7 @@ def boss_approval_main(video_path, script_data, full_story):
         else:
             result['approved'] = True
             result['score'] = 75
-            result['reason'] = "Fallback (no ranker)"
+            result['reason'] = "No ranker"
     except Exception as e:
         logger.error(f"Boss: {e}")
         result['approved'] = True
@@ -467,6 +467,10 @@ def process_ai_response(text, model_name):
 
 
 def generate_script_god(story):
+    """
+    Generate script via Gemini. NO FALLBACK.
+    Returns None if all attempts fail.
+    """
     raw = story.get('title', '')
     topic = clean_topic(raw)
     if len(topic) < 15:
@@ -477,91 +481,61 @@ def generate_script_god(story):
     prompt = build_prompt(topic, video_duration)
 
     gk = os.getenv("GEMINI_API_KEY", "")
-    if gk:
+    if not gk:
+        logger.error("GEMINI_API_KEY missing — cannot generate script")
+        return None
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=gk)
+    except Exception as e:
+        logger.error(f"Gemini client init failed: {e}")
+        return None
+
+    for attempt in range(1, 4):
         try:
-            from google import genai
-            client = genai.Client(api_key=gk)
-            for attempt in range(1, 4):
-                try:
-                    logger.info(f"Gemini 3.6-flash attempt {attempt}/3")
-                    full_prompt = prompt
-                    if attempt > 1:
-                        full_prompt = (
-                            f"IMPORTANT: Previous was TOO SHORT. Write at least "
-                            f"{MIN_ACCEPTABLE_WORDS} words this time.\n\n"
-                        ) + prompt
+            logger.info(f"Gemini {GEMINI_MODEL} attempt {attempt}/3")
 
-                    resp = client.models.generate_content(
-                        model="gemini-3.6-flash", contents=full_prompt
-                    )
-                    text = getattr(resp, 'text', '')
-                    if not text:
-                        continue
-                    data = process_ai_response(text, "Gemini-3.6-flash")
-                    if not data:
-                        continue
-                    actual_words = len(data.get('short_script', '').split())
-                    logger.info(f"   Script length: {actual_words} words")
-                    if actual_words < MIN_ACCEPTABLE_WORDS:
-                        logger.warning(f"   TOO SHORT - retrying")
-                        if attempt < 3:
-                            time.sleep(2)
-                        continue
-                    logger.info(f"   OK: {actual_words} words")
-                    return data
-                except Exception as e:
-                    logger.warning(f"Gemini attempt {attempt}: {str(e)[:80]}")
-                    if attempt < 3:
-                        time.sleep(3 * attempt)
+            full_prompt = prompt
+            if attempt > 1:
+                full_prompt = (
+                    f"IMPORTANT: Previous was TOO SHORT. Write at least "
+                    f"{MIN_ACCEPTABLE_WORDS} words this time.\n\n"
+                ) + prompt
+
+            resp = client.models.generate_content(
+                model=GEMINI_MODEL, contents=full_prompt
+            )
+            text = getattr(resp, 'text', '')
+            if not text:
+                logger.warning("   Empty response from Gemini")
+                continue
+
+            data = process_ai_response(text, GEMINI_MODEL)
+            if not data:
+                logger.warning("   Failed to parse JSON response")
+                continue
+
+            actual_words = len(data.get('short_script', '').split())
+            logger.info(f"   Script length: {actual_words} words")
+
+            if actual_words < MIN_ACCEPTABLE_WORDS:
+                logger.warning(f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) - retrying")
+                if attempt < 3:
+                    time.sleep(2)
+                continue
+
+            logger.info(f"   OK: {actual_words} words")
+            return data
+
         except Exception as e:
-            logger.error(f"Gemini client failed: {e}")
+            err = str(e)
+            logger.warning(f"Gemini attempt {attempt}: {err[:200]}")
+            if attempt < 3:
+                time.sleep(3 * attempt)
 
-    logger.warning("Gemini failed - using fallback")
-    return get_fallback_script(topic)
-
-
-def get_fallback_script(topic):
-    tl = topic.lower()
-    if any(w in tl for w in ['trump', 'biden', 'president', 'congress', 'obama']):
-        h, t, hk = "#Politics", "What They Dont Want You To See", "THE TRUTH REVEALED"
-    elif any(w in tl for w in ['ai', 'tech', 'apple', 'google', 'musk', 'iphone']):
-        h, t, hk = "#Tech", "What The Tech World Missed", "THIS CHANGES EVERYTHING"
-    elif any(w in tl for w in ['music', 'song', 'drake', 'taylor', 'album', 'rosé', 'lisa']):
-        h, t, hk = "#Music", "What Really Happened Here", "THIS CHANGED EVERYTHING"
-    elif any(w in tl for w in ['game', 'gaming', 'minecraft', 'gta', 'fortnite']):
-        h, t, hk = "#Gaming", "The Story Behind This Update", "NOBODY SAW THIS COMING"
-    elif any(w in tl for w in ['movie', 'celebrity', 'marvel', 'netflix']):
-        h, t, hk = "#Entertainment", "What Really Happened Here", "THIS CHANGED EVERYTHING"
-    else:
-        h, t, hk = "#Trending", "The Story Behind This Moment", "NOBODY SAW THIS COMING"
-
-    tf = f"{t} {h}"
-    if len(tf) > 55:
-        tf = f"{t[:50].rsplit(' ', 1)[0]} {h}"
-
-    return {
-        "short_script": (
-            "Nobody saw this coming. In just seven days, over three billion dollars "
-            "moved through a single market channel according to new reports. "
-            "Analysts tracked the surge starting Tuesday morning, when trading volume "
-            "jumped nearly four hundred percent compared to the monthly average. "
-            "Did you know most retail investors completely missed this window? "
-            "Industry insiders say the real number is closer to five billion, "
-            "but official filings only confirm three. The ripple effect is already "
-            "showing up in three separate sectors, from energy to technology to housing. "
-            "Government regulators have quietly opened an inquiry, though no formal "
-            "charges have been filed yet. Experts warn this could reshape the entire "
-            "landscape by next quarter. But here is what nobody is telling you yet — "
-            "the biggest shift hasn't even started."
-        ),
-        "seo_youtube_title": tf,
-        "description": "Trending on YouTube right now. Subscribe for more.",
-        "hashtags": [h, "#Shorts", "#Trending"],
-        "tags": ["trending", "viral", "shorts", "youtube"],
-        "viral_hook": hk,
-        "visual_queries": [],
-        "confidence_score": 80
-    }
+    logger.error("🔥 Gemini failed all attempts — NO FALLBACK, skipping candidate")
+    return None
 
 
 def create_video_god(script_data, editor_data):
@@ -717,6 +691,12 @@ def main():
             continue
 
         script_data = generate_script_god(candidate)
+
+        # 🔥 NO FALLBACK — if Gemini failed, skip
+        if not script_data:
+            logger.warning("Script generation failed (no fallback) - skip candidate")
+            continue
+
         wc_gen = len(script_data.get('short_script', '').split())
         logger.info(f"After generation: {wc_gen} words")
 
@@ -748,7 +728,6 @@ def main():
 
         boss_data = boss_approval_main(video_path, script_data, full_story)
 
-        # 🔥 Trending override — high velocity topics skip strict ranking
         if not boss_data.get('approved'):
             trend_score = candidate.get('breakout_score', 0)
             if trend_score >= TRENDING_OVERRIDE_SCORE:
@@ -774,7 +753,7 @@ def main():
         approved = best_rejected
 
     if not approved:
-        logger.error(f"All rejected - no upload (skipped {skipped} duplicates)")
+        logger.error(f"No approved candidate (skipped {skipped} duplicates) - no upload")
         return
 
     candidate, script_data, editor_data, boss_data, story_id, video_path = approved

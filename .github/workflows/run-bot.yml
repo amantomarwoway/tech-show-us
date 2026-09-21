@@ -9,7 +9,6 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
-# Required: models (GitHub Models) + contents:write (AI repair commits)
 permissions:
   contents: write
   models: read
@@ -22,18 +21,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Fetch full history so git can push
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Data
+      - name: Cache Data (persistent across runs)
         uses: actions/cache@v4
         with:
           path: |
             data/
             models/
           key: god-data-${{ github.run_id }}
-          restore-keys: god-data-
+          restore-keys: |
+            god-data-
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -48,7 +47,6 @@ jobs:
             fonts-dejavu fonts-dejavu-extra fonts-liberation \
             fonts-noto-color-emoji fonts-noto-core fonts-symbola
           fc-cache -f -v
-          fc-list | grep -i emoji || echo "No emoji fonts"
 
       - name: Install Python Deps
         run: |
@@ -71,18 +69,11 @@ jobs:
           touch src/learning/__init__.py
           touch src/utils/__init__.py
 
-      # ============================================================
-      # SETUP GIT FOR AI REPAIR COMMITS
-      # ============================================================
-      - name: Setup Git for Auto-Repair
+      - name: Setup Git
         run: |
           git config --global user.name "AI Repair Bot"
           git config --global user.email "ai-repair@tech-show-us.bot"
-          git config --global pull.rebase false
 
-      # ============================================================
-      # RUN THE BOT
-      # ============================================================
       - name: Run GOD BOT
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -93,90 +84,22 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
           LOG_LEVEL: INFO
-          # Disable Python warnings noise
           PYTHONWARNINGS: ignore
         run: python main.py
 
-      # ============================================================
-      # COMMIT AI REPAIRS (if any file was modified)
-      # ============================================================
-      - name: Commit AI Repairs
-        if: always()
-        run: |
-          echo "=== Checking for AI repairs ==="
-          
-          # Check if any Python files were modified
-          if [[ -z $(git status -s | grep -E '\.py$') ]]; then
-            echo "✅ No AI repairs to commit"
-            exit 0
-          fi
-          
-          echo "🤖 AI repairs detected - committing..."
-          git status -s
-          
-          # Stage only Python files (not logs/data/temp)
-          git add -A
-          
-          # Commit with timestamp and repair info
-          REPAIR_COUNT=$(git diff --cached --name-only | grep -c '\.py$' || echo 0)
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
-          
-          git commit -m "🤖 AI Self-Repair [$TIMESTAMP]: $REPAIR_COUNT file(s) fixed
-
-          Automated repairs by AI code repair system.
-          Check data/repair_history.json for details.
-          
-          Co-authored-by: GitHub Actions <actions@github.com>"
-          
-          # Push with retry
-          for i in 1 2 3; do
-            if git push; then
-              echo "✅ Repairs pushed to repository"
-              break
-            else
-              echo "⚠️ Push failed (attempt $i) - pulling and retrying..."
-              git pull --rebase origin ${{ github.ref_name }} || true
-              sleep 5
-            fi
-          done
-
-      # ============================================================
-      # DEBUG OUTPUT
-      # ============================================================
       - name: Debug Output
         if: always()
         run: |
           echo "=== OUTPUT ==="
           ls -lh output/ || true
-          echo ""
           echo "=== VIDEOS ==="
           ls -lh output/videos/ 2>/dev/null | tail -5 || true
-          echo ""
-          echo "=== REPAIR HISTORY ==="
-          if [ -f data/repair_history.json ]; then
-            python -c "
-          import json
-          with open('data/repair_history.json') as f:
-              h = json.load(f)
-          print(f'Total repairs: {len(h)}')
-          for entry in h[-5:]:
-              print(f\"  {entry['timestamp'][:19]} | {entry['file']} | conf: {entry.get('confidence', 0)}%\")
-          " || cat data/repair_history.json
-          else
-            echo "No repair history yet"
-          fi
-          echo ""
-          echo "=== BACKUPS ==="
-          ls -lh data/code_backups/ 2>/dev/null | tail -5 || echo "No backups"
-          echo ""
-          echo "=== LOGS (last 50) ==="
-          tail -50 logs/bot.log || true
+          echo "=== LOGS (last 30) ==="
+          tail -30 logs/bot.log || true
 
-      # ============================================================
-      # UPLOAD ARTIFACT
-      # ============================================================
       - name: Upload Artifact
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,8 +1,7 @@
 """
-src/youtube/analytics_collector.py - Analytics collector (fixed)
-- Fetches ALL uploads (not just 50)
-- Tracks failures + reports them
-- Does NOT overwrite valid data with 0
+src/youtube/analytics_collector.py - fixed
+- Fetches ALL uploads, tracks failures gracefully
+- Reports valid vs dead IDs
 """
 
 import os
@@ -14,7 +13,7 @@ logger = setup_logger(__name__)
 
 def collect_analytics():
     logger.info("=" * 60)
-    logger.info("📊 ANALYTICS COLLECTOR")
+    logger.info("ANALYTICS COLLECTOR")
     logger.info("=" * 60)
 
     try:
@@ -40,7 +39,6 @@ def collect_analytics():
 
         conn = get_connection()
         cursor = conn.cursor()
-        # Fetch ALL uploads (was LIMIT 50)
         cursor.execute('SELECT video_id FROM uploads ORDER BY uploaded_at DESC')
         rows = cursor.fetchall()
         conn.close()
@@ -49,8 +47,8 @@ def collect_analytics():
         logger.info(f"Total uploads to check: {total}")
 
         checked = 0
-        failed = 0
-        failure_reasons = {}
+        dead = 0
+        dead_ids = []
 
         for row in rows:
             vid = row[0]
@@ -58,14 +56,11 @@ def collect_analytics():
                 resp = youtube.videos().list(part='statistics', id=vid).execute()
                 items = resp.get('items', [])
                 if not items:
-                    failed += 1
-                    failure_reasons['not_found'] = failure_reasons.get('not_found', 0) + 1
-                    logger.warning(f"Analytics {vid}: video not found")
+                    dead += 1
+                    dead_ids.append(vid)
                     continue
 
                 stats = items[0].get('statistics', {})
-
-                # Do NOT write 0 for fields we don't have (leave NULL for retention)
                 perf = {
                     'views': int(stats.get('viewCount', 0)),
                     'likes': int(stats.get('likeCount', 0)),
@@ -74,20 +69,26 @@ def collect_analytics():
                 save_performance(vid, perf)
                 checked += 1
 
-                # Log only milestone views (every 500+)
-                views = perf['views']
-                if views >= 500:
-                    logger.info(f"Analytics {vid}: {views} views, {perf['likes']} likes")
-
             except Exception as e:
-                failed += 1
-                reason = str(e)[:50]
-                failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
+                dead += 1
+                logger.debug(f"Analytics {vid}: {str(e)[:60]}")
                 continue
 
-        logger.info(f"Collected: {checked} / {total} (failed {failed})")
-        if failure_reasons:
-            logger.info(f"Failure breakdown: {failure_reasons}")
+        logger.info(f"Collected: {checked} valid, {dead} dead IDs")
+
+        # Clean dead IDs from database
+        if dead_ids:
+            try:
+                conn = get_connection()
+                cur = conn.cursor()
+                placeholders = ','.join('?' * len(dead_ids))
+                cur.execute(f'DELETE FROM uploads WHERE video_id IN ({placeholders})', dead_ids)
+                deleted = cur.rowcount
+                conn.commit()
+                conn.close()
+                logger.info(f"Cleaned {deleted} dead video IDs from database")
+            except Exception as e:
+                logger.warning(f"DB cleanup failed: {e}")
 
         return checked
 

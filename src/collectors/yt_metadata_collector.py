@@ -1,8 +1,7 @@
 """
 src/collectors/yt_metadata_collector.py
-- Transcript (v1.x API)
-- Script from AI (Pollinations.ai FREE + Groq fallback) — NATURAL LENGTH
-- Emoji/hashtag/channel-promo removal
+- Transcript (v1.x + old API fallback)
+- Natural-length script via Pollinations + Groq
 """
 
 import os
@@ -36,7 +35,7 @@ def _clean_text(text):
     text = re.sub(r'\[.*?\]', '', text)
     text = re.sub(r'\(.*?\)', '', text)
     text = re.sub(r'>>\s*', '', text)
-    text = re.sub(r'#\w+', '', text)  # remove hashtags
+    text = re.sub(r'#\w+', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -49,7 +48,6 @@ def fetch_transcript(video_id):
     except ImportError:
         return None
 
-    # New API (v1.x)
     try:
         ytt = YouTubeTranscriptApi()
         fetched = ytt.fetch(video_id, languages=['en', 'en-US', 'en-GB'])
@@ -62,9 +60,8 @@ def fetch_transcript(video_id):
             logger.info(f"Transcript OK: {len(text)} chars")
             return text
     except Exception as e:
-        logger.warning(f"Transcript v1 API failed: {str(e)[:100]}")
+        logger.warning(f"Transcript v1 failed: {str(e)[:100]}")
 
-    # Old API fallback
     try:
         tl = YouTubeTranscriptApi.list_transcripts(video_id)
         try:
@@ -81,10 +78,10 @@ def fetch_transcript(video_id):
         )
         text = _clean_text(text)
         if len(text) > 50:
-            logger.info(f"Transcript OK (old API): {len(text)} chars")
+            logger.info(f"Transcript OK (old): {len(text)} chars")
             return text
     except Exception as e:
-        logger.warning(f"Transcript old API failed: {str(e)[:100]}")
+        logger.warning(f"Transcript old failed: {str(e)[:100]}")
 
     return None
 
@@ -103,21 +100,17 @@ def extract_hashtags(description):
 
 
 def extract_keywords(text, top_n=15):
-    stop = {
-        "the", "a", "an", "and", "or", "but", "is", "are", "was", "were",
-        "be", "been", "being", "have", "has", "had", "do", "does", "did",
-        "will", "would", "could", "should", "may", "might", "must", "can",
-        "to", "of", "in", "on", "at", "by", "for", "with", "about", "as",
-        "into", "through", "during", "before", "after", "above", "below",
-        "from", "up", "down", "out", "off", "over", "under", "again",
-        "further", "then", "once", "here", "there", "when", "where", "why",
-        "how", "all", "any", "both", "each", "few", "more", "most", "other",
-        "some", "such", "no", "nor", "not", "only", "own", "same", "so",
-        "than", "too", "very", "s", "t", "just", "don", "now", "i", "you",
-        "he", "she", "it", "we", "they", "this", "that", "these", "those",
-        "what", "which", "who", "whom", "your", "my", "his", "her", "our",
-        "their", "its", "like", "get", "got", "go", "going", "one", "two",
-    }
+    stop = {"the","a","an","and","or","but","is","are","was","were","be","been",
+            "being","have","has","had","do","does","did","will","would","could",
+            "should","may","might","must","can","to","of","in","on","at","by",
+            "for","with","about","as","into","through","during","before","after",
+            "above","below","from","up","down","out","off","over","under","again",
+            "further","then","once","here","there","when","where","why","how","all",
+            "any","both","each","few","more","most","other","some","such","no",
+            "nor","not","only","own","same","so","than","too","very","s","t",
+            "just","don","now","i","you","he","she","it","we","they","this","that",
+            "these","those","what","which","who","whom","your","my","his","her",
+            "our","their","its","like","get","got","go","going","one","two"}
     words = re.findall(r'\b[a-z]{4,}\b', text.lower())
     freq = {}
     for w in words:
@@ -127,46 +120,36 @@ def extract_keywords(text, top_n=15):
     return [w for w, _ in sorted(freq.items(), key=lambda x: -x[1])[:top_n]]
 
 
-# ============================================================
-# NATURAL-LENGTH SCRIPT PROMPT (no force)
-# ============================================================
-
 def _build_prompt(title, description, transcript):
     tp = transcript[:2500] if transcript else "No transcript available."
     dp = description[:400] if description else "No description."
 
-    return f"""You are a viral YouTube Shorts scriptwriter. Write a factual, engaging script.
+    return f"""You are a viral YouTube Shorts scriptwriter.
 
 SOURCE:
 Title: {title}
 Description: {dp}
 Transcript: {tp}
 
-TASK:
-Write a script that FULLY covers this trending topic. Let the content decide the length — no filler, no padding.
-
-NATURAL LENGTH RULE:
-- Short topic → 40-60 words
-- Rich topic → 90-130 words
-- Use only as many words as the content genuinely needs
+TASK: Write a factual script that FULLY covers this topic. Length depends on content — short topic → 70-90 words, rich topic → 100-130 words. No filler, no padding.
 
 RULES:
 - First sentence = strong hook
-- Then 3-7 facts with specific numbers, names, or dates from the source
-- Include 1 direct question to the viewer midway
-- End with a mystery / tease
-- Short sentences for natural TTS rhythm
-- NO filler ("in conclusion", "stay tuned", "let's dive in")
+- 3-7 facts with specific numbers/names/dates
+- 1 direct question to viewer midway
+- End with a mystery
+- Short sentences, natural TTS rhythm
+- NO filler ("stay tuned", "think again", "in conclusion", "let's dive in")
 - NO emojis, NO hashtags, NO markdown, NO channel promo
-- If music video: artist, chart impact, fan reaction
-- If gameplay: challenge, scale, outcome
-- If sports: moment, stats, context
+- Music video → artist + chart impact + fan reaction
+- Gameplay → challenge + scale + outcome
+- Sports → moment + stats + context
 
-ALSO generate 12-15 YouTube tags (lowercase words/phrases, no #).
+ALSO generate 12-15 YouTube tags (lowercase, no #).
 
-OUTPUT JSON ONLY (no markdown, no code fences):
+OUTPUT JSON ONLY:
 {{
-  "script": "the full script here",
+  "script": "the full script",
   "tags": ["tag1", "tag2", "..."]
 }}"""
 
@@ -185,14 +168,12 @@ def _parse_ai_json(text):
         return None
     script = _clean_text(data.get('script', '').strip())
     tags = data.get('tags', [])
-    if not script or len(script.split()) < 30:
+    if not script or len(script.split()) < 40:
         return None
     if not isinstance(tags, list):
         tags = []
-    tags = [
-        str(t).strip().lower().lstrip('#')
-        for t in tags if isinstance(t, str) and len(str(t).strip()) >= 2
-    ][:15]
+    tags = [str(t).strip().lower().lstrip('#') for t in tags
+            if isinstance(t, str) and len(str(t).strip()) >= 2][:15]
     return {"script": script, "tags": tags}
 
 
@@ -201,7 +182,6 @@ def _try_pollinations(prompt, timeout=90):
         url = f"https://text.pollinations.ai/{urllib.parse.quote(prompt)}?model=openai&json=true"
         r = requests.get(url, timeout=timeout)
         if r.status_code != 200:
-            logger.warning(f"Pollinations HTTP {r.status_code}")
             return None
         return _parse_ai_json(r.text)
     except Exception as e:
@@ -230,7 +210,6 @@ def _try_groq(prompt, timeout=60):
             timeout=timeout,
         )
         if r.status_code != 200:
-            logger.warning(f"Groq HTTP {r.status_code}")
             return None
         content = r.json()["choices"][0]["message"]["content"]
         return _parse_ai_json(content)
@@ -240,13 +219,12 @@ def _try_groq(prompt, timeout=60):
 
 
 def generate_script_and_tags(title, description, transcript):
-    """Try Pollinations → Groq → Pollinations retry."""
     prompt = _build_prompt(title, description, transcript)
 
     logger.info("AI: Pollinations")
     r = _try_pollinations(prompt)
     if r:
-        logger.info(f"Pollinations OK: {len(r['script'].split())} words, {len(r['tags'])} tags")
+        logger.info(f"Pollinations OK: {len(r['script'].split())} words")
         return r
 
     if os.getenv("GROQ_API_KEY", ""):

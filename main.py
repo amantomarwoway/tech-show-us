@@ -1,9 +1,10 @@
 """
-main.py - AUTONOMOUS TEXT BOT - FINAL v25
+main.py - AUTONOMOUS TEXT BOT - FINAL v26
 - YOUTUBE TRENDING AS ONLY SOURCE
-- NO FALLBACK ANYWHERE — Gemini fail = skip candidate
-- Model: gemini-3.6-flash (correct GA name, no -tiered suffix)
-- FIXED: Boss score fallback + trending override
+- Script built from YouTube metadata (title, description, hashtags, tags, transcript)
+- NO GEMINI — zero AI, zero cost, zero quota
+- Self evolution FIRST, Uploader LAST
+- FORCED 45-55s long-form Shorts
 """
 
 import os
@@ -32,7 +33,6 @@ CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 MIN_VIEWS_FOR_TREND = 50000
 TRENDING_OVERRIDE_SCORE = 70
-GEMINI_MODEL = "gemini-3.6-flash"   # ✅ Correct GA model name
 
 
 def safe_import(module_path, function_name=None):
@@ -360,183 +360,167 @@ def get_forced_duration():
     return duration
 
 
-def build_prompt(topic, video_duration=45):
-    target_words = int(video_duration * 2.3)
-    min_words = int(target_words * 0.85)
-    max_words = int(target_words * 1.15)
-
-    return f"""You are a VIRAL YouTube Shorts scriptwriter. Scripts MUST hit strict word count.
-
-TOPIC: {topic}
-TARGET: {video_duration}s
-WORD COUNT: {target_words} (min {min_words}, max {max_words})
-
-RULES:
-1. Script MUST be {min_words}-{max_words} words.
-2. NO filler. Every sentence has new info.
-3. Include numbers, dates, amounts, percentages.
-4. Natural TTS rhythm (short sentences).
-
-TITLE (30-50 chars, NO "?", 1 hashtag):
-Example: "The Reason This Changed Everything #Facts"
-
-HOOK (4-6 words ALL CAPS):
-Example: "NOBODY SAW THIS COMING"
-
-SCRIPT ({target_words} words):
-- Line 1: HOOK
-- Then 5-7 surprising facts, each with a number/date/name
-- 1 direct question to viewer midway
-- End with mystery
-- NO "in conclusion", "stay tuned"
-
-VISUAL QUERIES (6, 2-4 words each):
-GOOD: "stock market chart"
-
-OUTPUT JSON ONLY:
-{{
-    "short_script": "the {target_words}-word script",
-    "seo_youtube_title": "Statement title #Hashtag",
-    "description": "SEO description",
-    "hashtags": ["#Facts", "#Trending", "#Shorts"],
-    "tags": ["facts", "viral", "shorts"],
-    "viral_hook": "4-6 WORD STATEMENT",
-    "visual_queries": ["q1", "q2", "q3", "q4", "q5", "q6"],
-    "confidence_score": 85
-}}"""
-
-
-def process_ai_response(text, model_name):
-    if not text:
-        return None
-    m = re.search(r'\{.*\}', text, re.DOTALL)
-    if not m:
-        return None
-    try:
-        data = json.loads(m.group())
-    except Exception:
-        return None
-
-    vq = data.get('visual_queries', [])
-    if not isinstance(vq, list):
-        vq = []
-    clean_vq = [q.strip() for q in vq if isinstance(q, str) and 3 <= len(q.strip()) <= 50]
-    data['visual_queries'] = clean_vq[:6]
-
-    hook = data.get('viral_hook', '')
-    hook = re.sub(r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0001F1E0-\U0001F1FF]+', '', hook).strip()
-    hook = hook.rstrip('?').strip()
-    words = hook.split()
-    if len(words) > 6:
-        words = words[:6]
-    elif len(words) < 4:
-        if not any(w in hook.upper() for w in ['THIS', 'NOBODY', 'THE', 'EVERY']):
-            hook = "THIS CHANGES " + hook.upper()
-            words = hook.split()[:6]
-    data['viral_hook'] = " ".join(words).upper()
-
-    title = data.get('seo_youtube_title', '')
-    title = clean_topic(title)
-    title = re.sub(r'#\w+', '', title).strip()
-    title = re.sub(r'\b[A-Z]{4,}\b', '', title)
-    for bad in ['MINNEAPOLI', 'BREAKING', 'NEWS', 'MEDIA', 'LIVE']:
-        title = re.sub(rf'\b{bad}\b', '', title, flags=re.IGNORECASE)
-    title = re.sub(r'\s+', ' ', title).strip()
-    title = title.replace('?', '').strip()
-
-    if has_publisher_name(title) or is_spam_topic(title):
-        return None
-
-    hashtags = data.get('hashtags', ['#Facts'])
-    hashtag = hashtags[0] if hashtags else '#Facts'
-    if not hashtag.startswith('#'):
-        hashtag = '#' + hashtag
-
-    title_full = f"{title} {hashtag}"
-    if len(title_full) > 55:
-        max_len = 55 - len(hashtag) - 1
-        title_full = f"{title[:max_len].rsplit(' ', 1)[0]} {hashtag}"
-
-    data['seo_youtube_title'] = title_full
-    data['hashtags'] = hashtags[:3]
-
-    logger.info(f"Script by {model_name}")
-    logger.info(f"   Title: {title_full}")
-    logger.info(f"   Hook: {data['viral_hook']}")
-    return data
-
+# ============================================================
+# SCRIPT GENERATION FROM YOUTUBE METADATA (NO AI)
+# ============================================================
 
 def generate_script_god(story):
     """
-    Generate script via Gemini. NO FALLBACK.
-    Returns None if all attempts fail.
+    Build script from YouTube metadata (title, description, hashtags, tags, transcript).
+    NO AI, NO GEMINI, NO QUOTA.
     """
-    raw = story.get('title', '')
-    topic = clean_topic(raw)
-    if len(topic) < 15:
-        topic = raw
+    from src.collectors.yt_metadata_collector import (
+        fetch_transcript, extract_hashtags, extract_keywords
+    )
+
+    video_id = story.get('youtube_video_id', '')
+    title = story.get('title', '')
+    description = story.get('description', '')
+    channel = story.get('channel', '')
+    views = story.get('view_count', 0)
+    category = story.get('category', 'trending')
+
+    logger.info(f"Building script from YouTube data: {title[:60]}")
+
+    # 1. Fetch transcript
+    transcript = None
+    if video_id:
+        try:
+            transcript = fetch_transcript(video_id)
+        except Exception as e:
+            logger.warning(f"Transcript fetch failed: {e}")
+
+    # 2. Extract hashtags from description
+    try:
+        hashtags = extract_hashtags(description)
+    except Exception:
+        hashtags = []
+
+    # 3. Extract keywords for tags
+    try:
+        combined = f"{title} {description} {transcript or ''}"
+        keywords = extract_keywords(combined, top_n=15)
+    except Exception:
+        keywords = []
 
     video_duration = get_forced_duration()
-    logger.info(f"Target: {video_duration}s / ~{int(video_duration * 2.3)} words")
-    prompt = build_prompt(topic, video_duration)
+    target_words = int(video_duration * 2.3)
+    max_words = int(video_duration * 2.5)
 
-    gk = os.getenv("GEMINI_API_KEY", "")
-    if not gk:
-        logger.error("GEMINI_API_KEY missing — cannot generate script")
+    # ============================================================
+    # BUILD SCRIPT
+    # ============================================================
+    if transcript and len(transcript.split()) >= MIN_ACCEPTABLE_WORDS:
+        logger.info(f"Transcript available: {len(transcript.split())} words")
+        trans_words = transcript.split()
+
+        # Skip first 10 words (intro/greeting)
+        core = trans_words[10:] if len(trans_words) > 20 else trans_words
+
+        # Take up to target
+        core = core[:target_words]
+        script = " ".join(core)
+        script = re.sub(r'\s+', ' ', script).strip()
+
+        if not script.endswith(('.', '!', '?')):
+            script += "."
+
+        logger.info(f"Script from transcript: {len(script.split())} words")
+    else:
+        logger.info("No transcript - building from title/description")
+        title_clean = clean_topic(title)
+
+        # Clean description - skip first line (channel promo)
+        desc_lines = [l.strip() for l in description.split('\n') if l.strip()]
+        desc_core = " ".join(desc_lines[1:4]) if len(desc_lines) > 1 else ""
+
+        parts = [
+            title_clean + ".",
+            desc_core,
+            f"This video has {views:,} views on YouTube right now.",
+            f"Posted by {channel}." if channel else "",
+            "Millions are watching this trending story.",
+            "Comment below what you think.",
+            "Subscribe for more trending stories.",
+        ]
+        script = " ".join(p for p in parts if p).strip()
+
+    # Trim to max
+    words = script.split()
+    if len(words) > max_words:
+        script = " ".join(words[:max_words])
+        if not script.endswith(('.', '!', '?')):
+            script += "."
+
+    word_count = len(script.split())
+    logger.info(f"Script built: {word_count} words")
+
+    if word_count < MIN_ACCEPTABLE_WORDS:
+        logger.warning(f"Script too short ({word_count} words) - skip")
         return None
 
-    try:
-        from google import genai
-        client = genai.Client(api_key=gk)
-    except Exception as e:
-        logger.error(f"Gemini client init failed: {e}")
-        return None
+    # ============================================================
+    # BUILD TITLE
+    # ============================================================
+    title_clean = clean_topic(title)
+    if len(title_clean) > 50:
+        title_clean = title_clean[:50].rsplit(' ', 1)[0]
 
-    for attempt in range(1, 4):
-        try:
-            logger.info(f"Gemini {GEMINI_MODEL} attempt {attempt}/3")
+    if hashtags:
+        hashtag = hashtags[0]
+    else:
+        hashtag_map = {
+            "music": "#Music", "gaming": "#Gaming",
+            "entertainment": "#Trending", "sports": "#Sports",
+            "news": "#News", "tech": "#Tech",
+            "comedy": "#Comedy", "education": "#Education",
+        }
+        hashtag = hashtag_map.get(category, "#Trending")
 
-            full_prompt = prompt
-            if attempt > 1:
-                full_prompt = (
-                    f"IMPORTANT: Previous was TOO SHORT. Write at least "
-                    f"{MIN_ACCEPTABLE_WORDS} words this time.\n\n"
-                ) + prompt
+    seo_title = f"{title_clean} {hashtag}"
+    if len(seo_title) > 100:
+        seo_title = seo_title[:97] + "..."
 
-            resp = client.models.generate_content(
-                model=GEMINI_MODEL, contents=full_prompt
-            )
-            text = getattr(resp, 'text', '')
-            if not text:
-                logger.warning("   Empty response from Gemini")
-                continue
+    # ============================================================
+    # BUILD HOOK
+    # ============================================================
+    hook_words = title_clean.upper().split()[:5]
+    hook = " ".join(hook_words) if hook_words else "YOU WON'T BELIEVE THIS"
 
-            data = process_ai_response(text, GEMINI_MODEL)
-            if not data:
-                logger.warning("   Failed to parse JSON response")
-                continue
+    # ============================================================
+    # BUILD TAGS
+    # ============================================================
+    tags = list(keywords[:15]) if keywords else ["trending", "viral", "shorts"]
+    tags.insert(0, category)
+    tags = list(dict.fromkeys(tags))[:15]
 
-            actual_words = len(data.get('short_script', '').split())
-            logger.info(f"   Script length: {actual_words} words")
+    # ============================================================
+    # BUILD DESCRIPTION
+    # ============================================================
+    desc_out = description[:500] if description else "Trending on YouTube right now."
+    if hashtags:
+        desc_out = desc_out.rstrip() + "\n\n" + " ".join(hashtags[:5])
 
-            if actual_words < MIN_ACCEPTABLE_WORDS:
-                logger.warning(f"   TOO SHORT ({actual_words} < {MIN_ACCEPTABLE_WORDS}) - retrying")
-                if attempt < 3:
-                    time.sleep(2)
-                continue
+    logger.info(f"Script by YouTube metadata")
+    logger.info(f"   Title: {seo_title}")
+    logger.info(f"   Hook: {hook}")
+    logger.info(f"   Tags: {tags[:5]}")
 
-            logger.info(f"   OK: {actual_words} words")
-            return data
+    return {
+        "short_script": script,
+        "seo_youtube_title": seo_title,
+        "description": desc_out,
+        "hashtags": hashtags[:3] if hashtags else [hashtag, "#Shorts", "#Trending"],
+        "tags": tags,
+        "viral_hook": hook,
+        "visual_queries": [],
+        "confidence_score": 85,
+    }
 
-        except Exception as e:
-            err = str(e)
-            logger.warning(f"Gemini attempt {attempt}: {err[:200]}")
-            if attempt < 3:
-                time.sleep(3 * attempt)
 
-    logger.error("🔥 Gemini failed all attempts — NO FALLBACK, skipping candidate")
-    return None
-
+# ============================================================
+# VIDEO GENERATION
+# ============================================================
 
 def create_video_god(script_data, editor_data):
     logger.info("=" * 60)
@@ -636,7 +620,7 @@ def is_similar_this_run(title, seen_sets):
 
 def main():
     logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT START (YouTube Trending Only)")
+    logger.info("AUTONOMOUS TEXT BOT START (YouTube Metadata Only)")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 
@@ -692,9 +676,9 @@ def main():
 
         script_data = generate_script_god(candidate)
 
-        # 🔥 NO FALLBACK — if Gemini failed, skip
+        # NO FALLBACK — if script build failed, skip
         if not script_data:
-            logger.warning("Script generation failed (no fallback) - skip candidate")
+            logger.warning("Script build failed - skip candidate")
             continue
 
         wc_gen = len(script_data.get('short_script', '').split())

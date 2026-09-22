@@ -2,11 +2,16 @@ name: GOD LEVEL BOT - AUTONOMOUS
 
 "on":
   schedule:
-    - cron: '0 13 * * *'
+    # ============================================================
+    # 3 BEST TIMES FOR WORLDWIDE ENGLISH AUDIENCE
+    # ============================================================
+    # 17:00 UTC = 12:00 PM ET (US lunch) + 5:00 PM GMT (UK evening start)
+    # 21:00 UTC = 4:00 PM ET (US afternoon) + 9:00 PM GMT (UK evening peak)
+    # 23:00 UTC = 6:00 PM ET (US evening peak) + 9:00 AM AEST (AU morning)
+    # ============================================================
     - cron: '0 17 * * *'
-    - cron: '0 20 * * *'
+    - cron: '0 21 * * *'
     - cron: '0 23 * * *'
-    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,9 +30,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ============================================================
-      # CACHE FIX: dynamic key so DB persists across runs
-      # ============================================================
       - name: Cache Data (persistent)
         uses: actions/cache@v4
         with:

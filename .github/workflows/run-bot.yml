@@ -2,16 +2,9 @@ name: GOD LEVEL BOT - AUTONOMOUS
 
 "on":
   schedule:
-    # ============================================================
-    # 3 BEST TIMES FOR WORLDWIDE ENGLISH AUDIENCE
-    # ============================================================
-    # 17:00 UTC = 12:00 PM ET (US lunch) + 5:00 PM GMT (UK evening start)
-    # 21:00 UTC = 4:00 PM ET (US afternoon) + 9:00 PM GMT (UK evening peak)
-    # 23:00 UTC = 6:00 PM ET (US evening peak) + 9:00 AM AEST (AU morning)
-    # ============================================================
     - cron: '0 17 * * *'
-    - cron: '0 21 * * *'
-    - cron: '0 23 * * *'
+    - cron: '0 20 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
 
 permissions:
@@ -20,6 +13,7 @@ permissions:
 
 jobs:
   run-bot:
+    name: Run Autonomous Bot
     runs-on: ubuntu-latest
     timeout-minutes: 60
 

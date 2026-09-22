@@ -1,8 +1,7 @@
 """
-main.py - AUTONOMOUS TEXT BOT - v32
-- STRONG duplicate detection by youtube_video_id
-- Title overlap threshold 4 → 3
-- Cross-run topic memory (7 days)
+main.py - AUTONOMOUS TEXT BOT v33
+- Preset channels as source (motivation/story/facts/podcast/science)
+- Permanent dedup (never repeat)
 """
 
 import os
@@ -21,19 +20,15 @@ from src.config import GOD_INSTRUCTION, ENGLISH_COUNTRIES
 from src.utils.logger import setup_logger
 from src.database import (
     init_db, save_story, mark_uploaded, get_performance_stats,
-    is_youtube_id_used, get_recent_titles,
+    is_youtube_id_used, get_all_uploaded_yt_ids,
 )
 
 logger = setup_logger(__name__)
 
 MIN_ACCEPTABLE_WORDS = 70
 MAX_ACCEPTABLE_WORDS = 200
-CANDIDATE_POOL_SIZE = 15
+CANDIDATE_POOL_SIZE = 20
 BOSS_FALLBACK_SCORE = 40
-MIN_VIEWS_FOR_TREND = 50000
-TRENDING_OVERRIDE_SCORE = 70
-DUPLICATE_LOOKBACK_DAYS = 7      # Check last 7 days
-TITLE_OVERLAP_MIN = 3            # was 4 → now 3
 
 FILLER_PATTERNS = [
     r'\bstay\s+tuned\.?', r'\blet\'?s\s+dive\s+in\.?',
@@ -115,12 +110,13 @@ def strip_filler(script):
 
 def research_god_main():
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH - YOUTUBE TRENDING")
+    logger.info("LEG 1: RESEARCH - PRESET CHANNELS")
     logger.info("=" * 60)
 
-    collector = safe_import('src.collectors.youtube_trending_collector',
-                            'collect_youtube_trending')
+    collector = safe_import('src.collectors.preset_channels_collector',
+                            'collect_preset_channels')
     if not collector:
+        logger.error("Preset channels collector not found")
         return []
 
     try:
@@ -136,19 +132,21 @@ def research_god_main():
         s['title'] = clean_topic(s.get('title', ''))
     stories = [s for s in stories if s.get('title') and len(s['title']) > 10]
 
+    # Permanent dedup — remove already uploaded
+    uploaded_ids = get_all_uploaded_yt_ids()
     before = len(stories)
-    stories = [s for s in stories if s.get('view_count', 0) >= MIN_VIEWS_FOR_TREND]
-    logger.info(f"Min views filter: {before} -> {len(stories)} (removed {before - len(stories)})")
+    stories = [s for s in stories
+               if s.get('youtube_video_id', '') not in uploaded_ids]
+    logger.info(f"Permanent dedup: {before} -> {len(stories)} "
+                f"(removed {before - len(stories)} already-uploaded)")
 
     stories.sort(key=lambda x: x.get('breakout_score', 0), reverse=True)
 
-    logger.info(f"LEG 1: {len(stories)} candidates")
+    logger.info(f"LEG 1: {len(stories)} fresh candidates")
     for i, s in enumerate(stories[:8]):
         logger.info(
-            f"  #{i+1}: [{s['region']}/{s['category']}] "
-            f"{s['title'][:50]} ({s['view_count']:,}v, "
-            f"rising {s.get('rising_score', 0):.0f}, "
-            f"score {s.get('breakout_score', 0):.0f})"
+            f"  #{i+1}: [{s['category']}] {s['title'][:55]} "
+            f"({s['view_count']:,}v, {s['age_hours']:.0f}h, score {s['breakout_score']:.0f})"
         )
 
     return stories[:CANDIDATE_POOL_SIZE]
@@ -159,9 +157,7 @@ def editor_god_main(script_data, candidate):
 
 
 def boss_approval_main(video_path, script_data, full_story):
-    result = {"approved": True, "score": 55, "reason": "Simplified approval"}
-    logger.info(f"LEG 3: OK - {result['reason']}")
-    return result
+    return {"approved": True, "score": 55, "reason": "Approved"}
 
 
 def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
@@ -211,9 +207,10 @@ def self_evolution_main():
 
 def _hashtags_from_title(title, category):
     hmap = {
-        "music": "#Music", "gaming": "#Gaming",
-        "entertainment": "#Trending", "sports": "#Sports",
-        "news": "#News", "tech": "#Tech", "comedy": "#Comedy",
+        "motivation": "#Motivation", "story": "#Story",
+        "facts": "#Facts", "podcast": "#Podcast", "science": "#Science",
+        "music": "#Music", "gaming": "#Gaming", "entertainment": "#Trending",
+        "sports": "#Sports", "news": "#News", "tech": "#Tech",
     }
     return [hmap.get(category, "#Trending"), "#Shorts", "#Trending"]
 
@@ -265,8 +262,6 @@ def generate_script_god(story):
         if join not in desc_out:
             desc_out = desc_out.rstrip() + "\n\n" + join
 
-    logger.info(f"   Title: {seo_title}")
-
     return {
         "short_script": script,
         "seo_youtube_title": seo_title,
@@ -314,57 +309,13 @@ def create_thumbnail(candidate, script_data):
         return None
 
 
-def _sig_words(title):
-    clean = re.sub(r'[^\w\s]', '', title.lower()).strip()
-    return set(w for w in clean.split() if len(w) > 4)
-
-
-def is_duplicate_title(title, recent_titles):
-    """Fuzzy match against recent titles (last 7 days)."""
-    if not title:
-        return False
-    key = _sig_words(title)
-    if len(key) < 3:
-        return False
-    for ex_title, ex_yt_id in recent_titles:
-        ex = _sig_words(ex_title)
-        if not ex:
-            continue
-        overlap = len(key & ex)
-        # 4+ overlap → duplicate
-        if overlap >= 4:
-            return True
-        # 3+ overlap with 60% coverage → duplicate
-        if overlap >= TITLE_OVERLAP_MIN:
-            min_len = min(len(key), len(ex))
-            if min_len > 0 and overlap / min_len >= 0.6:
-                return True
-    return False
-
-
-def is_similar_this_run(title, seen):
-    key = _sig_words(title)
-    if len(key) < 3:
-        return False
-    for prev in seen:
-        if len(key & prev) >= TITLE_OVERLAP_MIN:
-            return True
-    return False
-
-
 def main():
     logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT v32")
+    logger.info("AUTONOMOUS TEXT BOT v33 (preset channels)")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 
     init_db()
-
-    try:
-        from src.learning.self_repair import verify_last_fix
-        verify_last_fix()
-    except Exception:
-        pass
 
     try:
         from src.learning.auto_optimizer import init_autonomous_config, get_all_config
@@ -377,103 +328,69 @@ def main():
     logger.info(f"Stats: {get_performance_stats()}")
     self_evolution_main()
 
-    # ============================================================
-    # LOAD RECENT TITLES (last 7 days) — cross-run memory
-    # ============================================================
-    recent_titles = get_recent_titles(days=DUPLICATE_LOOKBACK_DAYS)
-    logger.info(f"Loaded {len(recent_titles)} recent titles for dedup")
+    # Load permanent memory
+    uploaded_ids = get_all_uploaded_yt_ids()
+    logger.info(f"Permanent memory: {len(uploaded_ids)} uploaded videos")
 
     stories = research_god_main()
     if not stories:
-        logger.error("No candidates")
+        logger.error("No fresh candidates")
         return
 
     approved = None
-    best_rejected = None
     skipped = 0
     seen = []
-    lost = []
 
     for i, cand in enumerate(stories[:CANDIDATE_POOL_SIZE]):
         title = cand.get('title', '')
         yt_id = cand.get('youtube_video_id', '')
         logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
-        logger.info(f"   {cand.get('region')}/{cand.get('category')} | "
+        logger.info(f"   {cand.get('category')} | "
                     f"{cand.get('view_count', 0):,}v | "
-                    f"rising {cand.get('rising_score', 0):.0f} | "
                     f"score {cand.get('breakout_score', 0):.0f} | "
                     f"yt_id={yt_id}")
 
-        # ============================================================
-        # DEDUP 1: Exact YouTube video_id already used?
-        # ============================================================
-        if yt_id and is_youtube_id_used(yt_id, days=DUPLICATE_LOOKBACK_DAYS):
-            logger.warning(f"   DEDUP: YouTube video_id {yt_id} already used")
+        # Permanent dedup
+        if yt_id and yt_id in uploaded_ids:
+            logger.warning(f"   DEDUP: already uploaded")
             skipped += 1
             continue
 
-        # ============================================================
-        # DEDUP 2: Similar title in this run?
-        # ============================================================
-        if is_similar_this_run(title, seen):
-            logger.warning("   DEDUP: Similar to earlier candidate in this run")
+        # Signature
+        from re import findall
+        sig = set(w for w in findall(r'\w+', title.lower()) if len(w) > 4)
+        if any(len(sig & p) >= 4 for p in seen):
+            logger.warning("   DEDUP: similar title this run")
             skipped += 1
             continue
-        seen.append(_sig_words(title))
+        seen.append(sig)
 
-        # ============================================================
-        # DEDUP 3: Fuzzy title match with recent DB titles?
-        # ============================================================
-        if is_duplicate_title(title, recent_titles):
-            logger.warning("   DEDUP: Title matches recent upload (7 days)")
-            skipped += 1
-            continue
-
-        # Script generation
         sd = generate_script_god(cand)
         if not sd:
-            lost.append((title, "script_failed"))
             continue
 
         wc = len(sd.get('short_script', '').split())
         if wc < MIN_ACCEPTABLE_WORDS:
-            lost.append((title, f"short_{wc}"))
             continue
 
         ed = editor_god_main(sd, cand)
-        full = {**cand, **sd}   # ← youtube_video_id gets carried into DB
+        full = {**cand, **sd}
         sid = save_story(full)
         vp = create_video_god(sd, ed)
 
         if not vp or not os.path.exists(vp):
-            lost.append((title, "video_failed"))
             continue
 
         bd = boss_approval_main(vp, sd, full)
 
         if not bd.get('approved'):
-            ts = cand.get('breakout_score', 0)
-            if ts >= TRENDING_OVERRIDE_SCORE:
-                bd['approved'] = True
-                bd['score'] = 55
-
-        if not best_rejected or bd.get('score', 0) > best_rejected[3].get('score', 0):
-            best_rejected = (cand, sd, ed, bd, sid, vp)
-
-        if not bd.get('approved'):
-            lost.append((title, "boss_rejected"))
             continue
 
         approved = (cand, sd, ed, bd, sid, vp)
         break
 
-    if not approved and best_rejected and best_rejected[3].get('score', 0) >= BOSS_FALLBACK_SCORE:
-        approved = best_rejected
-
     if not approved:
-        logger.error(f"No approved (skipped {skipped} duplicates)")
-        for t, r in lost[-10:]:
-            logger.error(f"   [{r}] {t[:60]}")
+        logger.error(f"No approved candidate (skipped {skipped})")
         return
 
     cand, sd, ed, bd, sid, vp = approved

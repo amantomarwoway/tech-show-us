@@ -1,11 +1,11 @@
 name: GOD LEVEL BOT - AUTONOMOUS
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 17 * * *'
     - cron: '0 20 * * *'
     - cron: '0 1 * * *'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -81,32 +81,6 @@ jobs:
           LOG_LEVEL: INFO
           PYTHONWARNINGS: ignore
         run: python main.py
-
-      - name: Debug Output
-        if: always()
-        run: |
-          echo "=== DATABASE ==="
-          if [ -f data/news_bot.db ]; then
-            python -c "
-import sqlite3
-conn = sqlite3.connect('data/news_bot.db')
-cur = conn.cursor()
-try:
-    cur.execute('SELECT COUNT(*) FROM stories WHERE status=\"uploaded\"')
-    print('Uploaded stories: ' + str(cur.fetchone()[0]))
-except Exception as e:
-    print('DB error: ' + str(e))
-conn.close()
-"
-          else
-            echo "No DB file"
-          fi
-          echo ""
-          echo "=== OUTPUT ==="
-          ls -lh output/ || true
-          echo ""
-          echo "=== LOGS (last 30 lines) ==="
-          tail -30 logs/bot.log || true
 
       - name: Upload Artifact
         if: always()

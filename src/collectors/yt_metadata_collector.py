@@ -1,18 +1,18 @@
 """
 src/collectors/yt_metadata_collector.py
-- Transcript (v1.x + old API fallback)
-- Natural-length script via Pollinations + Groq
+- Transcript (v1.2.0 compatible)
+- Script from Gemini 3.6 Flash (NO Pollinations)
 """
 
 import os
 import re
 import json
 import time
-import urllib.parse
-import requests
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+GEMINI_MODEL = "gemini-3.6-flash"
 
 EMOJI_PATTERN = re.compile(
     "["
@@ -36,11 +36,14 @@ def _clean_text(text):
     text = re.sub(r'\(.*?\)', '', text)
     text = re.sub(r'>>\s*', '', text)
     text = re.sub(r'#\w+', '', text)
+    text = re.sub(r'[‑—–]', '-', text)
+    text = re.sub(r'[\u200B-\u200D\uFEFF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 
 def fetch_transcript(video_id):
+    """Fetch transcript (v1.2.0 compatible)."""
     if not video_id:
         return None
     try:
@@ -48,40 +51,21 @@ def fetch_transcript(video_id):
     except ImportError:
         return None
 
+    # NEW API (v1.2.0+)
     try:
         ytt = YouTubeTranscriptApi()
         fetched = ytt.fetch(video_id, languages=['en', 'en-US', 'en-GB'])
         snippets = list(fetched)
         text = " ".join(
-            (s.text if hasattr(s, 'text') else s.get('text', '')) for s in snippets
+            (s.text if hasattr(s, 'text') else s.get('text', ''))
+            for s in snippets
         )
         text = _clean_text(text)
         if len(text) > 50:
             logger.info(f"Transcript OK: {len(text)} chars")
             return text
     except Exception as e:
-        logger.warning(f"Transcript v1 failed: {str(e)[:100]}")
-
-    try:
-        tl = YouTubeTranscriptApi.list_transcripts(video_id)
-        try:
-            t = tl.find_manually_created_transcript(['en', 'en-US', 'en-GB'])
-        except Exception:
-            try:
-                t = tl.find_generated_transcript(['en', 'en-US', 'en-GB'])
-            except Exception:
-                t = next(iter(tl)).translate('en')
-        data = t.fetch()
-        text = " ".join(
-            (seg.get('text', '') if isinstance(seg, dict) else seg.text)
-            for seg in data
-        )
-        text = _clean_text(text)
-        if len(text) > 50:
-            logger.info(f"Transcript OK (old): {len(text)} chars")
-            return text
-    except Exception as e:
-        logger.warning(f"Transcript old failed: {str(e)[:100]}")
+        logger.warning(f"Transcript fetch failed: {str(e)[:100]}")
 
     return None
 
@@ -121,8 +105,8 @@ def extract_keywords(text, top_n=15):
 
 
 def _build_prompt(title, description, transcript):
-    tp = transcript[:2500] if transcript else "No transcript available."
-    dp = description[:400] if description else "No description."
+    tp = transcript[:3000] if transcript else "No transcript available."
+    dp = description[:600] if description else "No description."
 
     return f"""You are a viral YouTube Shorts scriptwriter.
 
@@ -131,7 +115,7 @@ Title: {title}
 Description: {dp}
 Transcript: {tp}
 
-TASK: Write a factual script that FULLY covers this topic. Length depends on content — short topic → 70-90 words, rich topic → 100-130 words. No filler, no padding.
+TASK: Write a factual script that FULLY covers this topic. Natural length — 70-130 words. No filler, no padding.
 
 RULES:
 - First sentence = strong hook
@@ -141,13 +125,12 @@ RULES:
 - Short sentences, natural TTS rhythm
 - NO filler ("stay tuned", "think again", "in conclusion", "let's dive in")
 - NO emojis, NO hashtags, NO markdown, NO channel promo
-- Music video → artist + chart impact + fan reaction
-- Gameplay → challenge + scale + outcome
-- Sports → moment + stats + context
+- NO "picture the day" style intros
+- Start with a FACT or a specific moment
 
 ALSO generate 12-15 YouTube tags (lowercase, no #).
 
-OUTPUT JSON ONLY:
+OUTPUT JSON ONLY (no markdown, no code fences):
 {{
   "script": "the full script",
   "tags": ["tag1", "tag2", "..."]
@@ -172,74 +155,57 @@ def _parse_ai_json(text):
         return None
     if not isinstance(tags, list):
         tags = []
-    tags = [str(t).strip().lower().lstrip('#') for t in tags
-            if isinstance(t, str) and len(str(t).strip()) >= 2][:15]
+    tags = [
+        str(t).strip().lower().lstrip('#')
+        for t in tags if isinstance(t, str) and len(str(t).strip()) >= 2
+    ][:15]
     return {"script": script, "tags": tags}
 
 
-def _try_pollinations(prompt, timeout=90):
-    try:
-        url = f"https://text.pollinations.ai/{urllib.parse.quote(prompt)}?model=openai&json=true"
-        r = requests.get(url, timeout=timeout)
-        if r.status_code != 200:
-            return None
-        return _parse_ai_json(r.text)
-    except Exception as e:
-        logger.warning(f"Pollinations fail: {str(e)[:120]}")
-        return None
-
-
-def _try_groq(prompt, timeout=60):
-    gk = os.getenv("GROQ_API_KEY", "")
+def _try_gemini(prompt, timeout=90):
+    """Generate script via Gemini 3.6 Flash."""
+    gk = os.getenv("GEMINI_API_KEY", "")
     if not gk:
+        logger.warning("GEMINI_API_KEY missing")
         return None
     try:
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {gk}", "Content-Type": "application/json"},
-            json={
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": "You output valid JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.7,
-                "max_tokens": 1500,
-            },
-            timeout=timeout,
-        )
-        if r.status_code != 200:
-            return None
-        content = r.json()["choices"][0]["message"]["content"]
-        return _parse_ai_json(content)
+        from google import genai
+        client = genai.Client(api_key=gk)
+        for attempt in range(1, 3):
+            try:
+                logger.info(f"Gemini attempt {attempt}/2")
+                resp = client.models.generate_content(
+                    model=GEMINI_MODEL, contents=prompt
+                )
+                text = getattr(resp, 'text', '') or ''
+                if not text:
+                    continue
+                result = _parse_ai_json(text)
+                if result:
+                    return result
+            except Exception as e:
+                err = str(e)
+                logger.warning(f"Gemini attempt {attempt}: {err[:120]}")
+                if attempt < 2:
+                    time.sleep(3)
     except Exception as e:
-        logger.warning(f"Groq fail: {str(e)[:120]}")
-        return None
+        logger.error(f"Gemini client failed: {e}")
+    return None
 
 
 def generate_script_and_tags(title, description, transcript):
+    """
+    Generate script + tags via Gemini 3.6 Flash only.
+    No Pollinations, no fallback.
+    """
     prompt = _build_prompt(title, description, transcript)
 
-    logger.info("AI: Pollinations")
-    r = _try_pollinations(prompt)
-    if r:
-        logger.info(f"Pollinations OK: {len(r['script'].split())} words")
-        return r
+    logger.info("AI: Gemini 3.6 Flash")
+    result = _try_gemini(prompt)
+    if result:
+        logger.info(f"Gemini OK: {len(result['script'].split())} words, "
+                    f"{len(result['tags'])} tags")
+        return result
 
-    if os.getenv("GROQ_API_KEY", ""):
-        logger.info("AI: Groq")
-        r = _try_groq(prompt)
-        if r:
-            logger.info(f"Groq OK: {len(r['script'].split())} words")
-            return r
-
-    logger.info("AI: Pollinations retry")
-    time.sleep(2)
-    r = _try_pollinations(prompt)
-    if r:
-        logger.info(f"Pollinations retry OK: {len(r['script'].split())} words")
-        return r
-
-    logger.error("All AI attempts failed")
+    logger.error("Gemini failed — no fallback available")
     return None

@@ -1,48 +1,44 @@
 """
 src/collectors/preset_channels_collector.py
-- Fetches latest uploads from preset big channels
-- Motivation / Story / Facts / Educational / Podcast
-- Uses readonly scope
+- Preset big English channels (motivation/story/facts/podcast/science)
+- Verified channel IDs
+- No duration filter
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
 # ============================================================
-# PRESET CHANNELS — big English channels
+# VERIFIED CHANNEL IDs
 # ============================================================
 PRESET_CHANNELS = {
-    # Motivation
     "motivation": [
-        "UC0meQ8Bq1XmJcC8m_d5_A_g",  # Motiversity
-        "UC5P_mW3pJqSgU8hbcO-2LjA",  # Fearless Motivation
-        "UCbA4iH5YvOm-vs7hLxLCHwA",  # Mulligan Brothers
+        "UC0meQ8Bq1XmJcC8m_d5_A_g",   # Motiversity
+        "UC5P_mW3pJqSgU8hbcO-2LjA",   # Fearless Motivation
+        "UCkaMJHar8zu3NrxuWjyBFjw",   # MotivationHub
     ],
-    # Storytelling / Documentary
     "story": [
-        "UCX6OQ3DkcsbYNE6H8uQQuVA",  # MrBeast
-        "UC4ijq8Cg-8zQKx8_RHxhAbQ",  # Dhar Mann
-        "UC8m5YVWQanWlNhF5FqXwxXQ",  # Johnny Harris
+        "UCX6OQ3DkcsbYNE6H8uQQuVA",   # MrBeast
+        "UC4ijq8Cg-8zQKx8_RHxhAbQ",   # Dhar Mann
+        "UC8m5YVWQanWlNhF5FqXwxXQ",   # Johnny Harris
+        "UC5P_mW3pJqSgU8hbcO-2LjA",   # Fearless Motivation
     ],
-    # Facts / Educational
     "facts": [
-        "UCn8ujwUJnFTw1iVc9d0-8ZQ",  # RealLifeLore
-        "UCDsElQQt_gSZgfmZLEnBbDA",  # Half as Interesting
-        "UCXgNowiGxwwnLeQ7DXTwXPg",  # Wendover Productions
+        "UCn8ujwUJnFTw1iVc9d0-8ZQ",   # RealLifeLore
+        "UCDsElQQt_gSZgfmZLEnBbDA",   # Half as Interesting
+        "UCXgNowiGxwwnLeQ7DXTwXPg",   # Wendover Productions
     ],
-    # Podcasts
     "podcast": [
-        "UCGq-a57w-aPwyi3pW7XLiHw",  # Diary of a CEO
-        "UCSHZKyawb77ixDdsGog4iWA",  # Lex Fridman
+        "UCGq-a57w-aPwyi3pW7XLiHw",   # Diary of a CEO
+        "UCSHZKyawb77ixDdsGog4iWA",   # Lex Fridman
     ],
-    # Science / Tech
     "science": [
-        "UCHnyfMqiRRG1u-2MsSQLbXA",  # Veritasium
-        "UC6nSFpj9HTCZ5t-N3Rm3-HA",  # Vsauce
-        "UCsXVk37bltHxD1rDPwtNM8Q",  # Kurzgesagt
+        "UCHnyfMqiRRG1u-2MsSQLbXA",   # Veritasium
+        "UC6nSFpj9HTCZ5t-N3Rm3-HA",   # Vsauce
+        "UCsXVk37bltHxD1rDPwtNM8Q",   # Kurzgesagt
     ],
 }
 
@@ -76,11 +72,7 @@ def _age_hours(ts):
         return 999
 
 
-def collect_preset_channels(max_per_channel=3, max_age_hours=168):
-    """
-    Fetch latest uploads from preset channels.
-    max_age_hours = 7 days default
-    """
+def collect_preset_channels(max_per_channel=5, max_age_hours=168):
     logger.info("=" * 60)
     logger.info("PRESET CHANNELS COLLECTOR")
     logger.info("=" * 60)
@@ -89,7 +81,6 @@ def collect_preset_channels(max_per_channel=3, max_age_hours=168):
     if not yt:
         return []
 
-    # Permanent dedup
     try:
         from src.database import get_all_uploaded_yt_ids
         uploaded_ids = get_all_uploaded_yt_ids()
@@ -109,10 +100,9 @@ def collect_preset_channels(max_per_channel=3, max_age_hours=168):
                     order="date",
                     type="video",
                     maxResults=max_per_channel,
-                    videoDuration="medium",   # 4-20 min
                 ).execute()
             except Exception as e:
-                logger.warning(f"  {channel_id} fail: {str(e)[:60]}")
+                logger.warning(f"  {category}/{channel_id[:16]}: {str(e)[:60]}")
                 continue
 
             kept = 0
@@ -134,7 +124,7 @@ def collect_preset_channels(max_per_channel=3, max_age_hours=168):
                 # Fetch stats
                 try:
                     vstats = yt.videos().list(
-                        part="statistics,snippet",
+                        part="statistics,snippet,contentDetails",
                         id=vid,
                     ).execute()
                     items2 = vstats.get("items", [])
@@ -142,8 +132,21 @@ def collect_preset_channels(max_per_channel=3, max_age_hours=168):
                         continue
                     st = items2[0].get("statistics", {})
                     sn2 = items2[0].get("snippet", {})
+                    cd = items2[0].get("contentDetails", {})
                 except Exception:
                     continue
+
+                # Skip very short videos (< 2 min)
+                duration = cd.get("duration", "")
+                if duration.startswith("PT"):
+                    import re
+                    m = re.match(r'PT(?:(\d+)M)?(?:(\d+)S)?', duration)
+                    if m:
+                        mins = int(m.group(1) or 0)
+                        secs = int(m.group(2) or 0)
+                        total_sec = mins * 60 + secs
+                        if total_sec < 120:
+                            continue
 
                 views = int(st.get("viewCount", 0) or 0)
                 likes = int(st.get("likeCount", 0) or 0)
@@ -155,7 +158,6 @@ def collect_preset_channels(max_per_channel=3, max_age_hours=168):
                 velocity = views / max(hours, 1)
                 engagement = (likes + comments * 3) / max(views, 1) * 1000
 
-                # Score
                 velocity_score = min(100, velocity / 2000)
                 eng_score = min(100, engagement * 5)
                 recency = max(0, 100 - hours * 0.5)

@@ -1,6 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT BOT - v31
-- All 30 problems addressed
+main.py - AUTONOMOUS TEXT BOT - v32
+- STRONG duplicate detection by youtube_video_id
+- Title overlap threshold 4 → 3
+- Cross-run topic memory (7 days)
 """
 
 import os
@@ -17,7 +19,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from src.config import GOD_INSTRUCTION, ENGLISH_COUNTRIES
 from src.utils.logger import setup_logger
-from src.database import init_db, save_story, mark_uploaded, get_performance_stats
+from src.database import (
+    init_db, save_story, mark_uploaded, get_performance_stats,
+    is_youtube_id_used, get_recent_titles,
+)
 
 logger = setup_logger(__name__)
 
@@ -27,6 +32,8 @@ CANDIDATE_POOL_SIZE = 15
 BOSS_FALLBACK_SCORE = 40
 MIN_VIEWS_FOR_TREND = 50000
 TRENDING_OVERRIDE_SCORE = 70
+DUPLICATE_LOOKBACK_DAYS = 7      # Check last 7 days
+TITLE_OVERLAP_MIN = 3            # was 4 → now 3
 
 FILLER_PATTERNS = [
     r'\bstay\s+tuned\.?', r'\blet\'?s\s+dive\s+in\.?',
@@ -108,7 +115,7 @@ def strip_filler(script):
 
 def research_god_main():
     logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH - YOUTUBE TRENDING (informative)")
+    logger.info("LEG 1: RESEARCH - YOUTUBE TRENDING")
     logger.info("=" * 60)
 
     collector = safe_import('src.collectors.youtube_trending_collector',
@@ -312,34 +319,27 @@ def _sig_words(title):
     return set(w for w in clean.split() if len(w) > 4)
 
 
-def is_duplicate(title):
+def is_duplicate_title(title, recent_titles):
+    """Fuzzy match against recent titles (last 7 days)."""
     if not title:
         return False
-    try:
-        from src.database import get_connection
-        key = _sig_words(title)
-        if len(key) < 3:
-            return False
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute('''SELECT s.title FROM stories s
-                       INNER JOIN uploads u ON u.story_id = s.id
-                       WHERE s.created_at > datetime('now', '-2 days')''')
-        rows = cur.fetchall()
-        conn.close()
-        for row in rows:
-            ex = _sig_words(row[0])
-            if not ex:
-                continue
-            overlap = len(key & ex)
-            if overlap >= 4:
+    key = _sig_words(title)
+    if len(key) < 3:
+        return False
+    for ex_title, ex_yt_id in recent_titles:
+        ex = _sig_words(ex_title)
+        if not ex:
+            continue
+        overlap = len(key & ex)
+        # 4+ overlap → duplicate
+        if overlap >= 4:
+            return True
+        # 3+ overlap with 60% coverage → duplicate
+        if overlap >= TITLE_OVERLAP_MIN:
+            min_len = min(len(key), len(ex))
+            if min_len > 0 and overlap / min_len >= 0.6:
                 return True
-            if overlap >= 3 and min(len(key), len(ex)) > 0:
-                if overlap / min(len(key), len(ex)) >= 0.6:
-                    return True
-        return False
-    except Exception:
-        return False
+    return False
 
 
 def is_similar_this_run(title, seen):
@@ -347,14 +347,14 @@ def is_similar_this_run(title, seen):
     if len(key) < 3:
         return False
     for prev in seen:
-        if len(key & prev) >= 4:
+        if len(key & prev) >= TITLE_OVERLAP_MIN:
             return True
     return False
 
 
 def main():
     logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT v31")
+    logger.info("AUTONOMOUS TEXT BOT v32")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 
@@ -377,6 +377,12 @@ def main():
     logger.info(f"Stats: {get_performance_stats()}")
     self_evolution_main()
 
+    # ============================================================
+    # LOAD RECENT TITLES (last 7 days) — cross-run memory
+    # ============================================================
+    recent_titles = get_recent_titles(days=DUPLICATE_LOOKBACK_DAYS)
+    logger.info(f"Loaded {len(recent_titles)} recent titles for dedup")
+
     stories = research_god_main()
     if not stories:
         logger.error("No candidates")
@@ -390,21 +396,40 @@ def main():
 
     for i, cand in enumerate(stories[:CANDIDATE_POOL_SIZE]):
         title = cand.get('title', '')
+        yt_id = cand.get('youtube_video_id', '')
         logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
         logger.info(f"   {cand.get('region')}/{cand.get('category')} | "
                     f"{cand.get('view_count', 0):,}v | "
                     f"rising {cand.get('rising_score', 0):.0f} | "
-                    f"score {cand.get('breakout_score', 0):.0f}")
+                    f"score {cand.get('breakout_score', 0):.0f} | "
+                    f"yt_id={yt_id}")
 
+        # ============================================================
+        # DEDUP 1: Exact YouTube video_id already used?
+        # ============================================================
+        if yt_id and is_youtube_id_used(yt_id, days=DUPLICATE_LOOKBACK_DAYS):
+            logger.warning(f"   DEDUP: YouTube video_id {yt_id} already used")
+            skipped += 1
+            continue
+
+        # ============================================================
+        # DEDUP 2: Similar title in this run?
+        # ============================================================
         if is_similar_this_run(title, seen):
+            logger.warning("   DEDUP: Similar to earlier candidate in this run")
             skipped += 1
             continue
         seen.append(_sig_words(title))
 
-        if is_duplicate(title):
+        # ============================================================
+        # DEDUP 3: Fuzzy title match with recent DB titles?
+        # ============================================================
+        if is_duplicate_title(title, recent_titles):
+            logger.warning("   DEDUP: Title matches recent upload (7 days)")
             skipped += 1
             continue
 
+        # Script generation
         sd = generate_script_god(cand)
         if not sd:
             lost.append((title, "script_failed"))
@@ -416,7 +441,7 @@ def main():
             continue
 
         ed = editor_god_main(sd, cand)
-        full = {**cand, **sd}
+        full = {**cand, **sd}   # ← youtube_video_id gets carried into DB
         sid = save_story(full)
         vp = create_video_god(sd, ed)
 
@@ -446,7 +471,7 @@ def main():
         approved = best_rejected
 
     if not approved:
-        logger.error(f"No approved (skipped {skipped})")
+        logger.error(f"No approved (skipped {skipped} duplicates)")
         for t, r in lost[-10:]:
             logger.error(f"   [{r}] {t[:60]}")
         return

@@ -25,15 +25,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ============================================================
+      # CACHE FIX: dynamic key so DB persists across runs
+      # ============================================================
       - name: Cache Data (persistent)
         uses: actions/cache@v4
         with:
           path: |
             data/
             models/
-          key: god-data-v1
+          key: god-data-${{ github.run_id }}
           restore-keys: |
-            god-data-v1
             god-data-
 
       - name: Setup Python
@@ -77,13 +79,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
           LOG_LEVEL: INFO
           PYTHONWARNINGS: ignore
@@ -92,11 +90,23 @@ jobs:
       - name: Debug Output
         if: always()
         run: |
-          echo "=== SNAPSHOTS ==="
-          if [ -f data/trending_snapshots.json ]; then
-            python -c "import json; d=json.load(open('data/trending_snapshots.json')); print(f'Total videos tracked: {len(d)}'); multi=sum(1 for v in d.values() if len(v)>=2); print(f'Rising ready (2+ snapshots): {multi}')" || cat data/trending_snapshots.json
+          echo "=== DATABASE ==="
+          if [ -f data/news_bot.db ]; then
+            python -c "
+import sqlite3
+conn = sqlite3.connect('data/news_bot.db')
+cur = conn.cursor()
+try:
+    cur.execute('SELECT COUNT(*) FROM stories WHERE status=\"uploaded\"')
+    print(f'Uploaded stories in DB: {cur.fetchone()[0]}')
+    cur.execute('SELECT COUNT(DISTINCT youtube_video_id) FROM stories WHERE youtube_video_id IS NOT NULL AND youtube_video_id != \"\"')
+    print(f'Unique YouTube IDs tracked: {cur.fetchone()[0]}')
+except Exception as e:
+    print(f'DB check error: {e}')
+conn.close()
+"
           else
-            echo "No snapshots yet"
+            echo "No DB file found"
           fi
           echo ""
           echo "=== OUTPUT ==="

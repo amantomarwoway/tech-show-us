@@ -1,6 +1,6 @@
 name: GOD LEVEL BOT - AUTONOMOUS
 
-"on":
+on:
   schedule:
     - cron: '0 17 * * *'
     - cron: '0 20 * * *'
@@ -9,11 +9,10 @@ name: GOD LEVEL BOT - AUTONOMOUS
 
 permissions:
   contents: write
-  models: read
 
 jobs:
   run-bot:
-    name: Run Autonomous Bot
+    name: Autonomous Bot
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -24,7 +23,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Data (persistent)
+      - name: Cache Data
         uses: actions/cache@v4
         with:
           path: |
@@ -68,17 +67,17 @@ jobs:
 
       - name: Setup Git
         run: |
-          git config --global user.name "AI Repair Bot"
-          git config --global user.email "ai-repair@tech-show-us.bot"
+          git config --global user.name "Bot"
+          git config --global user.email "bot@tech-show-us.bot"
 
-      - name: Run GOD BOT
+      - name: Run Bot
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          PYTHONPATH: src:.:${{ github.workspace }}:${{ github.workspace }}/src
+          PYTHONPATH: src:.:${{ github.workspace }}
           LOG_LEVEL: INFO
           PYTHONWARNINGS: ignore
         run: python main.py
@@ -94,21 +93,19 @@ conn = sqlite3.connect('data/news_bot.db')
 cur = conn.cursor()
 try:
     cur.execute('SELECT COUNT(*) FROM stories WHERE status=\"uploaded\"')
-    print(f'Uploaded stories in DB: {cur.fetchone()[0]}')
-    cur.execute('SELECT COUNT(DISTINCT youtube_video_id) FROM stories WHERE youtube_video_id IS NOT NULL AND youtube_video_id != \"\"')
-    print(f'Unique YouTube IDs tracked: {cur.fetchone()[0]}')
+    print('Uploaded stories: ' + str(cur.fetchone()[0]))
 except Exception as e:
-    print(f'DB check error: {e}')
+    print('DB error: ' + str(e))
 conn.close()
 "
           else
-            echo "No DB file found"
+            echo "No DB file"
           fi
           echo ""
           echo "=== OUTPUT ==="
           ls -lh output/ || true
           echo ""
-          echo "=== LOGS (last 30) ==="
+          echo "=== LOGS (last 30 lines) ==="
           tail -30 logs/bot.log || true
 
       - name: Upload Artifact

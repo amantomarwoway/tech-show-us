@@ -1,7 +1,8 @@
 """
-main.py - AUTONOMOUS TEXT BOT v33
-- Preset channels as source (motivation/story/facts/podcast/science)
-- Permanent dedup (never repeat)
+main.py - AUTONOMOUS TEXT BOT v34
+- Preset channels source
+- Permanent dedup by youtube_video_id
+- Gemini 3.6 Flash only
 """
 
 import os
@@ -38,6 +39,7 @@ FILLER_PATTERNS = [
     r'\blike\s+and\s+subscribe\.?', r'\bmore\s+coming\s+soon\.?',
     r'\bstay\s+with\s+me\.?', r'\bare\s+you\s+ready\?',
     r'\bthink\s+again\.?', r'\bhere\s+we\s+go\.?',
+    r'\bpicture\s+the\s+day\b', r'\bimagine\s+if\b',
 ]
 
 
@@ -132,7 +134,7 @@ def research_god_main():
         s['title'] = clean_topic(s.get('title', ''))
     stories = [s for s in stories if s.get('title') and len(s['title']) > 10]
 
-    # Permanent dedup — remove already uploaded
+    # Permanent dedup
     uploaded_ids = get_all_uploaded_yt_ids()
     before = len(stories)
     stories = [s for s in stories
@@ -311,7 +313,7 @@ def create_thumbnail(candidate, script_data):
 
 def main():
     logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT v33 (preset channels)")
+    logger.info("AUTONOMOUS TEXT BOT v34 (preset channels + Gemini)")
     logger.info(f"Time: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 
@@ -328,7 +330,6 @@ def main():
     logger.info(f"Stats: {get_performance_stats()}")
     self_evolution_main()
 
-    # Load permanent memory
     uploaded_ids = get_all_uploaded_yt_ids()
     logger.info(f"Permanent memory: {len(uploaded_ids)} uploaded videos")
 
@@ -350,15 +351,12 @@ def main():
                     f"score {cand.get('breakout_score', 0):.0f} | "
                     f"yt_id={yt_id}")
 
-        # Permanent dedup
         if yt_id and yt_id in uploaded_ids:
-            logger.warning(f"   DEDUP: already uploaded")
+            logger.warning("   DEDUP: already uploaded")
             skipped += 1
             continue
 
-        # Signature
-        from re import findall
-        sig = set(w for w in findall(r'\w+', title.lower()) if len(w) > 4)
+        sig = set(w for w in re.findall(r'\w+', title.lower()) if len(w) > 4)
         if any(len(sig & p) >= 4 for p in seen):
             logger.warning("   DEDUP: similar title this run")
             skipped += 1

@@ -1,6 +1,7 @@
 """
 src/database.py - SQLite database with performance learning
-- Added youtube_video_id column to stories table
+- Permanent YouTube video_id memory (never forgets)
+- Indexes for fast lookup
 """
 
 import sqlite3
@@ -38,7 +39,6 @@ def init_db():
         )
     ''')
 
-    # Stories table WITH youtube_video_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS stories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,20 +64,21 @@ def init_db():
         )
     ''')
 
-    # Migration: add youtube_video_id if missing (for existing DBs)
+    # Migration: add youtube_video_id if missing
     try:
         cursor.execute("PRAGMA table_info(stories)")
         cols = [row[1] for row in cursor.fetchall()]
         if 'youtube_video_id' not in cols:
             cursor.execute("ALTER TABLE stories ADD COLUMN youtube_video_id TEXT")
-            print("[DB] Added youtube_video_id column to stories table")
+            print("[DB] Added youtube_video_id column")
     except Exception as e:
         print(f"[DB] Migration warning: {e}")
 
-    # Index for fast lookups
+    # Indexes
     try:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_yt_id ON stories(youtube_video_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_created ON stories(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stories_status ON stories(status)")
     except Exception:
         pass
 
@@ -184,7 +185,6 @@ def init_db():
 
 
 def save_story(story_data):
-    """Save story to database, return story_id"""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -244,21 +244,55 @@ def mark_uploaded(story_id, video_id):
     print(f"[DB] Marked story {story_id} as uploaded: {video_id}")
 
 
-def is_youtube_id_used(youtube_video_id, days=7):
+# ============================================================
+# PERMANENT DEDUP — never forget a video
+# ============================================================
+
+def get_all_uploaded_yt_ids():
     """
-    Check if YouTube video ID was already used in last N days.
-    This is the STRONGEST dedup signal.
+    Return ALL youtube_video_ids ever uploaded (permanent memory).
+    This is the STRONGEST dedup signal — never forgets.
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT youtube_video_id FROM stories
+            WHERE youtube_video_id IS NOT NULL
+              AND youtube_video_id != ''
+              AND status = 'uploaded'
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        ids = set(row[0] for row in rows)
+        return ids
+    except Exception as e:
+        print(f"[DB] get_all_uploaded_yt_ids error: {e}")
+        return set()
+
+
+def is_youtube_id_used(youtube_video_id, days=None):
+    """
+    Check if YouTube video_id already used.
+    days=None → permanent check (never forgets)
+    days=N → check last N days only
     """
     if not youtube_video_id:
         return False
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT COUNT(*) FROM stories
-            WHERE youtube_video_id = ?
-              AND created_at > datetime('now', ?)
-        ''', (youtube_video_id, f'-{days} days'))
+        if days is None:
+            cursor.execute('''
+                SELECT COUNT(*) FROM stories
+                WHERE youtube_video_id = ?
+            ''', (youtube_video_id,))
+        else:
+            cursor.execute('''
+                SELECT COUNT(*) FROM stories
+                WHERE youtube_video_id = ?
+                  AND created_at > datetime('now', ?)
+            ''', (youtube_video_id, f'-{days} days'))
         count = cursor.fetchone()[0]
         conn.close()
         return count > 0
@@ -268,7 +302,7 @@ def is_youtube_id_used(youtube_video_id, days=7):
 
 
 def get_recent_titles(days=7):
-    """Return all recent titles (uploaded or pending) for fuzzy dedup."""
+    """Return recent titles (uploaded or pending) for fuzzy dedup."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -283,6 +317,29 @@ def get_recent_titles(days=7):
         print(f"[DB] get_recent_titles error: {e}")
         return []
 
+
+def get_all_uploaded_titles():
+    """Return ALL uploaded titles (permanent)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT title, youtube_video_id FROM stories
+            WHERE status = 'uploaded'
+              AND title IS NOT NULL
+              AND title != ''
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        return [(row[0], row[1]) for row in rows]
+    except Exception as e:
+        print(f"[DB] get_all_uploaded_titles error: {e}")
+        return []
+
+
+# ============================================================
+# STATS / LEARN
+# ============================================================
 
 def get_performance_stats():
     conn = get_connection()
@@ -319,26 +376,19 @@ def get_performance_stats():
 def get_recent_stories(limit=10):
     conn = get_connection()
     cursor = conn.cursor()
-
-    cursor.execute('''
-        SELECT * FROM stories ORDER BY created_at DESC LIMIT ?
-    ''', (limit,))
-
+    cursor.execute('SELECT * FROM stories ORDER BY created_at DESC LIMIT ?', (limit,))
     rows = cursor.fetchall()
     conn.close()
-
     return [dict(row) for row in rows]
 
 
 def log_error(component, error_message, stack_trace=""):
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute('''
         INSERT INTO errors (component, error_message, stack_trace)
         VALUES (?, ?, ?)
     ''', (component, error_message, stack_trace))
-
     conn.commit()
     conn.close()
 
@@ -346,7 +396,6 @@ def log_error(component, error_message, stack_trace=""):
 def save_performance(video_id, performance_data):
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute('''
         INSERT INTO performance (video_id, views, likes, comments, shares,
                                avg_view_duration, avg_percentage_viewed,
@@ -364,7 +413,6 @@ def save_performance(video_id, performance_data):
         performance_data.get('retention_score', 0),
         performance_data.get('engagement_score', 0)
     ))
-
     conn.commit()
     conn.close()
 
@@ -372,7 +420,6 @@ def save_performance(video_id, performance_data):
 def get_topic_performance():
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute('''
         SELECT s.canonical_topic, AVG(p.views) as avg_views,
                AVG(p.avg_percentage_viewed) as avg_retention
@@ -382,8 +429,6 @@ def get_topic_performance():
         GROUP BY s.canonical_topic
         ORDER BY avg_views DESC
     ''')
-
     rows = cursor.fetchall()
     conn.close()
-
     return [dict(row) for row in rows]

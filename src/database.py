@@ -1,7 +1,8 @@
 """
 src/database.py - SQLite database with performance learning
-- Permanent YouTube video_id memory (never forgets)
-- Indexes for fast lookup
+- Permanent youtube_video_id memory
+- Backfill migration from URL
+- Indexes for speed
 """
 
 import sqlite3
@@ -64,7 +65,7 @@ def init_db():
         )
     ''')
 
-    # Migration: add youtube_video_id if missing
+    # Migration 1: add youtube_video_id column
     try:
         cursor.execute("PRAGMA table_info(stories)")
         cols = [row[1] for row in cursor.fetchall()]
@@ -73,6 +74,20 @@ def init_db():
             print("[DB] Added youtube_video_id column")
     except Exception as e:
         print(f"[DB] Migration warning: {e}")
+
+    # Migration 2: backfill youtube_video_id from url
+    try:
+        cursor.execute('''
+            UPDATE stories
+            SET youtube_video_id = REPLACE(url, 'https://youtube.com/watch?v=', '')
+            WHERE (youtube_video_id IS NULL OR youtube_video_id = '')
+              AND url LIKE 'https://youtube.com/watch?v=%'
+        ''')
+        backfilled = cursor.rowcount
+        if backfilled > 0:
+            print(f"[DB] Backfilled {backfilled} youtube_video_ids from URLs")
+    except Exception as e:
+        print(f"[DB] Backfill warning: {e}")
 
     # Indexes
     try:
@@ -245,14 +260,11 @@ def mark_uploaded(story_id, video_id):
 
 
 # ============================================================
-# PERMANENT DEDUP — never forget a video
+# PERMANENT DEDUP
 # ============================================================
 
 def get_all_uploaded_yt_ids():
-    """
-    Return ALL youtube_video_ids ever uploaded (permanent memory).
-    This is the STRONGEST dedup signal — never forgets.
-    """
+    """All youtube_video_ids ever uploaded (permanent)."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -264,19 +276,14 @@ def get_all_uploaded_yt_ids():
         ''')
         rows = cursor.fetchall()
         conn.close()
-        ids = set(row[0] for row in rows)
-        return ids
+        return set(row[0] for row in rows)
     except Exception as e:
         print(f"[DB] get_all_uploaded_yt_ids error: {e}")
         return set()
 
 
 def is_youtube_id_used(youtube_video_id, days=None):
-    """
-    Check if YouTube video_id already used.
-    days=None → permanent check (never forgets)
-    days=N → check last N days only
-    """
+    """days=None → permanent check."""
     if not youtube_video_id:
         return False
     try:
@@ -284,8 +291,7 @@ def is_youtube_id_used(youtube_video_id, days=None):
         cursor = conn.cursor()
         if days is None:
             cursor.execute('''
-                SELECT COUNT(*) FROM stories
-                WHERE youtube_video_id = ?
+                SELECT COUNT(*) FROM stories WHERE youtube_video_id = ?
             ''', (youtube_video_id,))
         else:
             cursor.execute('''
@@ -302,7 +308,6 @@ def is_youtube_id_used(youtube_video_id, days=None):
 
 
 def get_recent_titles(days=7):
-    """Return recent titles (uploaded or pending) for fuzzy dedup."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -319,7 +324,6 @@ def get_recent_titles(days=7):
 
 
 def get_all_uploaded_titles():
-    """Return ALL uploaded titles (permanent)."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -338,7 +342,7 @@ def get_all_uploaded_titles():
 
 
 # ============================================================
-# STATS / LEARN
+# STATS
 # ============================================================
 
 def get_performance_stats():

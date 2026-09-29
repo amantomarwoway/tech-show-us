@@ -1,0 +1,43 @@
+name: CTR DYNAMIC OPTIMIZER
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # daily 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Run CTR optimizer
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: python -m src.ctr_optimizer
+
+      - name: Commit DB back
+        if: always()
+        run: |
+          git config user.name "wordsthatspeaks-bot"
+          git config user.email "bot@wordsthatspeaks.local"
+          git add data/words.db || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "db: ctr update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git pull --rebase || true
+          git push || true

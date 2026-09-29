@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+temp/*
+!temp/.gitkeep
+!temp/scenes/.gitkeep
+output/*
+!output/.gitkeep
+logs/*.log
+.env
+*.onnx
+*.onnx.json

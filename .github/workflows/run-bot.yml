@@ -1,0 +1,82 @@
+name: WORDSTHATSPEAKS WEEKLY OSCAR BOT
+
+on:
+  schedule:
+    # Tue & Fri 01:00 UTC (~6pm PT Mon/Thu) — same day/time every week.
+    - cron: '0 1 * * 2,5'
+  workflow_dispatch:
+
+concurrency:
+  group: wordsthatspeaks-weekly-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # stay under the 360/6h hard ceiling with margin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/piper/
+            ~/.cache/huggingface/
+            ~/.cache/torch/
+          key: piper-whisper-models-v1
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Run weekly bot (long + 2 shorts)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          # REVIEW_MODE=1 (default, set below) uploads everything PRIVATE for
+          # human review instead of publishing/scheduling automatically. Flip
+          # it to "0" in Settings -> Secrets and variables -> Actions ->
+          # Variables (repo VARIABLE, not secret) only once you trust the
+          # output — see README "Turning off review mode".
+          REVIEW_MODE: ${{ vars.REVIEW_MODE || '1' }}
+        run: python main.py
+
+      - name: Commit DB back
+        if: always()
+        run: |
+          git config user.name "wordsthatspeaks-bot"
+          git config user.email "bot@wordsthatspeaks.local"
+          git add data/words.db || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "db: weekly update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git pull --rebase || true
+          git push || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-output-${{ github.run_id }}
+          path: |
+            output/
+            logs/
+            data/words.db
+          retention-days: 7

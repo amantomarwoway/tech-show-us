@@ -1,408 +1,266 @@
 """
-main.py - AUTONOMOUS TEXT BOT v34
-- Preset channels source
-- Permanent dedup by youtube_video_id
-- Gemini 3.6 Flash only
-"""
+Weekly orchestration: pick word -> research -> script -> per-scene visuals +
+voiceover + alignment -> build long video -> thumbnail -> SEO -> upload long
+-> derive 2 shorts (reusing per-scene audio) -> upload shorts (scheduled) ->
+persist to DB.
 
-import os
+Voiceover and alignment are done PER SCENE (not once for the whole script)
+so each scene's Ken Burns visual clip can be sized to that scene's real
+narration length — this keeps captions and visuals in sync all the way
+through the video instead of drifting apart from an arbitrary LLM duration
+guess. See src/video_builder.py and src/aligner.py for the mechanics.
+
+Every stage is wrapped so a failure logs and either falls back or aborts the
+run cleanly (never crashes uncaught) — a failed long video skips short
+derivation and upload for that run.
+"""
+import logging
 import sys
 import time
-import traceback
-import json
-import random
-import re
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-sys.path.insert(0, os.path.dirname(__file__))
-
-from src.config import GOD_INSTRUCTION, ENGLISH_COUNTRIES
-from src.utils.logger import setup_logger
-from src.database import (
-    init_db, save_story, mark_uploaded, get_performance_stats,
-    is_youtube_id_used, get_all_uploaded_yt_ids,
+from src.aligner import align_words, offset_words
+from src.caption_builder import build_ass_captions
+from src.config import (
+    LONG_HEIGHT,
+    LONG_WIDTH,
+    OUTPUT_DIR,
+    REVIEW_MODE,
+    SHORT_PUBLISH_DELAY_HOURS,
+    TEMP_DIR,
+)
+from src.database import init_db, mark_word_used
+from src.etymology_researcher import research_word
+from src.script_writer import write_script
+from src.seo_optimizer import build_long_metadata, build_short_metadata
+from src.short_deriver import derive_shorts
+from src.story_engine import check_loop_closure, pick_best_segments_for_shorts
+from src.thumbnail_builder import build_thumbnail
+from src.tts_engine import synthesize_voiceover, get_audio_duration_sec
+from src.video_builder import build_long_video
+from src.visual_generator import generate_all_scene_images
+from src.word_picker import pick_word
+from src.youtube_uploader import (
+    compute_publish_at,
+    next_publish_slot,
+    upload_thumbnail,
+    upload_video,
 )
 
-logger = setup_logger(__name__)
+LOGS_DIR = Path(__file__).resolve().parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
-MIN_ACCEPTABLE_WORDS = 70
-MAX_ACCEPTABLE_WORDS = 200
-CANDIDATE_POOL_SIZE = 20
-BOSS_FALLBACK_SCORE = 40
-
-FILLER_PATTERNS = [
-    r'\bstay\s+tuned\.?', r'\blet\'?s\s+dive\s+in\.?',
-    r'\bin\s+conclusion\.?', r'\bwithout\s+further\s+ado\.?',
-    r'\bdon\'?t\s+forget\s+to\s+(like|subscribe|comment|hit).*?\.',
-    r'\bsmash\s+that\s+like\s+button\.?', r'\bhit\s+the\s+subscribe\s+button\.?',
-    r'\blike\s+and\s+subscribe\.?', r'\bmore\s+coming\s+soon\.?',
-    r'\bstay\s+with\s+me\.?', r'\bare\s+you\s+ready\?',
-    r'\bthink\s+again\.?', r'\bhere\s+we\s+go\.?',
-    r'\bpicture\s+the\s+day\b', r'\bimagine\s+if\b',
-]
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOGS_DIR / "bot.log"),
+    ],
+)
+log = logging.getLogger("main")
 
 
-def safe_import(mp, fn=None):
-    try:
-        if fn:
-            m = __import__(mp, fromlist=[fn])
-            return getattr(m, fn)
-        return __import__(mp)
-    except Exception as e:
-        logger.warning(f"Import failed {mp}: {e}")
-        return None
+_step_start_time = None
+_pipeline_start_time = None
 
 
-def clean_topic(title):
-    if not title:
-        return ""
-    c = title.strip()
-    if '|' in c:
-        c = max(c.split('|'), key=len).strip()
-    for p in [
-        r'^(?:[A-Z][A-Za-z]+\s*){1,4}(?:NEWS|MEDIA|TIMES|POST|TODAY|NOW|TV|PRESS|JOURNAL|REPORT)\s*[-:]\s*',
-        r'^(?:MINNEAPOLI|CNN|BBC|ABC|NBC|CBS|FOX|MSNBC|NYT|WSJ|AP|REUTERS)[A-Za-z]*\s*[-:]\s*',
-    ]:
-        c = re.sub(p, '', c, flags=re.IGNORECASE)
-    c = re.sub(r'\bBREAKING(\s+NEWS)?\b', '', c, flags=re.IGNORECASE)
-    c = re.sub(r'\bLIVE(\s+UPDATE)?\b', '', c, flags=re.IGNORECASE)
-    c = re.sub(r'\[.*?\]', '', c)
-    c = re.sub(r'\(.*?\)', '', c)
-    c = re.sub(r'\s*-\s*[A-Z][a-zA-Z\s]{2,30}$', '', c)
-    c = re.sub(r'^[\|\-\s:]+', '', c)
-    c = re.sub(r'[\|\-\s:]+$', '', c)
-    c = re.sub(r'\s+', ' ', c)
-    return c.strip()
+def step(name: str):
+    """Logs a step header and the elapsed time since the previous step —
+    useful for spotting which stage is eating your GitHub Actions minutes
+    budget (see README's 'known limitations' on timing)."""
+    global _step_start_time, _pipeline_start_time
+
+    now = time.monotonic()
+    if _pipeline_start_time is None:
+        _pipeline_start_time = now
+    if _step_start_time is not None:
+        log.info("(previous step took %.1fs)", now - _step_start_time)
+    _step_start_time = now
+    log.info("=== STEP: %s === [elapsed: %.1fs]", name, now - _pipeline_start_time)
 
 
-def has_publisher_name(text):
-    if not text:
-        return False
-    bad = ['MINNEAPOLI', 'BREAKING NEWS', 'CNN', 'BBC', 'ABC', 'NBC', 'CBS',
-           'FOX', 'MSNBC', 'NYT', 'WSJ', 'APNEWS', 'REUTERS']
-    t = text.upper()
-    return any(b in t for b in bad)
+def _build_scene_audio_and_alignment(scenes: list[dict], word: str) -> list[dict]:
+    """For each scene: synthesize its own voiceover, measure its real
+    duration, and align its words locally (timestamps starting at 0.0).
+    Mutates and returns `scenes` with `_audio_path`, `_duration`,
+    `_local_words` attached to each scene dict. Raises only if a scene's
+    voiceover synthesis fails outright (both TTS engines down) — a single
+    bad alignment falls back to proportional timing rather than aborting.
+    """
+    for scene in scenes:
+        scene_num = scene["scene_number"]
+        narration = scene["narration"]
+
+        audio_path = synthesize_voiceover(narration, f"{word}_scene{scene_num}_voice.mp3")
+        duration = get_audio_duration_sec(audio_path)
+        local_words = align_words(audio_path, narration)
+
+        scene["_audio_path"] = audio_path
+        scene["_duration"] = duration
+        scene["_local_words"] = local_words
+
+    return scenes
 
 
-def is_spam_topic(title):
-    if not title:
-        return True
-    tl = title.lower()
-    for kw in ['18+', 'adult', 'xxx', 'porn', 'casino', 'betting', 'lottery',
-               'loan', 'torrent', 'crack', 'hack tool', 'mod apk', 'viagra']:
-        if kw in tl:
-            return True
-    if re.search(r'https?://|www\.', tl):
-        return True
-    return False
+def _build_global_caption_timeline(scenes: list[dict]) -> list[dict]:
+    """Stitches each scene's local (0.0-based) word alignment into one
+    global timeline, offset by cumulative real scene durations, for
+    captioning the full concatenated long video."""
+    global_words = []
+    cumulative = 0.0
+    for scene in scenes:
+        global_words.extend(offset_words(scene["_local_words"], cumulative))
+        cumulative += scene["_duration"]
+    return global_words
 
 
-def strip_filler(script):
-    if not script:
-        return script
-    for p in FILLER_PATTERNS:
-        script = re.sub(p, '', script, flags=re.IGNORECASE)
-    script = re.sub(r'\s+', ' ', script).strip()
-    script = re.sub(r'\.\s*\.', '.', script)
-    if script and not script.endswith(('.', '!', '?')):
-        script += "."
-    return script
-
-
-def research_god_main():
-    logger.info("=" * 60)
-    logger.info("LEG 1: RESEARCH - PRESET CHANNELS")
-    logger.info("=" * 60)
-
-    collector = safe_import('src.collectors.preset_channels_collector',
-                            'collect_preset_channels')
-    if not collector:
-        logger.error("Preset channels collector not found")
-        return []
-
-    try:
-        stories = collector()
-    except Exception as e:
-        logger.error(f"Collector failed: {e}")
-        return []
-
-    if not stories:
-        return []
-
-    for s in stories:
-        s['title'] = clean_topic(s.get('title', ''))
-    stories = [s for s in stories if s.get('title') and len(s['title']) > 10]
-
-    # Permanent dedup
-    uploaded_ids = get_all_uploaded_yt_ids()
-    before = len(stories)
-    stories = [s for s in stories
-               if s.get('youtube_video_id', '') not in uploaded_ids]
-    logger.info(f"Permanent dedup: {before} -> {len(stories)} "
-                f"(removed {before - len(stories)} already-uploaded)")
-
-    stories.sort(key=lambda x: x.get('breakout_score', 0), reverse=True)
-
-    logger.info(f"LEG 1: {len(stories)} fresh candidates")
-    for i, s in enumerate(stories[:8]):
-        logger.info(
-            f"  #{i+1}: [{s['category']}] {s['title'][:55]} "
-            f"({s['view_count']:,}v, {s['age_hours']:.0f}h, score {s['breakout_score']:.0f})"
-        )
-
-    return stories[:CANDIDATE_POOL_SIZE]
-
-
-def editor_god_main(script_data, candidate):
-    return {"facts": [], "visuals": []}
-
-
-def boss_approval_main(video_path, script_data, full_story):
-    return {"approved": True, "score": 55, "reason": "Approved"}
-
-
-def uploader_god_main(video_path, thumbnail_path, script_data, candidate, boss_data):
-    logger.info("=" * 60)
-    logger.info("LEG 4: UPLOADER")
-    logger.info("=" * 60)
-    if not os.path.exists(video_path):
-        logger.error(f"Missing: {video_path}")
-        return None
-    uploader = safe_import('src.youtube.uploader', 'upload_video')
-    if not uploader:
-        return None
-    try:
-        title = script_data.get('seo_youtube_title', '') or candidate.get('title', 'Trending')
-        vid = uploader(
-            video_path=video_path,
-            thumbnail_path=thumbnail_path,
-            title=title[:100],
-            description=script_data.get('description', ''),
-            tags=script_data.get('tags', ['trending', 'viral', 'shorts']),
-            category_id="27"
-        )
-        if vid:
-            logger.info(f"Uploaded: https://youtu.be/{vid}")
-        return vid
-    except Exception as e:
-        logger.error(f"Upload: {e}")
-        return None
-
-
-def self_evolution_main():
-    logger.info("=" * 60)
-    logger.info("SELF EVOLUTION")
-    logger.info("=" * 60)
-    for mod, fn in [
-        ('src.youtube.analytics_collector', 'collect_analytics'),
-        ('src.learning.retention_analyzer', 'analyze_retention'),
-        ('src.learning.auto_optimizer', 'analyze_and_optimize'),
-        ('src.learning.self_repair', 'run_self_diagnostics'),
-    ]:
-        try:
-            m = __import__(mod, fromlist=[fn])
-            getattr(m, fn)()
-        except Exception as e:
-            logger.warning(f"{fn}: {str(e)[:80]}")
-
-
-def _hashtags_from_title(title, category):
-    hmap = {
-        "motivation": "#Motivation", "story": "#Story",
-        "facts": "#Facts", "podcast": "#Podcast", "science": "#Science",
-        "music": "#Music", "gaming": "#Gaming", "entertainment": "#Trending",
-        "sports": "#Sports", "news": "#News", "tech": "#Tech",
-    }
-    return [hmap.get(category, "#Trending"), "#Shorts", "#Trending"]
-
-
-def generate_script_god(story):
-    from src.collectors.yt_metadata_collector import (
-        fetch_transcript, generate_script_and_tags
-    )
-
-    vid = story.get('youtube_video_id', '')
-    title = story.get('title', '')
-    desc = story.get('description', '')
-    category = story.get('category', 'trending')
-
-    logger.info(f"Generating script for: {title[:60]}")
-
-    transcript = fetch_transcript(vid) if vid else None
-    hashtags = _hashtags_from_title(title, category)
-
-    ai = generate_script_and_tags(title, desc, transcript)
-    if not ai:
-        return None
-
-    script = ai["script"]
-    tags = ai["tags"]
-    script = strip_filler(script)
-
-    wc = len(script.split())
-    logger.info(f"AI script (post-clean): {wc} words")
-
-    if wc < MIN_ACCEPTABLE_WORDS:
-        logger.warning(f"Too short ({wc} < {MIN_ACCEPTABLE_WORDS})")
-        return None
-
-    title_clean = clean_topic(title)
-    if len(title_clean) > 50:
-        title_clean = title_clean[:50].rsplit(' ', 1)[0]
-    seo_title = f"{title_clean} {hashtags[0]}"[:100]
-
-    hook_words = title_clean.upper().split()[:5]
-    hook = " ".join(hook_words) if hook_words else "WATCH THIS"
-
-    all_tags = [category] + tags
-    all_tags = list(dict.fromkeys([t for t in all_tags if t]))[:15]
-
-    desc_out = desc[:500] if desc else "Trending on YouTube."
-    if hashtags:
-        join = " ".join(hashtags[:5])
-        if join not in desc_out:
-            desc_out = desc_out.rstrip() + "\n\n" + join
-
-    return {
-        "short_script": script,
-        "seo_youtube_title": seo_title,
-        "description": desc_out,
-        "hashtags": hashtags[:3],
-        "tags": all_tags,
-        "viral_hook": hook,
-        "visual_queries": [],
-        "confidence_score": 85,
-    }
-
-
-def create_video_god(script_data, editor_data):
-    try:
-        from src.media.text_video_builder import create_text_video
-        merged = {**script_data, **editor_data}
-        merged['short_script'] = script_data.get('short_script', '')
-        merged['full_script'] = script_data.get('short_script', '')
-        merged['title'] = script_data.get('seo_youtube_title', '')
-        p = create_text_video(merged, editor_data)
-        logger.info(f"Video: {p}")
-        return p
-    except Exception as e:
-        logger.error(f"Video failed: {e}")
-        return None
-
-
-def create_thumbnail(candidate, script_data):
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-        os.makedirs("output/thumbnails", exist_ok=True)
-        tp = "output/thumbnails/thumb.jpg"
-        img = Image.new('RGB', (1280, 720), (15, 15, 40))
-        d = ImageDraw.Draw(img)
-        title = script_data.get('seo_youtube_title', candidate.get('title', 'Trending'))
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 70)
-        except Exception:
-            font = ImageFont.load_default()
-        d.text((644, 364), title[:40], font=font, fill=(0, 0, 0), anchor="mm")
-        d.text((640, 360), title[:40], font=font, fill=(255, 255, 255), anchor="mm")
-        img.save(tp, quality=95)
-        return tp
-    except Exception:
-        return None
-
-
-def main():
-    logger.info("=" * 60)
-    logger.info("AUTONOMOUS TEXT BOT v34 (preset channels + Gemini)")
-    logger.info(f"Time: {datetime.now().isoformat()}")
-    logger.info("=" * 60)
-
+def run_weekly_pipeline() -> None:
     init_db()
 
-    try:
-        from src.learning.auto_optimizer import init_autonomous_config, get_all_config
-        init_autonomous_config()
-        config = get_all_config()
-        logger.info(f"Config v{config.get('version')}")
-    except Exception as e:
-        logger.warning(f"Config: {e}")
+    step("Pick word")
+    picked = pick_word()
+    word = picked["word"]
+    log.info("Selected word: %s (angle: %s)", word, picked.get("angle"))
 
-    logger.info(f"Stats: {get_performance_stats()}")
-    self_evolution_main()
+    step("Research etymology")
+    research = research_word(word)
 
-    uploaded_ids = get_all_uploaded_yt_ids()
-    logger.info(f"Permanent memory: {len(uploaded_ids)} uploaded videos")
+    step("Write script")
+    script = write_script(word, research, angle=picked.get("angle", ""))
+    check_loop_closure(script)  # logs a warning only, does not block
 
-    stories = research_god_main()
-    if not stories:
-        logger.error("No fresh candidates")
-        return
+    scenes = script["scenes"]
 
-    approved = None
-    skipped = 0
-    seen = []
+    step("Generate scene visuals")
+    scene_image_paths = generate_all_scene_images(scenes)
+    if all(p is None for p in scene_image_paths):
+        raise RuntimeError("All scene image generation failed — aborting run")
 
-    for i, cand in enumerate(stories[:CANDIDATE_POOL_SIZE]):
-        title = cand.get('title', '')
-        yt_id = cand.get('youtube_video_id', '')
-        logger.info(f"\nCANDIDATE {i+1}: {title[:60]}")
-        logger.info(f"   {cand.get('category')} | "
-                    f"{cand.get('view_count', 0):,}v | "
-                    f"score {cand.get('breakout_score', 0):.0f} | "
-                    f"yt_id={yt_id}")
+    step("Synthesize per-scene voiceover + alignment")
+    scenes = _build_scene_audio_and_alignment(scenes, word)
+    scene_audio_paths = [s["_audio_path"] for s in scenes]
+    scene_durations = [s["_duration"] for s in scenes]
 
-        if yt_id and yt_id in uploaded_ids:
-            logger.warning("   DEDUP: already uploaded")
-            skipped += 1
+    step("Build global caption timeline")
+    global_words = _build_global_caption_timeline(scenes)
+    ass_path = TEMP_DIR / f"{word}_captions.ass"
+    build_ass_captions(global_words, ass_path, theme="karaoke", is_short=False)
+
+    step("Build long cinematic video")
+    long_video_path = build_long_video(
+        scenes, scene_image_paths, scene_audio_paths, scene_durations,
+        ass_path, word, OUTPUT_DIR, LONG_WIDTH, LONG_HEIGHT,
+    )
+
+    step("Build thumbnail")
+    thumbnail_path = build_thumbnail(word, hook_snippet=script.get("hook", "")[:30])
+
+    step("Build SEO metadata (long)")
+    long_meta = build_long_metadata(script, word)
+
+    # REVIEW_MODE (default ON — see src/config.py) uploads everything PRIVATE
+    # with no schedule, so a human checks it in YouTube Studio before it ever
+    # goes public. This is the single most important safety valve for a
+    # fully-automated channel: bad output stays invisible until a person
+    # says otherwise. Only flip REVIEW_MODE off (repo variable, not secret)
+    # once you've watched several runs end-to-end and trust the pipeline.
+    #
+    # When REVIEW_MODE is off, the long video is scheduled (not published
+    # immediately) to the next fixed weekly slot (Tue/Fri 01:00 UTC by
+    # default — see PUBLISH_WEEKDAYS/PUBLISH_HOUR_UTC in config.py) so "same
+    # day, same time" holds regardless of how long THIS run's render took.
+    # Shorts are scheduled relative to that same slot, not to "now" — two
+    # runs that take 40 minutes vs 4 hours still produce identical publish
+    # times for viewers.
+    slot_time = next_publish_slot(datetime.now(timezone.utc))
+
+    step("Upload long video")
+    if REVIEW_MODE:
+        long_video_id = upload_video(
+            long_video_path,
+            title=long_meta["title"],
+            description=long_meta["description"],
+            tags=long_meta["tags"],
+            privacy_status="private",
+        )
+        log.info(
+            "REVIEW_MODE is on: long video uploaded PRIVATE, no schedule set. "
+            "Review it in YouTube Studio and publish manually. "
+            "https://studio.youtube.com/video/%s/edit", long_video_id,
+        )
+    else:
+        long_video_id = upload_video(
+            long_video_path,
+            title=long_meta["title"],
+            description=long_meta["description"],
+            tags=long_meta["tags"],
+            publish_at_iso=compute_publish_at(slot_time, 0),
+        )
+        log.info(
+            "Long video scheduled for %s: video_id=%s",
+            slot_time.isoformat(), long_video_id,
+        )
+    upload_thumbnail(long_video_id, thumbnail_path)
+
+    step("Derive shorts (reusing per-scene audio/alignment)")
+    short_paths = derive_shorts(script, word)
+    best_short_scenes = pick_best_segments_for_shorts(script, n=2)
+
+    short_ids = [None, None]
+    for i, (short_path, scene, delay_hours) in enumerate(
+        zip(short_paths, best_short_scenes, SHORT_PUBLISH_DELAY_HOURS)
+    ):
+        if short_path is None:
+            log.warning("Short %d was not built successfully — skipping upload", i + 1)
             continue
+        step(f"Upload short {i + 1}")
+        short_meta = build_short_metadata(scene, word, long_video_id, i + 1)
+        try:
+            if REVIEW_MODE:
+                short_id = upload_video(
+                    short_path,
+                    title=short_meta["title"],
+                    description=short_meta["description"],
+                    tags=short_meta["tags"],
+                    privacy_status="private",
+                )
+            else:
+                short_id = upload_video(
+                    short_path,
+                    title=short_meta["title"],
+                    description=short_meta["description"],
+                    tags=short_meta["tags"],
+                    publish_at_iso=compute_publish_at(slot_time, delay_hours),
+                )
+            short_ids[i] = short_id
+        except Exception as e:
+            log.error("Failed to upload short %d: %s", i + 1, e)
 
-        sig = set(w for w in re.findall(r'\w+', title.lower()) if len(w) > 4)
-        if any(len(sig & p) >= 4 for p in seen):
-            logger.warning("   DEDUP: similar title this run")
-            skipped += 1
-            continue
-        seen.append(sig)
+    step("Persist to database")
+    # Strip non-serializable Path objects before persisting the script JSON.
+    for scene in scenes:
+        scene.pop("_audio_path", None)
+        scene.pop("_local_words", None)
+    mark_word_used(
+        word,
+        long_video_id=long_video_id,
+        short_id_1=short_ids[0],
+        short_id_2=short_ids[1],
+        title=long_meta["title"],
+        script=script,
+    )
 
-        sd = generate_script_god(cand)
-        if not sd:
-            continue
-
-        wc = len(sd.get('short_script', '').split())
-        if wc < MIN_ACCEPTABLE_WORDS:
-            continue
-
-        ed = editor_god_main(sd, cand)
-        full = {**cand, **sd}
-        sid = save_story(full)
-        vp = create_video_god(sd, ed)
-
-        if not vp or not os.path.exists(vp):
-            continue
-
-        bd = boss_approval_main(vp, sd, full)
-
-        if not bd.get('approved'):
-            continue
-
-        approved = (cand, sd, ed, bd, sid, vp)
-        break
-
-    if not approved:
-        logger.error(f"No approved candidate (skipped {skipped})")
-        return
-
-    cand, sd, ed, bd, sid, vp = approved
-    thumb = create_thumbnail(cand, sd)
-    vid = uploader_god_main(vp, thumb, sd, cand, bd)
-
-    if vid:
-        mark_uploaded(sid, vid)
-        logger.info(f"UPLOADED: https://youtu.be/{vid}")
-
-    logger.info("=" * 60)
-    logger.info("BOT COMPLETE")
-    logger.info("=" * 60)
+    log.info(
+        "Run complete in %.1fs. word=%s long_video_id=%s short_ids=%s",
+        time.monotonic() - _pipeline_start_time, word, long_video_id, short_ids,
+    )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        run_weekly_pipeline()
+    except Exception as e:
+        log.exception("Weekly pipeline run failed: %s", e)
+        sys.exit(1)

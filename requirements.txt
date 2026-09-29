@@ -1,41 +1,19 @@
-# Core
-python-dotenv>=1.0.0
-requests>=2.31.0
-
-# News & RSS
-feedparser>=6.0.10
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-
-# Google Trends
-pytrends==4.9.2
-urllib3<2.0.0
-
-# AI
-google-genai
-
-# YouTube transcript
-youtube-transcript-api>=1.0.0
-
-# TTS
-piper-tts>=1.2.0
-
-# Video
-moviepy==1.0.3
-Pillow==10.3.0
-numpy>=1.24.0,<2.0.0
-imageio>=2.31.0
-imageio-ffmpeg>=0.4.9
-decorator>=4.0.2,<6.0
-
-# YouTube
+google-genai>=0.3.0
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0
 google-auth-httplib2>=0.1.1
+google-auth>=2.23.0
+edge-tts>=6.1.0
+piper-tts>=1.2.0
+faster-whisper>=0.9.0
+sentence-transformers>=2.2.0
+Pillow>=10.0.0
+moviepy>=1.0.3
+requests>=2.31.0
+python-dotenv>=1.0.0
+numpy<2.0
 
-# Utils
-colorama>=0.4.6
-tqdm>=4.66.0
-
-# Optional
-pandas>=2.0.0,<3.0.0
+# CPU-only torch (needed by faster-whisper / sentence-transformers) — keeps
+# the GitHub Actions runner from pulling multi-GB CUDA wheels it can't use.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch

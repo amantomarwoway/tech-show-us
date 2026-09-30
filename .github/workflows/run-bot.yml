@@ -52,6 +52,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
           # REVIEW_MODE=1 (default, set below) uploads everything PRIVATE for
           # human review instead of publishing/scheduling automatically. Flip
           # it to "0" in Settings -> Secrets and variables -> Actions ->

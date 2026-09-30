@@ -127,7 +127,9 @@ hardcode pixel coordinates for one canvas size.
      your own client ID/secret, then store it as a secret — it will keep
      refreshing indefinitely as long as the OAuth consent screen is in
      **Production** mode (Testing mode tokens expire after 7 days).
-   - Optional free-tier keys: `HF_TOKEN`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`
+   - Optional free-tier keys: `HF_TOKEN`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
+     `POLLINATIONS_API_KEY` (free at [enter.pollinations.ai](https://enter.pollinations.ai) —
+     see "Run #113 fixes" below for why this was added)
 2. **Repo variable** (Settings → Secrets and variables → Actions →
    *Variables* tab): `REVIEW_MODE` — leave unset or `"1"` for your first
    several runs (see above).
@@ -143,6 +145,71 @@ hardcode pixel coordinates for one canvas size.
    with `REVIEW_MODE` unset/`1`, watch the log/artifact output, and check
    the uploaded (private) video in YouTube Studio before ever setting
    `REVIEW_MODE=0`.
+
+## Run #113 fixes: OAuth invalid_scope, Pollinations migration, dead HF endpoint
+
+A second real run got past the Gemini resilience fixes above (both models
+succeeded on retry — confirms those fixes work) but then hit three more
+issues, all fixed now:
+
+1. **CRITICAL — uploads were failing with `invalid_scope: Bad Request`.**
+   `_get_credentials()` in `src/youtube_uploader.py` was passing an explicit
+   `scopes=` list to the refresh-token `Credentials` object. google-auth
+   sends that in the token-refresh request, and if it doesn't *exactly*
+   match what your refresh token was actually granted during the one-time
+   OAuth Playground consent (easy to get out of sync — e.g. only checking
+   2 of the 3 scope boxes), Google's token endpoint rejects the refresh
+   entirely — which fails **every** API call, not just ones needing the
+   missing scope. Fixed: `scopes` is no longer passed on refresh (it's not
+   needed there — omitting it lets the refresh succeed with whatever was
+   actually granted). The `SCOPES` list still documents what to select
+   during the initial OAuth Playground consent step.
+   **If you still see `invalid_scope` after updating**: your refresh token
+   itself may have been issued without one of the 3 scopes. Regenerate it
+   via OAuth Playground, double-checking all three boxes
+   (`youtube.upload`, `youtube`, `yt-analytics.readonly`) are selected
+   before exchanging for a refresh token.
+2. **Pollinations migrated their API — the old endpoint now 402s.** The
+   real run's logs showed `402 Payment Required` from
+   `image.pollinations.ai/prompt/...` on every single scene. That host is
+   being deprecated in favor of a unified API at `gen.pollinations.ai`.
+   Fixed: `POLLINATIONS_BASE` now points at
+   `https://gen.pollinations.ai/image/`. Pollinations' own documentation is
+   inconsistent about whether unauthenticated basic access still works on
+   the new host — if scene generation keeps failing here, get a free key at
+   [enter.pollinations.ai](https://enter.pollinations.ai) and set it as the
+   `POLLINATIONS_API_KEY` secret (optional — code works without it, just
+   less reliably per Pollinations' own docs).
+3. **The HuggingFace image fallback was calling a dead endpoint.**
+   `api-inference.huggingface.co` now returns HTTP 410 with HuggingFace's
+   own message: *"no longer supported, use
+   https://router.huggingface.co/hf-inference instead."* Same request
+   shape, just the wrong host. Fixed: `HF_INFERENCE_BASE` now points at
+   `https://router.huggingface.co/hf-inference/models/`.
+4. **Pexels returned 403 in that run.** This means a `PEXELS_API_KEY` was
+   set (the code skips Pexels entirely with no key) but was rejected — most
+   likely invalid, revoked, or mistyped. Check the key in your Pexels
+   dashboard; this isn't something the code can fix for you.
+5. **Added success logging for every fallback source.** Previously only
+   failures were logged, so a run where e.g. Pixabay quietly saved the day
+   for every scene looked, from the logs alone, like "everything failed but
+   somehow it worked anyway" — confusing to debug. Each of
+   `generate_scene_image()`/`generate_thumbnail()` now logs which source
+   actually succeeded (`"Scene 3 image: Pixabay succeeded"`, etc.).
+
+6. **Bonus find while fixing the above**: `ctr-optimizer.yml` wasn't
+   passing `HF_TOKEN`/`PEXELS_API_KEY`/`PIXABAY_API_KEY` to the daily CTR
+   job at all — so a Pollinations failure during thumbnail regeneration had
+   only HuggingFace available as a fallback (and only if `HF_TOKEN` was set
+   some other way), instead of all four sources. Fixed: that workflow now
+   passes the same image-source secrets `run-bot.yml` does.
+
+**None of items 2-4 were things our retry logic could paper over** — a
+dead or moved endpoint fails identically no matter how many times or how
+patiently you retry it. This is also a useful general lesson for this
+repo: when a free external API stops working, check whether it moved
+(search "`<service> API migration`" / "`<service> deprecated endpoint`")
+before assuming it's just down.
 
 ## Gemini 503 "high demand" resilience (added after a real production failure)
 

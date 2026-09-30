@@ -32,13 +32,23 @@ def _get_credentials():
     client_secret = os.environ["YT_CLIENT_SECRET"]
     refresh_token = os.environ["YT_REFRESH_TOKEN"]
 
+    # TESTED FOOTGUN, already hit in production: do NOT pass `scopes=` here.
+    # google-auth includes it in the token-refresh request body, and if it
+    # doesn't EXACTLY match what the refresh token was actually granted
+    # (e.g. the user's OAuth Playground consent only included 2 of these 3
+    # scopes, or included them in a different combination), Google's token
+    # endpoint rejects the refresh entirely with
+    # `google.auth.exceptions.RefreshError: ('invalid_scope: Bad Request', ...)`
+    # — which fails EVERY API call, not just ones needing the missing scope.
+    # Omitting `scopes` lets the refresh succeed with whatever was actually
+    # granted; SCOPES above stays only as documentation for what to select
+    # during the one-time OAuth Playground consent step (see README).
     return Credentials(
         token=None,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
         client_id=client_id,
         client_secret=client_secret,
-        scopes=SCOPES,
     )
 
 

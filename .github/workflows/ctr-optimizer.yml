@@ -30,6 +30,14 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          # Needed for thumbnail regeneration (build_thumbnail -> the same
+          # Pollinations/HuggingFace/Pexels/Pixabay fallback chain as scene
+          # generation) — without these, a failed Pollinations call here has
+          # only HuggingFace left as a fallback instead of all four sources.
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
         run: python -m src.ctr_optimizer
 
       - name: Commit DB back

@@ -29,6 +29,8 @@ from src.config import (
     REVIEW_MODE,
     SHORT_PUBLISH_DELAY_HOURS,
     TEMP_DIR,
+    WORD_SCRIPT_OUTER_RETRIES,
+    WORD_SCRIPT_RETRY_COOLDOWN_SEC,
 )
 from src.database import init_db, mark_word_used
 from src.etymology_researcher import research_word
@@ -81,6 +83,45 @@ def step(name: str):
     log.info("=== STEP: %s === [elapsed: %.1fs]", name, now - _pipeline_start_time)
 
 
+def _pick_research_and_write_script():
+    """Wraps word-pick + research + script-write with one extra full cycle
+    (fresh word, fresh research, fresh script attempt) after a several-
+    minute cooldown.
+
+    This is layered ON TOP of write_script's own internal retries and
+    llm_client's per-call backoff — it exists specifically for a sustained
+    Gemini outage that outlasts those. Observed in production: a ~4 minute
+    503 "high demand" window took out an entire script-writing attempt
+    (every retry inside that one attempt landed inside the outage window).
+    A second attempt after a real WORD_SCRIPT_RETRY_COOLDOWN_SEC-second
+    cooldown has a meaningfully better chance of landing outside it than
+    immediately retrying again with no gap.
+    """
+    last_err = None
+    for attempt in range(WORD_SCRIPT_OUTER_RETRIES + 1):
+        try:
+            picked = pick_word()
+            word = picked["word"]
+            log.info("Selected word: %s (angle: %s)", word, picked.get("angle"))
+            research = research_word(word)
+            script = write_script(word, research, angle=picked.get("angle", ""))
+            return picked, word, research, script
+        except Exception as e:
+            last_err = e
+            if attempt < WORD_SCRIPT_OUTER_RETRIES:
+                log.warning(
+                    "Word/research/script cycle failed (attempt %d/%d): %s — "
+                    "waiting %ds before one more full attempt",
+                    attempt + 1, WORD_SCRIPT_OUTER_RETRIES + 1, e,
+                    WORD_SCRIPT_RETRY_COOLDOWN_SEC,
+                )
+                time.sleep(WORD_SCRIPT_RETRY_COOLDOWN_SEC)
+    raise RuntimeError(
+        f"Word/research/script cycle failed after "
+        f"{WORD_SCRIPT_OUTER_RETRIES + 1} full attempts: {last_err}"
+    )
+
+
 def _build_scene_audio_and_alignment(scenes: list[dict], word: str) -> list[dict]:
     """For each scene: synthesize its own voiceover, measure its real
     duration, and align its words locally (timestamps starting at 0.0).
@@ -119,16 +160,8 @@ def _build_global_caption_timeline(scenes: list[dict]) -> list[dict]:
 def run_weekly_pipeline() -> None:
     init_db()
 
-    step("Pick word")
-    picked = pick_word()
-    word = picked["word"]
-    log.info("Selected word: %s (angle: %s)", word, picked.get("angle"))
-
-    step("Research etymology")
-    research = research_word(word)
-
-    step("Write script")
-    script = write_script(word, research, angle=picked.get("angle", ""))
+    step("Pick word, research, write script")
+    picked, word, research, script = _pick_research_and_write_script()
     check_loop_closure(script)  # logs a warning only, does not block
 
     scenes = script["scenes"]

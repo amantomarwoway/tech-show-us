@@ -129,6 +129,17 @@ RESERVE_WORDS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Outage resilience for the word-pick/research/script-write cycle
+# ---------------------------------------------------------------------------
+# One extra full cycle (fresh word, fresh research, fresh script attempt)
+# after a real cooldown, specifically for a sustained multi-minute Gemini
+# outage that outlasts write_script's own internal retries — observed in
+# production: a ~4 minute 503 "high demand" window took out an entire
+# script-writing attempt. See main.py's _pick_research_and_write_script().
+WORD_SCRIPT_OUTER_RETRIES = 1
+WORD_SCRIPT_RETRY_COOLDOWN_SEC = 180
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 MAX_RECENT_WORDS_FOR_PROMPT = 200

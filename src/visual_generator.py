@@ -14,8 +14,10 @@ import requests
 
 from src.config import (
     HF_IMAGE_MODEL,
+    HF_INFERENCE_BASE,
     PEXELS_SEARCH_URL,
     PIXABAY_IMAGE_URL,
+    POLLINATIONS_API_KEY_ENV,
     POLLINATIONS_BASE,
     POLLINATIONS_SLEEP_SEC,
     REQUEST_TIMEOUT_SEC,
@@ -37,10 +39,20 @@ def _download(url: str, dest: Path, headers: dict | None = None) -> bool:
 
 
 def _pollinations(prompt: str, dest: Path, width: int, height: int) -> bool:
+    """Uses the current gen.pollinations.ai/image/{prompt} endpoint (the
+    legacy image.pollinations.ai/prompt/... host is being deprecated and
+    was observed returning 402 Payment Required in production — see the
+    TESTED FOOTGUN note on POLLINATIONS_BASE in config.py). Sends an API
+    key if POLLINATIONS_API_KEY is set; Pollinations' own docs are
+    inconsistent about whether unauthenticated basic access still works,
+    so a key is the reliable path if this keeps failing."""
     encoded = urllib.parse.quote(prompt)
     url = f"{POLLINATIONS_BASE}{encoded}?width={width}&height={height}&nologo=true"
+    api_key = os.environ.get(POLLINATIONS_API_KEY_ENV)
+    if api_key:
+        url += f"&key={api_key}"
     ok = _download(url, dest)
-    time.sleep(POLLINATIONS_SLEEP_SEC)  # respect ~5 req/s rate limit
+    time.sleep(POLLINATIONS_SLEEP_SEC)  # respect Pollinations' rate limit
     return ok
 
 
@@ -50,7 +62,7 @@ def _huggingface(prompt: str, dest: Path, width: int, height: int) -> bool:
         return False
     try:
         resp = requests.post(
-            f"https://api-inference.huggingface.co/models/{HF_IMAGE_MODEL}",
+            f"{HF_INFERENCE_BASE}{HF_IMAGE_MODEL}",
             headers={"Authorization": f"Bearer {hf_token}"},
             json={
                 "inputs": prompt,
@@ -141,15 +153,19 @@ def generate_scene_image(
     """Try Pollinations, then HuggingFace, then Pexels, then Pixabay. Raises if all fail."""
     dest = SCENES_DIR / f"scene{scene_number}.jpg"
     if _pollinations(visual_prompt, dest, width, height):
+        log.info("Scene %s image: Pollinations succeeded", scene_number)
         return dest
     log.warning("Pollinations failed for scene %s, trying HuggingFace", scene_number)
     if _huggingface(visual_prompt, dest, width, height):
+        log.info("Scene %s image: HuggingFace succeeded", scene_number)
         return dest
     log.warning("HuggingFace failed for scene %s, trying Pexels", scene_number)
     if _pexels(visual_prompt, dest):
+        log.info("Scene %s image: Pexels succeeded", scene_number)
         return dest
     log.warning("Pexels failed for scene %s, trying Pixabay", scene_number)
     if _pixabay(visual_prompt, dest):
+        log.info("Scene %s image: Pixabay succeeded", scene_number)
         return dest
     raise RuntimeError(f"All visual sources failed for scene {scene_number}")
 
@@ -177,11 +193,18 @@ def generate_thumbnail(word: str, width: int = 1280, height: int = 720) -> Path:
     )
     dest = SCENES_DIR / f"thumbnail_{word}.jpg"
     if _pollinations(prompt, dest, width, height):
+        log.info("Thumbnail: Pollinations succeeded")
         return dest
+    log.warning("Pollinations failed for thumbnail, trying HuggingFace")
     if _huggingface(prompt, dest, width, height):
+        log.info("Thumbnail: HuggingFace succeeded")
         return dest
+    log.warning("HuggingFace failed for thumbnail, trying Pexels")
     if _pexels(prompt, dest):
+        log.info("Thumbnail: Pexels succeeded")
         return dest
+    log.warning("Pexels failed for thumbnail, trying Pixabay")
     if _pixabay(prompt, dest):
+        log.info("Thumbnail: Pixabay succeeded")
         return dest
     raise RuntimeError(f"All visual sources failed for thumbnail of '{word}'")

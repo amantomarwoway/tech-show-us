@@ -78,8 +78,24 @@ WHISPER_COMPUTE_TYPE = "int8"
 # ---------------------------------------------------------------------------
 # Visual generation
 # ---------------------------------------------------------------------------
-POLLINATIONS_BASE = "https://image.pollinations.ai/prompt/"
+# TESTED FOOTGUN, already hit in production: Pollinations migrated off the
+# legacy image.pollinations.ai/prompt/... host to a unified API at
+# gen.pollinations.ai. The legacy host started returning 402 Payment
+# Required in production (confirmed via a real run's logs) — it is being
+# deprecated, not just "sometimes rate limited". POLLINATIONS_API_KEY is
+# optional (some basic access reportedly still works unauthenticated per
+# Pollinations' own docs, but this is inconsistent across their own
+# documentation, so don't rely on it) — get one free at
+# https://enter.pollinations.ai if scene generation keeps failing here.
+POLLINATIONS_BASE = "https://gen.pollinations.ai/image/"
 POLLINATIONS_SLEEP_SEC = 1.0
+POLLINATIONS_API_KEY_ENV = "POLLINATIONS_API_KEY"  # optional
+
+# TESTED FOOTGUN, already hit in production: api-inference.huggingface.co
+# is dead — HuggingFace's own API now returns HTTP 410 with the message
+# "no longer supported, use https://router.huggingface.co/hf-inference
+# instead." Same request/response shape, only the host changed.
+HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models/"
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell")
 PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
 PIXABAY_IMAGE_URL = "https://pixabay.com/api/"

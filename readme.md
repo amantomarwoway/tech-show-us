@@ -144,6 +144,49 @@ hardcode pixel coordinates for one canvas size.
    the uploaded (private) video in YouTube Studio before ever setting
    `REVIEW_MODE=0`.
 
+## Gemini 503 "high demand" resilience (added after a real production failure)
+
+A real run failed with `main.py` crashing entirely because both
+`gemini-3.7-flash` and `gemini-3.6-flash` returned `503 UNAVAILABLE` for
+about 4 straight minutes. Two real bugs and one design gap came out of
+debugging that log, all fixed now:
+
+1. **`generate_json`'s own retry loop never actually ran.** It only caught
+   `json.JSONDecodeError`, so when `generate_text` raised (an API outage,
+   not a parsing problem), that exception skipped straight past the loop
+   instead of being retried. All the apparent "retrying" in the failed run
+   was actually `write_script`'s outer loop burning through both models
+   with almost no wait between attempts. Fixed: `generate_json` now retries
+   on any failure, not just malformed JSON.
+2. **Backoff was too short for a real outage** (1s/2s/4s). Gemini's own
+   error message says these spikes are "usually temporary" — that only
+   helps if the retry loop waits long enough for temporary to pass.
+   `generate_text`'s backoff is now 5s/10s/20s (capped at 30s) per attempt.
+3. **New outer safety net in `main.py`**: `_pick_research_and_write_script()`
+   wraps word-pick + research + script-write with one additional full cycle
+   (fresh word, fresh research, fresh script attempt) after a
+   `WORD_SCRIPT_RETRY_COOLDOWN_SEC` (3 minute, configurable in
+   `src/config.py`) cooldown — specifically for an outage that outlasts
+   even the deeper per-call retries above. This is layered on top of, not
+   instead of, the fixes above.
+4. **Unrelated but found in the same log**: Wiktionary and Wikipedia were
+   both returning `403 Forbidden` on every single run. Wikimedia's API
+   gateway rejects the default `python-requests` User-Agent per their
+   [User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy) —
+   `src/etymology_researcher.py` now sends a descriptive one. This failed
+   "gracefully" (empty string, script writing still worked from Gemini's
+   own knowledge) so it never crashed anything, but every episode was
+   silently missing real etymology/Wikipedia grounding until this fix.
+
+None of this makes a sustained multi-hour Gemini outage survivable — at
+some point the run genuinely should fail rather than hang for the entire
+job timeout. If a run fails with "Word/research/script cycle failed after
+2 full attempts", both a first attempt AND a retry 3 minutes later hit the
+same wall; that's a real, extended outage (or a bad `GEMINI_API_KEY`, or a
+non-retryable error being misclassified — check `_RETRYABLE_STATUS_HINTS`
+in `src/llm_client.py` if this ever fires for something other than an
+actual outage). Re-running the workflow later, once, is the correct move.
+
 ## Known limitations / things to verify before relying on this in production
 
 - **Timing budget is tight, not guaranteed.** A long-video build involves

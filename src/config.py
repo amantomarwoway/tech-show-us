@@ -29,8 +29,15 @@ for d in (DATA_DIR, OUTPUT_DIR, LOGS_DIR, TEMP_DIR, SCENES_DIR, MUSIC_DIR, LUTS_
 # ---------------------------------------------------------------------------
 # NOTE: verify these are still live in Google AI Studio before relying on them —
 # model naming/availability changes over time and this list can go stale.
-GEMINI_PRIMARY_MODEL = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.7-flash")
-GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
+#
+# gemini-3.6-flash is PRIMARY (not 3.7). Two consecutive real production runs
+# both hit sustained 503 "high demand" on gemini-3.7-flash specifically (4
+# full retries, every time) while gemini-3.6-flash succeeded immediately on
+# first try as the fallback both times — real evidence 3.6 is currently the
+# more stable/available of the two, not a stylistic preference. Swap this
+# back only if 3.7's availability visibly improves in your own run logs.
+GEMINI_PRIMARY_MODEL = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.6-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.7-flash")
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 SEMANTIC_DEDUP_THRESHOLD = 0.85
 
@@ -99,6 +106,7 @@ HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models/"
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "black-forest-labs/FLUX.1-schnell")
 PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
 PIXABAY_IMAGE_URL = "https://pixabay.com/api/"
+PIXABAY_SLEEP_SEC = 0.6  # free tier: 100 req/60s — see _pixabay() in visual_generator.py
 PIXABAY_MUSIC_URL = "https://pixabay.com/api/music/"
 
 # ---------------------------------------------------------------------------

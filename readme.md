@@ -149,6 +149,39 @@ hardcode pixel coordinates for one canvas size.
    the uploaded (private) video in YouTube Studio before ever setting
    `REVIEW_MODE=0`.
 
+## Run #116 fix: Pollinations auth was correct, but no model was pinned
+
+Even with the `Authorization: Bearer` header fixed (run #115), a fresh run
+still got 401 Unauthorized on every Pollinations call. Research into
+Pollinations' current docs surfaced the real cause: `gen.pollinations.ai`
+now bills most model usage against a paid "Pollen" credit balance, and only
+the `flux` model is consistently described (across multiple independent
+sources, and Pollinations' own official curl example) as unlimited and
+always-free. Our request never specified a model, so it was landing on
+whatever Pollinations defaults an unspecified request to — which can 401
+even with fully correct auth if the account's Pollen balance is zero.
+Fixed: `POLLINATIONS_MODEL` (default `"flux"`) is now pinned explicitly in
+every Pollinations request, via a `POLLINATIONS_MODEL` env var if you ever
+want to override it.
+
+**This is also the actual answer to "I want this free forever":** pinning
+`model=flux` is what keeps every Pollinations call on the genuinely free,
+unlimited tier instead of silently drifting onto a paid one. If scene
+generation starts failing on Pollinations again in the future, check
+whether it's specifically the `flux` model failing (genuinely free-tier
+trouble) versus some other model being requested (a sign this pin got
+lost or overridden) — those are different problems with different fixes.
+
+One honest caveat: Pollinations' own documentation is visibly inconsistent
+across their own pages about exactly which guarantees apply to anonymous
+vs. keyed vs. free-model requests (this isn't me being vague — their docs
+genuinely contradict each other on this point, confirmed by reading
+several of their own pages side by side). If `model=flux` ever stops being
+free, that'll show up as a 401/402 specifically after this fix, and the
+fastest path to confirming it is checking the Pollen balance at your
+enter.pollinations.ai account dashboard directly, since that number is
+ground truth in a way their docs currently aren't.
+
 ## Run #115 fix: Pollinations auth was in the wrong place entirely
 
 A `POLLINATIONS_API_KEY` secret was set, but every call still 401'd. Root

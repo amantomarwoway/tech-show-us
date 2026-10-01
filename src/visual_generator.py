@@ -24,6 +24,7 @@ from src.config import (
     PIXABAY_SLEEP_SEC,
     POLLINATIONS_API_KEY_ENV,
     POLLINATIONS_BASE,
+    POLLINATIONS_MODEL,
     POLLINATIONS_SLEEP_SEC,
     REQUEST_TIMEOUT_SEC,
     SCENES_DIR,
@@ -51,16 +52,22 @@ def _pollinations(prompt: str, dest: Path, width: int, height: int) -> bool:
     observed returning 402 Payment Required in production — see the TESTED
     FOOTGUN note on POLLINATIONS_BASE in config.py).
 
-    TESTED FOOTGUN, already hit in production: a POLLINATIONS_API_KEY was
-    set but every call still 401'd. The key was being sent as a `?key=`
-    query parameter — Pollinations' current auth (confirmed against a real
-    `sk_...`-style secret key, the standard shape for Bearer-token auth)
-    expects it as `Authorization: Bearer <key>` instead. Query-param auth
-    silently does nothing on this API — it doesn't error on the param
-    itself, it just falls through to unauthenticated, which is why this
-    kept 401ing instead of failing loudly at the point of the mistake.
-    Get a free key at enter.pollinations.ai if POLLINATIONS_API_KEY isn't
-    set yet.
+    TESTED FOOTGUN, already hit in production (round 1): a
+    POLLINATIONS_API_KEY was set but every call still 401'd. The key was
+    being sent as a `?key=` query parameter — Pollinations' current auth
+    (confirmed against a real `sk_...`-style secret key, the standard shape
+    for Bearer-token auth) expects it as `Authorization: Bearer <key>`
+    instead. Fixed by sending the header.
+
+    TESTED FOOTGUN, already hit in production (round 2): even with the
+    correct Bearer header, calls STILL 401'd. Root cause: no `model=` was
+    specified in the URL. Multiple independent sources — and Pollinations'
+    own official curl example — agree that only the `flux` model is
+    unlimited-and-always-free; every other/default model draws down a paid
+    Pollen credit balance, and an account with no balance gets rejected
+    even with perfectly valid auth. POLLINATIONS_MODEL now pins this
+    explicitly (default "flux") instead of trusting whatever model
+    Pollinations defaults an unspecified request to.
 
     Timeout is longer than other calls in this file (60s, not
     REQUEST_TIMEOUT_SEC's 30s) because on-demand image generation is
@@ -68,7 +75,10 @@ def _pollinations(prompt: str, dest: Path, width: int, height: int) -> bool:
     cutting off slower generations before this was raised.
     """
     encoded = urllib.parse.quote(prompt)
-    url = f"{POLLINATIONS_BASE}{encoded}?width={width}&height={height}&nologo=true"
+    url = (
+        f"{POLLINATIONS_BASE}{encoded}"
+        f"?width={width}&height={height}&nologo=true&model={POLLINATIONS_MODEL}"
+    )
     headers = {}
     api_key = os.environ.get(POLLINATIONS_API_KEY_ENV)
     if api_key:

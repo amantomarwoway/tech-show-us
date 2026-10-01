@@ -32,9 +32,11 @@ from src.config import (
 log = logging.getLogger(__name__)
 
 
-def _download(url: str, dest: Path, headers: dict | None = None) -> bool:
+def _download(url: str, dest: Path, headers: dict | None = None, timeout: int | None = None) -> bool:
     try:
-        resp = requests.get(url, headers=headers or {}, timeout=REQUEST_TIMEOUT_SEC)
+        resp = requests.get(
+            url, headers=headers or {}, timeout=timeout or REQUEST_TIMEOUT_SEC
+        )
         resp.raise_for_status()
         dest.write_bytes(resp.content)
         return dest.stat().st_size > 1024  # reject near-empty/error responses
@@ -45,18 +47,33 @@ def _download(url: str, dest: Path, headers: dict | None = None) -> bool:
 
 def _pollinations(prompt: str, dest: Path, width: int, height: int) -> bool:
     """Uses the current gen.pollinations.ai/image/{prompt} endpoint (the
-    legacy image.pollinations.ai/prompt/... host is being deprecated and
-    was observed returning 402 Payment Required in production — see the
-    TESTED FOOTGUN note on POLLINATIONS_BASE in config.py). Sends an API
-    key if POLLINATIONS_API_KEY is set; without one, production logs have
-    shown 401 Unauthorized on this host, so a key is effectively required
-    now, not just recommended — get one free at enter.pollinations.ai."""
+    legacy image.pollinations.ai/prompt/... host is deprecated and was
+    observed returning 402 Payment Required in production — see the TESTED
+    FOOTGUN note on POLLINATIONS_BASE in config.py).
+
+    TESTED FOOTGUN, already hit in production: a POLLINATIONS_API_KEY was
+    set but every call still 401'd. The key was being sent as a `?key=`
+    query parameter — Pollinations' current auth (confirmed against a real
+    `sk_...`-style secret key, the standard shape for Bearer-token auth)
+    expects it as `Authorization: Bearer <key>` instead. Query-param auth
+    silently does nothing on this API — it doesn't error on the param
+    itself, it just falls through to unauthenticated, which is why this
+    kept 401ing instead of failing loudly at the point of the mistake.
+    Get a free key at enter.pollinations.ai if POLLINATIONS_API_KEY isn't
+    set yet.
+
+    Timeout is longer than other calls in this file (60s, not
+    REQUEST_TIMEOUT_SEC's 30s) because on-demand image generation is
+    genuinely slower than a typical JSON API call — a 30s timeout was
+    cutting off slower generations before this was raised.
+    """
     encoded = urllib.parse.quote(prompt)
     url = f"{POLLINATIONS_BASE}{encoded}?width={width}&height={height}&nologo=true"
+    headers = {}
     api_key = os.environ.get(POLLINATIONS_API_KEY_ENV)
     if api_key:
-        url += f"&key={api_key}"
-    ok = _download(url, dest)
+        headers["Authorization"] = f"Bearer {api_key}"
+    ok = _download(url, dest, headers=headers, timeout=60)
     time.sleep(POLLINATIONS_SLEEP_SEC)  # respect Pollinations' rate limit
     return ok
 

@@ -97,6 +97,15 @@ WHISPER_COMPUTE_TYPE = "int8"
 POLLINATIONS_BASE = "https://gen.pollinations.ai/image/"
 POLLINATIONS_SLEEP_SEC = 1.0
 POLLINATIONS_API_KEY_ENV = "POLLINATIONS_API_KEY"  # optional
+# "flux" is the model multiple independent sources (and Pollinations' own
+# official curl example in APIDOCS.md) consistently describe as unlimited
+# and always-free — every other model on gen.pollinations.ai draws down a
+# paid "Pollen" credit balance. Not specifying a model risks silently
+# landing on a non-free default, which can 401 even with a fully correct
+# Authorization header if the account has no Pollen balance. If free,
+# unlimited image generation matters for this pipeline (it does), pin this
+# explicitly rather than trust whatever Pollinations defaults to.
+POLLINATIONS_MODEL = os.getenv("POLLINATIONS_MODEL", "flux")
 
 # TESTED FOOTGUN, already hit in production: api-inference.huggingface.co
 # is dead — HuggingFace's own API now returns HTTP 410 with the message

@@ -15,7 +15,8 @@ review in YouTube Studio before it ever reaches an audience. See
   semantic-similarity dedup against everything used before), researches it
   (Wiktionary + Wikipedia), writes a 750-1300 word mystery/suspense/thriller
   script in 6-10 scenes, generates AI visuals per scene (Pollinations, with
-  Pexels/Pixabay/HuggingFace fallback), synthesizes voiceover **per scene**
+  Pexels/Pixabay fallback — see "Run #114 fixes" below for why HuggingFace
+  isn't in that chain), synthesizes voiceover **per scene**
   (Edge TTS, Piper offline fallback), aligns word timestamps (faster-whisper),
   builds a graded 1920x1080 video with parallax Ken Burns motion + kinetic
   typography + animated captions + ducked music + scene-change SFX + a
@@ -127,9 +128,11 @@ hardcode pixel coordinates for one canvas size.
      your own client ID/secret, then store it as a secret — it will keep
      refreshing indefinitely as long as the OAuth consent screen is in
      **Production** mode (Testing mode tokens expire after 7 days).
-   - Optional free-tier keys: `HF_TOKEN`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
+   - Optional free-tier keys: `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
      `POLLINATIONS_API_KEY` (free at [enter.pollinations.ai](https://enter.pollinations.ai) —
-     see "Run #113 fixes" below for why this was added)
+     see "Run #113 fixes" below for why this was added). `HF_TOKEN` is
+     accepted but currently unused by default — see "Run #114 fixes" for why
+     the HuggingFace image fallback is disabled.
 2. **Repo variable** (Settings → Secrets and variables → Actions →
    *Variables* tab): `REVIEW_MODE` — leave unset or `"1"` for your first
    several runs (see above).
@@ -145,6 +148,81 @@ hardcode pixel coordinates for one canvas size.
    with `REVIEW_MODE` unset/`1`, watch the log/artifact output, and check
    the uploaded (private) video in YouTube Studio before ever setting
    `REVIEW_MODE=0`.
+
+## Run #114 fixes: model priority swap, HuggingFace removed, script rewrite
+
+Run #114 **succeeded** (26m57s) — the OAuth fix and Pollinations/HF endpoint
+updates from run #113 all worked. Pixabay ended up carrying the entire run
+(every scene image, 8 of 9 calls succeeded there), which prompted a few
+more changes:
+
+1. **gemini-3.6-flash is now PRIMARY, gemini-3.7-flash is the fallback**
+   (`src/config.py`) — per your request, and backed by real evidence: two
+   consecutive production runs both hit sustained 503 "high demand" on
+   gemini-3.7-flash specifically (every retry, every time), while
+   gemini-3.6-flash succeeded immediately as the fallback both times. If
+   3.7's availability visibly improves in your own logs later, swap it
+   back by setting the `GEMINI_PRIMARY_MODEL`/`GEMINI_FALLBACK_MODEL` repo
+   secrets rather than editing the code.
+2. **The HuggingFace image fallback is now disabled** (not called from the
+   active chain in `src/visual_generator.py`). The corrected
+   `router.huggingface.co` endpoint from the last fix still returned `410
+   Gone` — this time because `black-forest-labs/FLUX.1-schnell` isn't
+   deployable via any of HuggingFace's current Inference Providers at all
+   (confirmed on the model's own HuggingFace page), not because of a wrong
+   URL. Guessing a replacement model risked a third broken fix in a row, so
+   the function is kept as a reference implementation with a clear comment
+   on what to verify before re-enabling it, rather than guessed at again.
+   The chain is now Pollinations → Pexels → Pixabay.
+3. **Pixabay now has an explicit rate-limit pause** (`PIXABAY_SLEEP_SEC` in
+   `src/config.py`, 0.6s/call) — their free tier is 100 requests/60s. A
+   single run's ~9 calls wouldn't hit that alone, but Pixabay has become
+   the pipeline's de facto primary source while Pollinations/Pexels are
+   unreliable, and this costs nothing to add now.
+4. **Pexels 403 is still unresolved — diagnosed, not fixed.** Your
+   `PEXELS_API_KEY` is confirmed set (the code skips Pexels entirely with
+   no key) but every scene call returned `403 Forbidden` — except one
+   thumbnail call ~20 minutes later in the same run, which succeeded with
+   the same key. Pexels' own docs treat 403 ("Forbidden" — an access/key
+   problem) and 429 ("Too Many Requests" — a rate-limit problem) as
+   distinct, and their free-tier limit (200/hour) is far above what this
+   run used, so this doesn't look like ordinary rate limiting either. One
+   intermittent success doesn't fit a simple "bad key" theory cleanly, and
+   I can't test your actual key from here — **please verify it directly**:
+   ```
+   curl -H "Authorization: $PEXELS_API_KEY" "https://api.pexels.com/v1/search?query=cat&per_page=1"
+   ```
+   outside this pipeline, and check its status on your Pexels dashboard.
+   If that curl also 403s, the key itself is the problem; if it succeeds,
+   there's something more specific to this pipeline's request pattern
+   worth investigating further (header casing, a WAF rule on rapid
+   sequential calls — genuinely uncertain without being able to reproduce
+   it here).
+5. **Script-writing prompt substantially rewritten for retention**
+   (`src/script_writer.py`). The previous prompt described the desired
+   tone ("mystery/suspense/thriller") but gave little concrete guidance on
+   *how* to keep viewers watching. The new prompt is built around named,
+   well-documented retention mechanisms rather than vibes:
+   - **open-loop stacking** (a chain of unresolved questions, not one hook
+     that resolves into flat exposition),
+   - explicit guidance that **the first 15 seconds** (no channel-intro
+     throat-clearing, hook as the literal first sentence) and the **30-60s
+     / 40-60% marks** (mandatory re-hooks) are the documented drop-off
+     cliffs to defend,
+   - **specificity-over-abstraction** and **escalating stakes** rules with
+     concrete good/bad examples,
+   - a **banned-patterns list** of the specific phrases/structures that
+     make a script read as generic or AI-flavored ("In this video...",
+     "In conclusion...", repeated rhetorical-question crutches, three
+     sentences in a row with identical openings),
+   - pacing guidance given as **proportions of runtime** rather than fixed
+     minute-marks, since actual scene count/length varies run to run.
+
+   This can't be benchmarked from here without real Gemini calls and real
+   audience data, so treat it as a strong starting point to evaluate
+   against your own actual output — if a particular banned pattern keeps
+   slipping through, or a retention mechanic isn't landing, that's a
+   one-line addition to the prompt, not a rewrite.
 
 ## Run #113 fixes: OAuth invalid_scope, Pollinations migration, dead HF endpoint
 
@@ -302,10 +380,8 @@ actual outage). Re-running the workflow later, once, is the correct move.
   `src/config.py`) should be re-checked against
   [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
   periodically — model availability and naming shift over time.
-- **HuggingFace image fallback** uses the shared free Inference API, which
-  can return a `503` while a model cold-starts; the code treats that as
-  "skip to the next free source" rather than waiting, to avoid stalling
-  scene generation on a slow cold start.
+- **HuggingFace image fallback is disabled by default** (see "Run #114
+  fixes") — the active visual chain is Pollinations → Pexels → Pixabay only.
 
 ## What's been tested end-to-end (not just compiled)
 

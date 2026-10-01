@@ -149,6 +149,21 @@ hardcode pixel coordinates for one canvas size.
    the uploaded (private) video in YouTube Studio before ever setting
    `REVIEW_MODE=0`.
 
+## Run #115 fix: Pollinations auth was in the wrong place entirely
+
+A `POLLINATIONS_API_KEY` secret was set, but every call still 401'd. Root
+cause: `_pollinations()` was sending the key as a `?key=` query parameter.
+Pollinations' current auth (confirmed against a real `sk_...`-style secret
+key — that prefix is the standard shape for Bearer-token auth) expects
+`Authorization: Bearer <key>` as a header instead. Query-param auth doesn't
+error on the parameter itself — it just silently falls through to
+unauthenticated, which is why this failed quietly as a generic 401 instead
+of something more obviously "wrong parameter." Fixed: the key now goes in
+an `Authorization: Bearer` header, not the URL. Also bumped Pollinations'
+own request timeout to 60s (from the shared 30s default) since on-demand
+image generation is genuinely slower than a typical JSON API call and was
+at real risk of being cut off mid-generation.
+
 ## Run #114 fixes: model priority swap, HuggingFace removed, script rewrite
 
 Run #114 **succeeded** (26m57s) — the OAuth fix and Pollinations/HF endpoint

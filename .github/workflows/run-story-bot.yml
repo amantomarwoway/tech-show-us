@@ -1,0 +1,164 @@
+name: HEY DARKY STORY BOT
+
+# One long story (15-20 min) every 2 days + one Short every day.
+#   18:00 UTC  build job   -> builds + publishes a long story ONLY when one is due
+#                             (decided from what was actually uploaded, so a failed
+#                              day is retried automatically); also posts Short #1.
+#   19:30 UTC  queue job   -> publishes the Short that was queued yesterday.
+# Long story -> YouTube + Facebook. Every Short -> YouTube + Facebook + Instagram.
+# Change the times by editing the two cron lines (UTC).
+on:
+  schedule:
+    - cron: '0 18 * * *'
+    - cron: '30 19 * * *'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'What to run'
+        type: choice
+        options: [build, publish-queue]
+        default: build
+      force:
+        description: 'build: ignore the every-2-days rule and build now'
+        type: boolean
+        default: false
+
+# One writer of data/words.db at a time (builds, queue runs and analytics all commit it).
+concurrency:
+  group: hey-darky-db
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Decide command
+        id: cmd
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "command=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+            if [ "${{ inputs.force }}" = "true" ]; then echo "force=--force" >> "$GITHUB_OUTPUT"; else echo "force=" >> "$GITHUB_OUTPUT"; fi
+          elif [ "${{ github.event.schedule }}" = "30 19 * * *" ]; then
+            echo "command=publish-queue" >> "$GITHUB_OUTPUT"; echo "force=" >> "$GITHUB_OUTPUT"
+          else
+            echo "command=build" >> "$GITHUB_OUTPUT"; echo "force=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache ML models
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/piper/
+            ~/.cache/huggingface/
+            ~/.cache/torch/
+          key: ml-models-v1
+
+      # Freesound downloads are cached forever: a keyword fetched once is never fetched again.
+      - name: Restore audio cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: audio_cache
+          key: audio-cache-${{ github.run_id }}
+          restore-keys: audio-cache-
+
+      # Yesterday's queued Short(s) live here between runs.
+      - name: Restore pending Shorts
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: pending
+          key: pending-${{ github.run_id }}
+          restore-keys: pending-
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      # Optional browser-based niche research (Node + Puppeteer). A failure here must
+      # never block the bot: research falls back to the official YouTube API alone.
+      - uses: actions/setup-node@v4
+        continue-on-error: true
+        with:
+          node-version: '20'
+      - name: Install trending-scraper deps (optional)
+        continue-on-error: true
+        run: cd tools/trending-scraper && npm install --no-audit --no-fund
+
+      # Fails in seconds (not after a 90-minute render) if any import/wiring/secret is broken.
+      - name: Pre-flight wiring checks
+        run: |
+          python tools/wiring_audit.py
+          python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Run Hey Darky story bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # "1" (default) = everything private/unpublished + Instagram skipped, for you to review.
+          # Set the repo VARIABLE REVIEW_MODE=0 for fully automatic public publishing.
+          REVIEW_MODE: ${{ vars.REVIEW_MODE || '1' }}
+        run: python main_story.py ${{ steps.cmd.outputs.command }} ${{ steps.cmd.outputs.force }}
+
+      - name: Save audio cache
+        if: always()
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: audio_cache
+          key: audio-cache-${{ github.run_id }}
+
+      - name: Save pending Shorts
+        if: always()
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: pending
+          key: pending-${{ github.run_id }}
+
+      - name: Commit DB back
+        if: always()
+        run: |
+          git config user.name "heydarky-bot"
+          git config user.email "bot@heydarky.local"
+          git add data/words.db || true
+          git diff --staged --quiet || git commit -m "db: story bot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git pull --rebase || true
+          git push || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-output-${{ github.run_id }}
+          path: |
+            output/*.json
+            logs/
+            data/words.db
+          retention-days: 7

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# generated at runtime — never commit
+temp/*
+!temp/.gitkeep
+output/*
+!output/.gitkeep
+logs/*
+!logs/.gitkeep
+data/piper/
+audio_cache/*
+!audio_cache/.gitignore
+pending/*
+!pending/.gitignore
+
+# Node (optional niche-research scraper)
+node_modules/
+
+# NOTE: data/words.db is deliberately NOT ignored — the workflows commit it back
+# (it holds the learning data and the publish queue).

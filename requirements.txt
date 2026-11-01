@@ -1,0 +1,12 @@
+# HEY DARKY story bot — Python dependencies (system packages: ffmpeg, fonts-dejavu-core)
+requests>=2.31
+Pillow>=10.0
+edge-tts>=6.1.9               # voices (Microsoft Edge neural TTS, free)
+# piper-tts (offline fallback voice) is installed by an OPTIONAL workflow step, not here,
+# so a broken Piper install can never stop the bot from starting.
+faster-whisper>=1.0.0         # word-level timestamps for captions / SFX placement
+google-genai>=1.0.0           # Gemini (story writing)
+google-api-python-client>=2.100.0   # YouTube Data + Analytics APIs
+google-auth>=2.23.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0

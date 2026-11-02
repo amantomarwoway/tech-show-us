@@ -133,7 +133,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           # "1" (default) = everything private/unpublished + Instagram skipped, for you to review.
           # Set the repo VARIABLE REVIEW_MODE=0 for fully automatic public publishing.
-          REVIEW_MODE: ${{ vars.REVIEW_MODE || '1' }}
+          REVIEW_MODE: ${{ vars.REVIEW_MODE || '0' }}
         run: python main_story.py ${{ steps.cmd.outputs.command }} ${{ steps.cmd.outputs.force }}
 
       - name: Save audio cache

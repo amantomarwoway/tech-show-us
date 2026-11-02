@@ -1,0 +1,13 @@
+{
+  "name": "trending-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless-browser YouTube search scraper, invoked from the Python pipeline via src/node_bridge.py. Supplementary to src/topic_research.py's official Data-API-based research, not a replacement for it.",
+  "main": "scrape.js",
+  "scripts": {
+    "test": "node lib/extract.test.js"
+  },
+  "dependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}

@@ -1,5 +1,7 @@
 # HEY DARKY story bot — Python dependencies (system packages: ffmpeg, fonts-dejavu-core)
 requests>=2.31
+tzdata                      # time-zone database for the US Eastern slots (zoneinfo)
+PyYAML>=6.0                   # lets the pre-flight audit validate the workflow files
 Pillow>=10.0
 edge-tts>=6.1.9               # voices (Microsoft Edge neural TTS, free)
 # piper-tts (offline fallback voice) is installed by an OPTIONAL workflow step, not here,

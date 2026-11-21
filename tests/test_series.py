@@ -127,9 +127,36 @@ class PlannerTests(_DbCase):
 
     def test_a_lukewarm_story_ends_at_its_planned_length(self):
         sid = db.create_series("S", "horror", "p", 3, 0, {}); db.update_series(sid, parts_done=2)
-        self._add(sid, 2, 0.45, 1500)
+        self._add(sid, 2, 0.30, 1500)                  # 30% retention: neither a hit nor a flop
+        self.assertEqual(sp.craze(sid, now=self.NOW)["label"], "warm")
         p = sp.plan_for_slot(0, now=self.NOW)
         self.assertEqual((p.part_no, p.mode), (3, "finale"))
+
+    def test_the_very_first_story_is_judged_on_retention_alone_not_against_itself(self):
+        # a real flaw: the baseline used to include the story being judged, so views always scored ~0.2 and a
+        # video with 20% retention (people leave after a few minutes) still counted as "warm"
+        sid = db.create_series("S", "horror", "p", 5, 0, {}); db.update_series(sid, parts_done=1)
+        self._add(sid, 1, 0.20, 200)
+        v = sp.craze(sid, now=self.NOW)
+        self.assertEqual((v["label"], v["score"]), ("cold", round(0.20 / 0.55, 3)))
+        self.assertEqual(db.channel_baseline(exclude_series_id=sid)["views_per_day"], None)
+
+    def test_views_are_compared_per_day_of_age_against_the_other_stories(self):
+        other = db.create_series("Other", "horror", "p", 5, 1, {}); db.update_series(other, parts_done=1)
+        self._add(other, 1, 0.5, 2800, age_days=28)                       # 100 views a day
+        sid = db.create_series("S", "horror", "p", 5, 0, {}); db.update_series(sid, parts_done=1)
+        self._add(sid, 1, 0.5, 300, age_days=3)                           # also 100 a day, only 3 days old
+        v = sp.craze(sid, now=self.NOW)
+        self.assertEqual(v["views_per_day"], 100.0)
+        self.assertAlmostEqual(v["score"], 0.6 * (0.5 / 0.55) + 0.4 * 0.5, places=3, msg="same rate as the others -> half marks on views")
+        base = db.channel_baseline(exclude_series_id=sid, now=self.NOW)
+        self.assertEqual((base["n"], base["views_per_day"]), (1, 100.0))
+
+    def test_a_series_row_with_empty_counters_does_not_crash_the_planner(self):
+        sid = db.create_series("S", "horror", "p", 5, 0, {})
+        with db.get_conn() as c: c.execute("UPDATE series SET parts_done = NULL, planned_parts = NULL WHERE id = ?", (sid,))
+        p = sp.plan_for_slot(0, now=self.NOW)
+        self.assertEqual((p.part_no, p.mode), (1, "opening"))
 
     def test_the_part_cap_always_ends_a_story(self):
         verdict = {"label": "hot", "score": 0.9, "part": 11}
@@ -161,6 +188,21 @@ class BibleTests(unittest.TestCase):
         self.assertEqual((after["recap"], after["cliffhanger"], after["open_threads"]), ("R2", "c2", ["t1"]), "old threads are kept when the writer omits them")
         self.assertEqual(after["voice_map"], {"Sarah": "V1", "Dave": "V2"})
         self.assertEqual(appearance_map(after), {"Sarah": "40s, navy coat", "Dave": "teen, red hoodie"})
+
+    def test_a_model_that_bends_the_schema_degrades_instead_of_crashing(self):
+        # found by probing: these used to raise KeyError / AttributeError AFTER the episode was already uploaded,
+        # or turn "Part 1: x" into a list of single characters
+        from src.series_bible import appearance_map, merged_characters, new_bible, updated_bible
+        b = new_bible({"series": None, "series_update": None, "characters": [{"gender": "male"}, {"name": "B", "gender": "male"}]})
+        self.assertEqual([c["name"] for c in b["characters"]], ["B"], "a character without a name is skipped")
+        self.assertEqual(new_bible({"series": {"arc": "Part 1: x"}, "series_update": {"open_threads": "who locked it?"}})["arc"], ["Part 1: x"])
+        self.assertEqual(new_bible({"series_update": {"open_threads": "who locked it?"}})["open_threads"], ["who locked it?"])
+        after = updated_bible({"recap": "old", "voice_map": None, "open_threads": ["t"]}, {"series_update": "oops", "characters": None}, {"A": "V"})
+        self.assertEqual((after["recap"][:3], after["open_threads"], after["voice_map"]), ("old", ["t"], {"A": "V"}))
+        self.assertEqual([c["name"] for c in merged_characters({"characters": [{"gender": "male"}]}, [{"name": "Z"}, "junk", None])], ["Z"])
+        self.assertEqual(appearance_map(None, [{"name": "A", "appearance": "tall"}, {"appearance": "x"}]), {"A": "tall"})
+        long = updated_bible({"recap": "word " * 400}, {"premise": "p", "characters": []}, {})["recap"]
+        self.assertLessEqual(len(long), 900); self.assertTrue(long.startswith("word"), "the cut starts at a whole word")
 
     def test_characters_keep_their_looks_in_image_prompts(self):
         from src.story_pipeline import prompt_for_beat

@@ -1,16 +1,24 @@
 name: HEY DARKY STORY BOT
 
-# One long story (15-20 min) every 2 days + one Short every day.
-#   18:00 UTC  build job   -> builds + publishes a long story ONLY when one is due
-#                             (decided from what was actually uploaded, so a failed
-#                              day is retried automatically); also posts Short #1.
-#   19:30 UTC  queue job   -> publishes the Short that was queued yesterday.
-# Long story -> YouTube + Facebook. Every Short -> YouTube + Facebook + Instagram.
-# Change the times by editing the two cron lines (UTC).
+# A weekly SERIES SHOW: three stories run in parallel, each with a fixed weekly slot in US Eastern time
+# (default Wed / Fri / Sun 8 PM ET — crime & horror viewers watch late at night). Every week each story
+# gets its next part; a hit is extended, a flop wrapped up, and a finished story's slot starts a new one.
+#
+#   06:00 UTC  build job  -> if a weekly slot opens inside the next few days, builds ONE episode (~30-60 min)
+#                            with its 2-3 Shorts and SCHEDULES everything: YouTube + Facebook publish
+#                            by themselves at the slot, no job has to be awake then.
+#   21:05 + 22:05 UTC     -> queue job: posts the Instagram Reels that are due. Instagram has no scheduler,
+#                            and 5 PM ET is 21:00 UTC in summer / 22:00 UTC in winter — both are listed so
+#                            one of the two always lands right after the Short's slot (the other finds
+#                            nothing due and ends in a minute).
+# Long episode -> YouTube + Facebook. Every Short -> YouTube + Facebook + Instagram.
+# To change the days/times of the SHOW edit LONG_SLOTS_DEFAULT in src/config.py (US Eastern time); the
+# crons below only control when the bot wakes up.
 on:
   schedule:
-    - cron: '0 18 * * *'
-    - cron: '30 19 * * *'
+    - cron: '0 6 * * *'
+    - cron: '5 21 * * *'
+    - cron: '5 22 * * *'
   workflow_dispatch:
     inputs:
       command:
@@ -19,7 +27,7 @@ on:
         options: [build, publish-queue]
         default: build
       force:
-        description: 'build: ignore the every-2-days rule and build now'
+        description: 'build: look two weeks ahead instead of the usual few days (use it to build now)'
         type: boolean
         default: false
 
@@ -53,10 +61,10 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "command=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
             if [ "${{ inputs.force }}" = "true" ]; then echo "force=--force" >> "$GITHUB_OUTPUT"; else echo "force=" >> "$GITHUB_OUTPUT"; fi
-          elif [ "${{ github.event.schedule }}" = "30 19 * * *" ]; then
-            echo "command=publish-queue" >> "$GITHUB_OUTPUT"; echo "force=" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "${{ github.event.schedule }}" = "0 6 * * *" ]; then
             echo "command=build" >> "$GITHUB_OUTPUT"; echo "force=" >> "$GITHUB_OUTPUT"
+          else
+            echo "command=publish-queue" >> "$GITHUB_OUTPUT"; echo "force=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Cache ML models
@@ -91,22 +99,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core
 
+      # The queue job only posts files that already exist: it needs no speech/ML libraries, so it
+      # installs just what the imports and the pre-flight tests touch and finishes in about a minute.
+      - name: Install Python deps (light, for the queue job)
+        if: steps.cmd.outputs.command != 'build'
+        run: pip install requests PyYAML tzdata Pillow google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+
       - name: Install Python deps
+        if: steps.cmd.outputs.command == 'build'
         run: pip install -r requirements.txt
 
       # Offline fallback voice. OPTIONAL: if its install ever breaks, the bot still runs
       # (Edge TTS is the real voice; this only matters if Microsoft's service is down).
       - name: Install Piper fallback voice (optional)
+        if: steps.cmd.outputs.command == 'build'
         continue-on-error: true
         run: pip install piper-tts
 
       # Optional browser-based niche research (Node + Puppeteer). A failure here must
       # never block the bot: research falls back to the official YouTube API alone.
       - uses: actions/setup-node@v4
+        if: steps.cmd.outputs.command == 'build'
         continue-on-error: true
         with:
           node-version: '20'
       - name: Install trending-scraper deps (optional)
+        if: steps.cmd.outputs.command == 'build'
         continue-on-error: true
         timeout-minutes: 10
         run: cd tools/trending-scraper && npm install --no-audit --no-fund
@@ -157,7 +175,7 @@ jobs:
         run: |
           git config user.name "heydarky-bot"
           git config user.email "bot@heydarky.local"
-          git add data/words.db || true
+          git add data/words.db data/related_video_checklist.md || true
           git diff --staged --quiet || git commit -m "db: story bot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git pull --rebase || true
           git push || true
@@ -171,4 +189,5 @@ jobs:
             output/*.json
             logs/
             data/words.db
+            data/related_video_checklist.md
           retention-days: 7

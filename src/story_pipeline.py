@@ -35,6 +35,7 @@ from src.config import (
     STORY_VISUAL_STYLE_SUFFIX,
     TEMP_DIR,
 )
+from src.series_bible import appearance_map
 from src.story_writer import write_story
 from src.tts_engine import get_audio_duration_sec, synthesize_voiceover
 from src.video_builder import build_video
@@ -105,15 +106,50 @@ def _synthesize_items(beats: list[dict], voice_map: dict) -> list[dict]:
     return items
 
 
-def attach_images(items: list[dict], width: int, height: int, tag: str = "") -> list[Path]:
-    """One image per item from that beat's own visual_description (Western-
-    styled). A failed image reuses the nearest successful neighbour; only if
-    EVERY image fails does this raise."""
+def prompt_for_beat(beat: dict, appearances: dict[str, str] | None) -> str:
+    """The beat's image prompt with the looks of the characters in it. Pollinations cannot remember a
+    face between images, but it can follow a concrete description: appending each present character's
+    one-sentence appearance (from the series bible) keeps them recognisable across every image of every
+    part. A character counts as present when they speak the beat or their full name / first name appears
+    in the beat's prompt or text (at most two, to keep the prompt focused)."""
+    base = str(beat["visual_description"]).strip().rstrip(".,; ")
+    if not appearances:
+        return base
+    haystack = f"{base} {beat.get('text', '')}".lower()
+    present = []
+    speaker = beat.get("speaker")
+    if beat.get("type") == "dialogue" and speaker in appearances:
+        present.append(speaker)
+    for name in appearances:
+        first = name.split()[-1] if name.lower().startswith(("detective", "sheriff", "dr.", "officer")) else name.split()[0]
+        if name not in present and (name.lower() in haystack or re.search(rf"\b{re.escape(first.lower())}\b", haystack)):
+            present.append(name)
+    for name in present[:2]:
+        base += f", {name}: {appearances[name][:130].rstrip('.,; ')}"
+    return base
+
+
+def build_outro(mode: str, part_no: int, next_label: str) -> str:
+    """The last spoken beat of an episode: tells viewers when the next part arrives (a series only works
+    if people know when to come back) — or, after a finale, asks for the next story."""
+    if mode == "finale":
+        return ("And that is where this story ends. If you want another story like this one, tell us in the "
+                "comments what scares you the most, and subscribe so you never miss what comes next.")
+    when = f" {next_label}" if next_label else " next week"
+    return (f"That was part {part_no}. Part {part_no + 1} arrives{when}. "
+            f"Subscribe and turn on notifications, so you never miss it.")
+
+
+def attach_images(items: list[dict], width: int, height: int, tag: str = "",
+                  appearances: dict[str, str] | None = None) -> list[Path]:
+    """One image per item from that beat's own visual_description (Western-styled, with the looks of the
+    characters in it). A failed image reuses the nearest successful neighbour; only if EVERY image fails
+    does this raise."""
     paths: list[Path | None] = []
     for k, item in enumerate(items, start=1):
         try:
             paths.append(generate_scene_image(
-                styled_prompt(item["beat"]["visual_description"]), f"{tag}{k}", width, height))
+                styled_prompt(prompt_for_beat(item["beat"], appearances)), f"{tag}{k}", width, height))
         except Exception as e:
             log.warning("Image for beat %s failed (%s) — will reuse a neighbouring image", k, e)
             paths.append(None)
@@ -128,11 +164,21 @@ def attach_images(items: list[dict], width: int, height: int, tag: str = "") -> 
     return paths
 
 
-def prepare_story_assets(story: dict) -> dict:
-    """Voices + audio + alignment for every beat (shared by long video and
-    Shorts). Returns {"story", "voice_map", "slug", "items"} where each item
-    also carries its 16:9 image under "image"."""
-    voice_map = assign_voices(story["characters"])
+def prepare_story_assets(story: dict, *, voice_map: dict | None = None, appearances: dict | None = None,
+                         outro: str | None = None) -> dict:
+    """Voices + audio + alignment for every beat (shared by long video and Shorts). `voice_map` is the
+    series' voice map (characters keep their voices across parts); `appearances` the characters' looks;
+    `outro` an extra closing narration beat. Returns {"story", "voice_map", "slug", "items", "appearances"}
+    where each item also carries its 16:9 image under "image"."""
+    voice_map = assign_voices(story["characters"], existing=voice_map)
+    if outro and story["beats"]:
+        last = story["beats"][-1]
+        story["beats"].append({
+            "beat_number": len(story["beats"]) + 1, "type": "narration", "speaker": "narrator", "text": outro,
+            "visual_description": last["visual_description"], "emotion": "calm", "elements": [], "jumpscare": False,
+            "bgm_keyword": last.get("bgm_keyword", "dark ambient drone"), "sfx_keyword": "none", "sfx_kind": "none",
+            "sfx_trigger_word": "", "pause_after_sec": 0, "outro": True,
+        })
     log.info("Synthesizing %d beats...", len(story["beats"]))
     items = _synthesize_items(story["beats"], voice_map)
     if not items:
@@ -140,14 +186,15 @@ def prepare_story_assets(story: dict) -> dict:
     if len(items) < len(story["beats"]):
         log.warning("%d of %d beats were dropped (voice-over failures)", len(story["beats"]) - len(items), len(story["beats"]))
     log.info("Generating %d Western-styled beat images...", len(items))
-    images = attach_images(items, LONG_WIDTH, LONG_HEIGHT, tag="")
+    images = attach_images(items, LONG_WIDTH, LONG_HEIGHT, tag="", appearances=appearances)
     for item, image in zip(items, images):
         item["image"] = image
-    return {"story": story, "voice_map": voice_map, "slug": slugify(story.get("title") or story.get("title_long")), "items": items}
+    return {"story": story, "voice_map": voice_map, "appearances": appearances or {},
+            "slug": slugify(story.get("title") or story.get("title_long")), "items": items}
 
 
 def render_video(items: list[dict], images: list[Path], width: int, height: int, slug: str,
-                 *, is_short: bool, ass_name: str) -> tuple[Path, dict]:
+                 *, is_short: bool, ass_name: str, end_cta: str | None = None) -> tuple[Path, dict]:
     """Shared renderer for the long video and the Shorts: captions -> Ken Burns
     video with the voice-over -> BGM + SFX mix. Returns (final_path, mix_report)."""
     beats = [it["beat"] for it in items]
@@ -159,7 +206,7 @@ def render_video(items: list[dict], images: list[Path], width: int, height: int,
         beats_with_words.append((it["beat"], offset_words(it["words"], cumulative)))
         cumulative += it["duration"]
     ass_path = TEMP_DIR / ass_name
-    build_story_captions(beats_with_words, ass_path, theme="karaoke", is_short=is_short)
+    build_story_captions(beats_with_words, ass_path, theme="karaoke", is_short=is_short, end_cta=end_cta)
 
     video = build_video(
         images, [it["audio"] for it in items], durations, ass_path,
@@ -181,16 +228,22 @@ def render_long_video(assets: dict) -> Path:
     return final
 
 
-def build_story_video(genre: str, premise: str = "", research: dict | None = None,
-                      pillar: str | None = None) -> dict:
-    """Genre -> finished 15-20 minute video file. Returns
-    {"story", "voice_map", "long_video_path", "assets"}; `assets` is what
-    src/story_shorts.py needs to cut the Shorts without re-synthesizing."""
-    log.info("Writing %s story...", genre)
-    story = write_story(genre, premise, pillar=pillar, research=research)
+def build_story_video(genre: str | None = None, premise: str = "", research: dict | None = None,
+                      pillar: str | None = None, *, series: dict | None = None, part_no: int = 1,
+                      mode: str = "opening", planned_parts: int = 0, next_label: str = "") -> dict:
+    """One episode, from writing to a finished 15-20 minute video file. Returns
+    {"story", "voice_map", "long_video_path", "assets"}; `assets` is what src/story_shorts.py needs to cut
+    the Shorts without re-synthesizing. For a continuation pass the series row (its bible supplies the cast,
+    their voices and looks); `next_label` ("Friday night") feeds the closing line."""
+    log.info("Writing %s part %d (%s)...", genre or (series or {}).get("genre"), part_no, mode)
+    story = write_story(genre, premise, pillar=pillar, research=research, series=series,
+                        part_no=part_no, mode=mode, planned_parts=planned_parts)
     log.info("Story: %r | pillar=%s | %d characters | %d beats",
              story.get("title"), story.get("pillar"), len(story["characters"]), len(story["beats"]))
-    assets = prepare_story_assets(story)
+    bible = (series or {}).get("bible", {})
+    assets = prepare_story_assets(
+        story, voice_map=bible.get("voice_map"), appearances=appearance_map(bible, story["characters"]),
+        outro=build_outro(mode, part_no, next_label))
     long_video_path = render_long_video(assets)
     (OUTPUT_DIR / f"{assets['slug']}_story.json").write_text(
         json.dumps(story, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.config import (
@@ -102,8 +103,13 @@ def upload_video(
     category_id: str = STORY_YT_CATEGORY,
     language: str = STORY_LANGUAGE,
     made_for_kids: bool = False,
+    publish_at: datetime | None = None,
 ) -> str:
-    """Uploads and returns the new video id. Raises on failure."""
+    """Uploads and returns the new video id. Raises on failure. With `publish_at` (a future UTC time) the
+    video is uploaded PRIVATE with a publishAt timestamp and YouTube itself makes it public at that moment —
+    no job has to be running then. Without it, `privacy_status` applies immediately."""
+    if publish_at is not None:
+        privacy_status = "private"
     youtube = _get_youtube_client()
     snippet = {
         "title": _clean(title, YT_TITLE_LIMIT),
@@ -114,6 +120,8 @@ def upload_video(
         "defaultAudioLanguage": language,
     }
     status = {"privacyStatus": privacy_status, "selfDeclaredMadeForKids": made_for_kids}
+    if publish_at is not None:
+        status["publishAt"] = publish_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
     def attempt(synthetic: bool) -> dict:
         body = {"snippet": snippet, "status": {**status, **({"containsSyntheticMedia": True} if synthetic else {})}}
@@ -131,7 +139,9 @@ def upload_video(
 
     video_id = response["id"]
     applied = (response.get("status") or {}).get("privacyStatus")
-    if privacy_status == "public" and applied and applied != "public":
+    if publish_at is not None:
+        log.info("Scheduled %s to go public at %s UTC", video_id, publish_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M"))
+    elif privacy_status == "public" and applied and applied != "public":
         log.error(
             "YouTube applied privacyStatus=%r to %s although 'public' was requested. This is the API "
             "audit lock: uploads from an unverified Google Cloud project are forced private until the "
@@ -148,3 +158,42 @@ def upload_thumbnail(video_id: str, thumbnail_path: Path) -> None:
     _get_youtube_client().thumbnails().set(
         videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path), mimetype="image/jpeg")
     ).execute()
+
+
+def ensure_playlist(title: str, description: str, existing_id: str | None = None) -> str:
+    """The series playlist (one per story): binge-watching — one part after another — is the strongest
+    session-time signal a series can create. Returns the existing id, or creates the playlist."""
+    if existing_id:
+        return existing_id
+    resp = _get_youtube_client().playlists().insert(
+        part="snippet,status",
+        body={"snippet": {"title": _clean(title, 150), "description": _clean(description, 4900), "defaultLanguage": STORY_LANGUAGE},
+              "status": {"privacyStatus": "public"}},
+    ).execute()
+    return resp["id"]
+
+
+def add_to_playlist(playlist_id: str, video_id: str) -> None:
+    _get_youtube_client().playlistItems().insert(
+        part="snippet",
+        body={"snippet": {"playlistId": playlist_id, "resourceId": {"kind": "youtube#video", "videoId": video_id}}},
+    ).execute()
+
+
+def append_to_description(video_id: str, text: str) -> bool:
+    """Adds a paragraph to an existing video's description (e.g. "Next part: <link>" on the previous part).
+    Idempotent; returns False (never raises) if it could not be done."""
+    try:
+        yt = _get_youtube_client()
+        items = yt.videos().list(part="snippet", id=video_id).execute().get("items", [])
+        if not items:
+            return False
+        snippet = items[0]["snippet"]
+        if text.strip() in snippet.get("description", ""):
+            return True
+        snippet["description"] = _clean(f"{snippet.get('description', '')}\n\n{text}", 4900)
+        yt.videos().update(part="snippet", body={"id": video_id, "snippet": snippet}).execute()
+        return True
+    except Exception as e:
+        log.warning("Could not update the description of %s: %s", video_id, e)
+        return False

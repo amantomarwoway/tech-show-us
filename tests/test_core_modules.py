@@ -157,45 +157,80 @@ class VisualGeneratorTests(unittest.TestCase):
         import src.visual_generator as vg
         self.vg = vg
         self.tmp = Path(tempfile.mkdtemp())
+        vg._pollinations_off_reason = None; vg._pollinations_notes_shown.clear()
         self.stack = [mock.patch.object(vg, "SCENES_DIR", self.tmp), mock.patch("time.sleep"),
                       mock.patch.dict(os.environ, {"POLLINATIONS_API_KEY": "PK", "PEXELS_API_KEY": "XK", "PIXABAY_API_KEY": "BK"})]
         for p in self.stack: p.start()
 
     def tearDown(self):
         for p in self.stack: p.stop()
+        self.vg._pollinations_off_reason = None; self.vg._pollinations_notes_shown.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _png(self, w=400, h=300):
         from PIL import Image
         buf = io.BytesIO(); Image.effect_noise((w, h), 60).convert("RGB").save(buf, "PNG"); return buf.getvalue()
 
-    def test_pollinations_anonymous_first_then_api_key_and_exact_size(self):
+    def test_pollinations_needs_its_key_and_returns_an_exact_size_image(self):
         seen = []
         def get(url, params=None, headers=None, timeout=None):
-            seen.append((url, dict(headers or {}), params))
-            return _Resp(401) if not headers else _Resp(200, content=self._png())
+            if "account/balance" in url: return _Resp(200, {"balance": 1.5})
+            seen.append((url, dict(headers or {}), params)); return _Resp(200, content=self._png())
         with mock.patch("requests.get", side_effect=get):
             path = self.vg.generate_scene_image("a lonely diner at night", 5, 640, 360)
-        self.assertEqual([bool(h) for _, h, _ in seen], [False, True], "anonymous first, then the Bearer key")
-        self.assertEqual(seen[1][1]["Authorization"], "Bearer PK")
-        self.assertEqual(seen[0][2]["model"], "flux")
+        self.assertEqual(seen[0][1]["Authorization"], "Bearer PK")
+        self.assertEqual(seen[0][2]["model"], "black-forest-labs/flux.1-schnell")
         from PIL import Image
         with Image.open(path) as im:
             self.assertEqual(im.size, (640, 360))
         self.assertEqual(path.name, "scene5.jpg")
 
+    def test_the_default_image_model_is_flux_schnell_with_its_short_alias_as_backup(self):
+        import src.config as cfg
+        self.assertEqual(cfg.POLLINATIONS_MODELS, ("black-forest-labs/flux.1-schnell", "flux"))
+
+    def test_without_a_key_pollinations_is_skipped_without_any_request(self):
+        with mock.patch.dict(os.environ, {"POLLINATIONS_API_KEY": ""}), mock.patch("requests.get", side_effect=AssertionError("no request without a key")):
+            self.assertIsNone(self.vg._pollinations("x", 320, 180))
+
+    def test_next_model_is_tried_when_the_first_is_refused(self):
+        models = []
+        def get(url, params=None, headers=None, timeout=None):
+            if "account/balance" in url: return _Resp(200, {})
+            models.append(params["model"]); return _Resp(402) if params["model"] == "flux" else _Resp(200, content=self._png())
+        with mock.patch("requests.get", side_effect=get), mock.patch.object(self.vg, "POLLINATIONS_MODELS", ("flux", "zimage")):
+            self.assertIsNotNone(self.vg._pollinations("x", 320, 180))
+        self.assertEqual(models[:2], ["flux", "zimage"])
+        self.assertIsNone(self.vg._pollinations_off_reason)
+
+    def test_no_pollen_balance_switches_pollinations_off_for_the_rest_of_the_run(self):
+        # a real run sent 70 doomed requests (401 then 402 per scene); now it stops after the first scene
+        image_calls = {"pollinations": 0}
+        def get(url, params=None, headers=None, timeout=None):
+            if "account/balance" in url: return _Resp(200, {"balance": 0})
+            if "pollinations" in url: image_calls["pollinations"] += 1; return _Resp(402)
+            if "pexels.com/v1/search" in url: return _Resp(200, {"photos": [{"src": {"large2x": "https://cdn/p.jpg"}}]})
+            return _Resp(200, content=self._png())
+        with mock.patch("requests.get", side_effect=get):
+            self.vg.generate_scene_image("old farmhouse porch light", 1, 320, 180)
+            first_scene_calls = image_calls["pollinations"]
+            self.vg.generate_scene_image("another scene", 2, 320, 180)
+        self.assertEqual(first_scene_calls, len(self.vg.POLLINATIONS_MODELS), "each model tried once on the first scene")
+        self.assertEqual(image_calls["pollinations"], first_scene_calls, "zero further Pollinations requests after the breaker tripped")
+        self.assertIn("402", self.vg._pollinations_off_reason)
+
     def test_chain_falls_through_pollinations_pexels_pixabay_in_order(self):
         order = []
         def get(url, params=None, headers=None, timeout=None):
-            if "pollinations" in url: order.append("pollinations"); return _Resp(402)
+            if "account/balance" in url: return _Resp(200, {})
+            if "pollinations" in url: order.append("pollinations"); return _Resp(500)
             if "pexels.com/v1/search" in url: order.append("pexels"); return _Resp(403)
             if "pixabay.com/api" in url:
                 order.append("pixabay"); return _Resp(200, {"hits": [{"largeImageURL": "https://cdn/p.jpg"}]})
             order.append("download"); return _Resp(200, content=self._png())
         with mock.patch("requests.get", side_effect=get):
             self.vg.generate_scene_image("old farmhouse porch light", 1, 320, 180)
-        uniq = [x for i, x in enumerate(order) if x != "pollinations" or i == 0]
-        self.assertEqual(uniq[0], "pollinations")
+        self.assertEqual(order[0], "pollinations")
         self.assertLess(order.index("pexels"), order.index("pixabay"))
         self.assertEqual(order[-1], "download")
 

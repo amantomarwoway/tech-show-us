@@ -145,6 +145,27 @@ def _best_result(results: list[dict]) -> dict | None:
     return sorted(usable, key=lambda r: r.get("avg_rating") or 0, reverse=True)[0]
 
 
+def _query_variants(kind: str, keyword: str) -> list[str]:
+    """The model's mood/effect phrases are often too specific for Freesound
+    ("pulse investigative tone" matched nothing in a real run). Try the phrase as
+    given, then progressively simpler searches — at most 3 requests per keyword."""
+    words = re.findall(r"[a-z0-9]+", keyword.lower())
+    variants = [keyword]
+    if len(words) > 2:
+        variants.append(" ".join(words[-2:]))
+    if kind == "bgm":
+        if len(variants) < 2 and words:
+            variants.append(f"{words[-1]} ambient")
+        variants.append("dark ambient")          # generic, but real CC0 beds exist for it
+    elif len(words) > 1:
+        variants.append(words[-1])
+    seen, out = set(), []
+    for v in variants:
+        if v not in seen:
+            seen.add(v); out.append(v)
+    return out[:3]
+
+
 def _fetch_from_freesound(kind: str, keyword: str, duration_filter: str) -> Path | None:
     global _warned_no_key
     headers = _auth_headers()
@@ -159,26 +180,31 @@ def _fetch_from_freesound(kind: str, keyword: str, duration_filter: str) -> Path
     if (kind, _slug(keyword)) in _misses:
         return None
 
-    resp = _request(
-        FREESOUND_SEARCH_URL,
-        params={
-            "query": keyword,
-            "filter": f"{duration_filter} {FREESOUND_LICENSE_FILTER}",
-            "fields": "id,name,duration,previews,avg_rating,num_ratings,license",
-            "sort": "score",
-            "page_size": 15,
-        },
-        headers=headers,
-    )
-    if resp is None:
-        return None
-    try:
-        results = resp.json().get("results", [])
-    except ValueError:
-        log.warning("Freesound returned non-JSON for %r", keyword)
-        return None
-
-    best = _best_result(results)
+    best = None
+    for query in _query_variants(kind, keyword):
+        resp = _request(
+            FREESOUND_SEARCH_URL,
+            params={
+                "query": query,
+                "filter": f"{duration_filter} {FREESOUND_LICENSE_FILTER}",
+                "fields": "id,name,duration,previews,avg_rating,num_ratings,license",
+                "sort": "score",
+                "page_size": 15,
+            },
+            headers=headers,
+        )
+        if resp is None:
+            return None            # network/429 trouble: don't hammer the API with more variants
+        try:
+            results = resp.json().get("results", [])
+        except ValueError:
+            log.warning("Freesound returned non-JSON for %r", query)
+            return None
+        best = _best_result(results)
+        if best is not None:
+            if query != keyword:
+                log.info("Freesound: %r found nothing; the simpler query %r did", keyword, query)
+            break
     if best is None:
         log.info("Freesound: no usable %s result for %r", kind, keyword)
         _misses.add((kind, _slug(keyword)))

@@ -13,6 +13,7 @@ import logging
 import sys
 
 from src.youtube_analytics import fetch_ctr, fetch_video_stats
+from src import schedule
 from src.database import get_story_videos_for_stats, init_db, update_story_performance
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ def run_story_analytics_sync() -> int:
         updated += 1
         log.info("Updated %s [%s/%s]: retention=%.2f ctr=%s views=%s", vid, row["kind"],
                  row["pillar"], stats["averageViewPercentage"], ctr, stats["views"])
+    for row in schedule.slot_report():
+        log.info("Slot report — slot %d %s: %d episodes with data, avg views %.0f, avg retention %.2f",
+                 row["slot_index"], row["when"], row["n"], row["avg_views"], row["avg_retention"])
     return updated
 
 

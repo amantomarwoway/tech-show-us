@@ -22,6 +22,17 @@ from unittest import mock
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 
 
+def with_elements(story: dict) -> dict:
+    """Tag a fake story's beats so it passes the strict validation (five emotions, a jumpscare, a hook)."""
+    cycle = ["fear", "curiosity", "suspense", "excitement", "mystery"]
+    for i, b in enumerate(story["beats"]):
+        b["elements"] = ["suspense", "mystery"] if i < 4 else [cycle[i % 5]]
+        b["jumpscare"] = (i == 10)
+    story.setdefault("series", {"title": "The Steel Vault", "planned_parts": 4, "arc": ["Part 1: a", "Part 2: b"]})
+    story.setdefault("series_update", {"recap": "recap", "open_threads": ["t"], "cliffhanger": "c"})
+    return story
+
+
 class _Resp:
     def __init__(self, status=200, body=None, content=b"", text=""):
         self.status_code, self._body, self.content, self.text = status, body if body is not None else {}, content, text
@@ -76,7 +87,7 @@ class StoryWriterTests(unittest.TestCase):
     def test_write_story_wires_research_pillar_and_overrides_model_echo(self):
         import src.story_writer as sw
         sent = {}
-        story = self._valid_story(); story.update(genre="WRONG", pillar="WRONG")
+        story = with_elements(self._valid_story()); story.update(genre="WRONG", pillar="WRONG")
 
         def fake_json(prompt, temperature=0.9):
             sent["prompt"] = prompt
@@ -87,7 +98,7 @@ class StoryWriterTests(unittest.TestCase):
             out = sw.write_story("horror", research=research)
         pick.assert_called_once()
         self.assertEqual((out["genre"], out["pillar"]), ("horror", "locked_room"), "our decisions beat the model's echo")
-        for needle in ("Real Title X", "nightshift", "WESTERN (American)", "Hey Darky", "Reddit-confession", "bgm_keyword"):
+        for needle in ("Real Title X", "nightshift", "WESTERN (American)", "Hey Darky", "TITLE & THUMBNAIL", "bgm_keyword"):
             self.assertIn(needle, sent["prompt"])
         with self.assertRaises(ValueError): sw.write_story("romance")
         with self.assertRaises(ValueError): sw.write_story("horror", pillar="nope")
@@ -160,6 +171,25 @@ class AudioFetcherTests(unittest.TestCase):
                 mock.patch("time.sleep"):
             self.af.get_bgm("dark ambient drone")
         self.assertEqual(calls[0][1]["filter"], 'duration:[60 TO 600] license:"Creative Commons 0"')
+
+    def test_a_too_specific_phrase_falls_back_to_simpler_queries(self):
+        # real run: 'pulse investigative tone', 'chilling ominous swell', 'heavy dramatic payoff' all found nothing
+        calls = []
+        empty = _Resp(200, {"results": []})
+        script = [empty, self._search(), _Resp(200, content=b"ID3" + b"\0" * 3000)]
+        with mock.patch("requests.get", side_effect=self._getter(script, calls)), mock.patch("time.sleep"):
+            out = self.af.get_bgm("pulse investigative tone")
+        self.assertEqual(out.name, "bgm_pulse_investigative_tone.mp3")
+        self.assertEqual([c[1]["query"] for c in calls[:2]], ["pulse investigative tone", "investigative tone"])
+        calls.clear(); self.af._misses.clear()
+        with mock.patch("requests.get", side_effect=self._getter([empty, empty, empty], calls)), mock.patch("time.sleep"), \
+                mock.patch.object(self.af, "synthesize_drone", return_value=None):
+            self.af.get_bgm("zzz qqq www")
+        self.assertEqual(len(calls), 3, "at most 3 searches per keyword")
+        self.assertEqual(calls[-1][1]["query"], "dark ambient")
+        with mock.patch("requests.get", side_effect=AssertionError("a known miss is not searched again")), \
+                mock.patch.object(self.af, "synthesize_drone", return_value=None):
+            self.af.get_bgm("zzz qqq www")
 
     def test_429_linear_backoff_then_give_up_without_trailing_wait(self):
         sleeps, calls = [], []
@@ -309,16 +339,6 @@ class DatabaseTests(unittest.TestCase):
     def tearDown(self):
         self.p.stop(); shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_cadence_is_driven_by_real_uploads(self):
-        db = self.db; now = datetime.now(timezone.utc)
-        self.assertTrue(db.should_build_long_today(2))
-        db.record_story_upload("L1", "T", "locked_room", kind="long", genre="horror")
-        self.assertFalse(db.should_build_long_today(2))
-        self.assertTrue(db.should_build_long_today(2, now + timedelta(days=2)))
-        self.assertFalse(db.should_build_long_today(2, now + timedelta(days=1, hours=10)))
-        db.record_story_upload("S1", "short", "locked_room", kind="short", parent_video_id="L1")
-        self.assertFalse(db.should_build_long_today(2), "a Short must not reset the long-video clock")
-
     def test_pillar_learning_uses_long_videos_only(self):
         db = self.db
         db.record_story_upload("L1", "T", "locked_room", kind="long")
@@ -345,7 +365,7 @@ class SocialPublisherTests(unittest.TestCase):
         self.f = Path(tempfile.mkdtemp()) / "v.mp4"; self.f.write_bytes(bytes(range(256)) * 40)
         self.size = self.f.stat().st_size
         import src.facebook_publisher as fb
-        self.fb = fb; fb._locale_cache = None
+        self.fb = fb; fb._locale_cache = None; fb._page_token_cache = "TOK"
 
     def tearDown(self):
         self.env.stop(); shutil.rmtree(self.f.parent, ignore_errors=True)

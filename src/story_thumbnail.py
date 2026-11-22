@@ -19,7 +19,7 @@ MAX_BYTES = 1_900_000
 _FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
-def _compose(base: Path, text: str, out: Path) -> Path:
+def _compose(base: Path, text: str, out: Path, badge: str | None = None) -> Path:
     from PIL import Image, ImageDraw, ImageFont
 
     img = Image.open(base).convert("RGB")
@@ -44,6 +44,18 @@ def _compose(base: Path, text: str, out: Path) -> Path:
         x = (THUMB_W - (box[2] - box[0])) // 2
         y = THUMB_H - (box[3] - box[1]) - 70
         draw.text((x, y), text, font=font, fill="#FFD700", stroke_width=8, stroke_fill="black")
+    if badge:
+        # a small "PART 2" tag: tells a browsing viewer at a glance that this is an episode of a series
+        from PIL import ImageDraw as _D, ImageFont as _F
+        draw = _D.Draw(img)
+        try:
+            bfont = _F.truetype(_FONT, 58)
+        except OSError:
+            bfont = _F.load_default()
+        box = draw.textbbox((0, 0), badge, font=bfont)
+        w, h = box[2] - box[0], box[3] - box[1]
+        draw.rounded_rectangle((28, 28, 28 + w + 44, 28 + h + 36), radius=14, fill=(8, 8, 12))
+        draw.text((50, 40), badge, font=bfont, fill="#FFD700")
     quality = 92
     while True:
         img.save(out, "JPEG", quality=quality)
@@ -59,7 +71,9 @@ def build_story_thumbnail(story: dict) -> Path | None:
     )
     try:
         base = generate_scene_image(prompt, "story_thumb", THUMB_W, THUMB_H)
-        return _compose(Path(base), str(story.get("thumbnail_text") or "").strip(), SCENES_DIR / "story_thumb_final.jpg")
+        mode, part = story.get("mode"), story.get("part_no")
+        badge = ("FINAL PART" if mode == "finale" else f"PART {part}") if part and (part > 1 or mode == "finale" or story.get("series")) else None
+        return _compose(Path(base), str(story.get("thumbnail_text") or "").strip(), SCENES_DIR / "story_thumb_final.jpg", badge)
     except Exception as e:
         log.error("Story thumbnail failed (%s) — publishing without a custom thumbnail", e)
         return None

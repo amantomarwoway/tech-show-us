@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -47,8 +48,47 @@ def is_configured() -> bool:
     return bool(os.environ.get(FB_PAGE_ID_ENV) and os.environ.get(FB_ACCESS_TOKEN_ENV))
 
 
+_page_token_cache: str | None = None
+_hint_shown = False
+
+
 def _creds() -> tuple[str, str]:
-    return os.environ[FB_PAGE_ID_ENV], os.environ[FB_ACCESS_TOKEN_ENV]
+    """(page_id, token to publish with). Publishing to a Page requires a PAGE access
+    token. If FB_ACCESS_TOKEN is a USER token (the usual mistake — it produces
+    '(#100) No permission to publish the video'), Meta returns the Page's own token
+    for `GET /{page-id}?fields=access_token` when the user administers that Page;
+    that token is used instead. If the exchange gives nothing, the configured token is
+    used unchanged (it may already be a Page token)."""
+    global _page_token_cache
+    page, token = os.environ[FB_PAGE_ID_ENV], os.environ[FB_ACCESS_TOKEN_ENV]
+    if _page_token_cache is None:
+        _page_token_cache = token
+        try:
+            resp = requests.get(f"{GRAPH}/{page}", params={"fields": "access_token", "access_token": token}, timeout=30)
+            body = resp.json() if resp.status_code == 200 else {}
+            if body.get("access_token"):
+                _page_token_cache = body["access_token"]
+                log.info("Facebook: using the Page access token derived from the configured token")
+            else:
+                log.info("Facebook: no Page token could be derived — using the configured token as-is")
+        except (requests.RequestException, ValueError) as e:
+            log.info("Facebook: Page-token lookup failed (%s) — using the configured token as-is", e)
+    return page, _page_token_cache
+
+
+def _permission_hint(err: dict | None) -> None:
+    global _hint_shown
+    msg = str((err or {}).get("message", "")).lower()
+    if _hint_shown or "permission" not in msg:
+        return
+    _hint_shown = True
+    log.error(
+        "FACEBOOK PERMISSION PROBLEM — fix it in Meta, not in the code: FB_ACCESS_TOKEN must be a "
+        "PAGE access token (or a user token of someone who has FULL CONTROL of the Page) with the "
+        "permissions pages_show_list, pages_read_engagement, pages_manage_posts and publish_video, "
+        "and FB_PAGE_ID must be the Page's own id. Check the token at "
+        "https://developers.facebook.com/tools/debug/accesstoken/"
+    )
 
 
 def _call(method: str, url: str, *, retries: int = 3, timeout: int = 180, **kwargs) -> dict | None:
@@ -77,6 +117,7 @@ def _call(method: str, url: str, *, retries: int = 3, timeout: int = 180, **kwar
             time.sleep(wait)
             continue
         log.error("Facebook API error %s for %s: %s", resp.status_code, url.split("?")[0], (err or body))
+        _permission_hint(err)
         return None
     return None
 
@@ -117,6 +158,20 @@ def build_targeting() -> dict:
     return out
 
 
+def _schedule_params(scheduled_time: datetime | None) -> int | None:
+    """Unix time for Facebook's scheduler, or None when the post should go out now. Facebook only accepts
+    a schedule between 10 minutes and 30 days ahead; anything closer than 11 minutes is published at once."""
+    if scheduled_time is None:
+        return None
+    delta = scheduled_time - datetime.now(timezone.utc)
+    if delta < timedelta(minutes=11):
+        return None
+    if delta > timedelta(days=29):
+        log.warning("Facebook cannot schedule more than 30 days ahead — publishing immediately instead")
+        return None
+    return int(scheduled_time.timestamp())
+
+
 def _with_targeting_fallback(url: str, data: dict) -> dict | None:
     """Try with audience targeting; if Graph rejects it, retry without."""
     targeting = build_targeting()
@@ -128,7 +183,8 @@ def _with_targeting_fallback(url: str, data: dict) -> dict | None:
     return _call("POST", url, data=data)
 
 
-def publish_long_video(path: Path, title: str, description: str, *, published: bool = True) -> str | None:
+def publish_long_video(path: Path, title: str, description: str, *, published: bool = True,
+                       scheduled_time: datetime | None = None) -> str | None:
     """Resumable upload: start -> transfer chunks (server dictates the byte
     ranges) -> finish. published=False leaves it as an unpublished draft
     (used by REVIEW_MODE)."""
@@ -166,17 +222,21 @@ def publish_long_video(path: Path, title: str, description: str, *, published: b
         else:
             log.error("Facebook upload exceeded the chunk limit — aborting")
             return None
-    fin = _with_targeting_fallback(url, {
-        "upload_phase": "finish", "upload_session_id": session, "access_token": token,
-        "title": title, "description": description, "published": "true" if published else "false",
-    })
+    ts = _schedule_params(scheduled_time) if published else None
+    finish = {"upload_phase": "finish", "upload_session_id": session, "access_token": token,
+              "title": title, "description": description, "published": "true" if published and ts is None else "false"}
+    if ts is not None:
+        finish["scheduled_publish_time"] = ts
+    fin = _with_targeting_fallback(url, finish)
     if not fin:
         return None
-    log.info("Facebook long video %s (%s)", video_id, "published" if published else "unpublished draft")
+    log.info("Facebook long video %s (%s)", video_id,
+             f"scheduled for {scheduled_time:%Y-%m-%d %H:%M} UTC" if ts else "published" if published else "unpublished draft")
     return str(video_id)
 
 
-def publish_reel(path: Path, description: str, *, published: bool = True) -> str | None:
+def publish_reel(path: Path, description: str, *, published: bool = True,
+                 scheduled_time: datetime | None = None) -> str | None:
     """Page Reel: start -> upload binary to the returned upload_url -> finish."""
     if not is_configured():
         log.info("Facebook not configured (FB_PAGE_ID / FB_ACCESS_TOKEN) — skipping")
@@ -195,11 +255,14 @@ def publish_reel(path: Path, description: str, *, published: bool = True) -> str
                headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)})
     if not up:
         return None
-    fin = _with_targeting_fallback(url, {
-        "upload_phase": "finish", "video_id": video_id, "access_token": token,
-        "video_state": "PUBLISHED" if published else "DRAFT", "description": description,
-    })
+    ts = _schedule_params(scheduled_time) if published else None
+    finish = {"upload_phase": "finish", "video_id": video_id, "access_token": token, "description": description,
+              "video_state": "SCHEDULED" if ts else ("PUBLISHED" if published else "DRAFT")}
+    if ts is not None:
+        finish["scheduled_publish_time"] = ts
+    fin = _with_targeting_fallback(url, finish)
     if not fin:
         return None
-    log.info("Facebook Reel %s (%s)", video_id, "published" if published else "draft")
+    log.info("Facebook Reel %s (%s)", video_id,
+             f"scheduled for {scheduled_time:%Y-%m-%d %H:%M} UTC" if ts else "published" if published else "draft")
     return video_id

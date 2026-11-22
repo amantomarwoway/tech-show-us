@@ -40,7 +40,9 @@ def _ass_header(font_size: int, margin_v: int, play_res_x: int, play_res_y: int)
         "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
         f"Style: Default,DejaVu Sans,{font_size},&H00FFFFFF,&H0000D7FF,&H00000000,&H64000000,"
-        f"-1,0,0,0,100,100,0,0,1,4,1,2,60,60,{margin_v},1\n\n"
+        f"-1,0,0,0,100,100,0,0,1,4,1,2,60,60,{margin_v},1\n"
+        f"Style: Cta,DejaVu Sans,{int(font_size * 0.8)},&H0000D7FF,&H0000D7FF,&H00000000,&H64000000,"
+        f"-1,0,0,0,100,100,0,0,1,4,1,8,60,60,{int(margin_v * 0.8)},1\n\n"
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
 
@@ -77,9 +79,12 @@ def build_story_captions(
     *,
     theme: str = "karaoke",
     is_short: bool = False,
+    end_cta: str | None = None,
+    end_cta_seconds: float = 3.5,
 ) -> Path:
     """`beats_with_words`: [(beat, words)] where `words` are that beat's aligned
-    words ALREADY offset into the global timeline (aligner.offset_words)."""
+    words ALREADY offset into the global timeline (aligner.offset_words). `end_cta` adds a banner for the
+    last `end_cta_seconds` seconds (Shorts use it to point at the full episode)."""
     if theme not in _RENDERERS:
         raise ValueError(f"Unknown caption theme {theme!r}; choose from {THEMES}")
     font_size, margin_v = (90, 200) if is_short else (70, 150)
@@ -96,6 +101,13 @@ def build_story_captions(
                 continue
             prefix = f"{_safe(speaker).upper()}: " if (is_dialogue and i == 0) else ""
             lines.append(render(group, prefix))
+    if end_cta:
+        # A banner at the TOP for the last seconds (the spoken captions sit at the bottom): used by
+        # Shorts to point viewers at the full episode ("see related video").
+        end = max((w["end"] for _, words in beats_with_words for w in words), default=0.0)
+        if end > 0:
+            lines.append(f"Dialogue: 1,{_fmt_time(max(end - end_cta_seconds, 0.0))},{_fmt_time(end)},Cta,,0,0,0,,"
+                         rf"{{\fad(150,0)}}{_safe(end_cta)}" + "\n")
     out_path = Path(out_path)
     out_path.write_text("".join(lines), encoding="utf-8")
     return out_path

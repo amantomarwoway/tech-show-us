@@ -152,6 +152,28 @@ def main() -> int:
             if not target.exists():
                 errors.append(f"WORKFLOW {wf.name} runs `{cmd}` but {target.relative_to(ROOT)} does not exist")
 
+    # 5) workflow files are VALID YAML with the structure GitHub requires. (A step name containing ": " once
+    #    made a workflow unloadable.) Skipped with a warning where PyYAML is not installed.
+    try:
+        import yaml
+    except ImportError:
+        yaml = None
+        warnings.append("PyYAML not installed — workflow YAML syntax not checked")
+    if yaml is not None:
+        for wf in sorted(wf_dir.glob("*.yml")) if wf_dir.exists() else []:
+            try:
+                doc = yaml.safe_load(wf.read_text())
+            except yaml.YAMLError as e:
+                errors.append(f"YAML     {wf.name} is not valid YAML: {str(e).splitlines()[0]} ({str(e).splitlines()[-1].strip()})")
+                continue
+            triggers = doc.get("on") if "on" in doc else doc.get(True)       # YAML 1.1 reads `on:` as True
+            if not triggers or "jobs" not in doc or not all("steps" in j or "uses" in j for j in doc["jobs"].values()):
+                errors.append(f"YAML     {wf.name} lacks `on:` triggers, `jobs:` or job steps")
+            for job in doc.get("jobs", {}).values():
+                for step in job.get("steps", []):
+                    if not ({"run", "uses"} & set(step)):
+                        errors.append(f"YAML     {wf.name}: step {step.get('name')!r} has neither `run` nor `uses`")
+
     n_mods = len(list(SRC.glob("*.py"))) - 1
     for w in warnings:
         print("WARN  ", w)

@@ -2,10 +2,10 @@
 One image per beat: Pollinations (AI, free) -> Pexels (stock) -> Pixabay (stock).
 
 PRODUCTION LESSONS built in:
-  * Pollinations moved to gen.pollinations.ai; the model must be pinned
-    (POLLINATIONS_MODEL, default "flux"). Anonymous access is tried FIRST and the
-    API key (Bearer) second — in real runs one of the two worked when the other
-    returned 401.
+  * Pollinations moved to gen.pollinations.ai: an API key is REQUIRED (anonymous
+    requests return 401) and each image spends pollen balance (HTTP 402 when empty).
+    A first real run showed 401/402 on every scene and all images came from stock
+    photos — hence the per-run circuit breaker below.
   * Pexels intermittently 403s; Pixabay is the dependable stock fallback and is
     spaced by PIXABAY_SLEEP_SEC to respect its rate limit.
   * The stock fallbacks search on the FIRST few words of the prompt, which is why
@@ -32,8 +32,9 @@ from src.config import (
     PIXABAY_SEARCH_URL,
     PIXABAY_SLEEP_SEC,
     POLLINATIONS_API_KEY_ENV,
+    POLLINATIONS_BALANCE_URL,
     POLLINATIONS_BASE,
-    POLLINATIONS_MODEL,
+    POLLINATIONS_MODELS,
     POLLINATIONS_SLEEP_SEC,
     POLLINATIONS_TIMEOUT_SEC,
     REQUEST_TIMEOUT_SEC,
@@ -75,31 +76,74 @@ def _decode(content: bytes) -> Image.Image | None:
         return None
 
 
+_pollinations_off_reason: str | None = None   # circuit breaker, per run
+_pollinations_notes_shown: set[str] = set()
+
+
+def _note_once(key: str, level, msg: str, *args) -> None:
+    if key not in _pollinations_notes_shown:
+        _pollinations_notes_shown.add(key)
+        log.log(level, msg, *args)
+
+
+def _log_pollinations_balance(api_key: str) -> None:
+    """One INFO line with the account balance so a 402 is diagnosable from the log."""
+    if "balance" in _pollinations_notes_shown:
+        return
+    _pollinations_notes_shown.add("balance")
+    try:
+        resp = requests.get(POLLINATIONS_BALANCE_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=15)
+        log.info("Pollinations account balance (HTTP %s): %s", resp.status_code, resp.text[:160])
+    except Exception as e:                      # purely informational — never let it break a run
+        log.info("Pollinations balance lookup failed: %s", e)
+
+
 def _pollinations(prompt: str, width: int, height: int) -> Image.Image | None:
-    url = f"{POLLINATIONS_BASE}{quote(prompt[:MAX_PROMPT_CHARS], safe='')}"
-    params = {"width": width, "height": height, "model": POLLINATIONS_MODEL,
-              "nologo": "true", "seed": random.randint(1, 10_000_000)}
+    """AI image from Pollinations. An API key is REQUIRED (anonymous requests get
+    401). Each model in POLLINATIONS_MODELS is tried in order. When every model
+    answers 401/402 the source is switched OFF for the rest of the run — no point
+    sending 70 more doomed requests — and the stock-photo fallbacks take over."""
+    global _pollinations_off_reason
     key = os.environ.get(POLLINATIONS_API_KEY_ENV)
-    attempts = [("anonymous", {})] + ([("api key", {"Authorization": f"Bearer {key}"})] if key else [])
-    for label, headers in attempts:
-        time.sleep(POLLINATIONS_SLEEP_SEC)
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=POLLINATIONS_TIMEOUT_SEC)
-        except requests.RequestException as e:
-            log.warning("Pollinations (%s) request error: %s", label, e)
-            continue
-        if resp.status_code == 200:
-            img = _decode(resp.content)
-            if img is not None:
-                return img
-            log.warning("Pollinations (%s) returned a non-image / tiny response", label)
-        elif resp.status_code == 429:
-            retry_after = str((getattr(resp, "headers", None) or {}).get("Retry-After", "10"))
-            wait = min(int(retry_after) if retry_after.isdigit() else 10, 30)
-            log.warning("Pollinations (%s) rate-limited (429) — pausing %ds before the next attempt", label, wait)
-            time.sleep(wait)
-        else:
-            log.warning("Pollinations (%s) HTTP %s", label, resp.status_code)
+    if not key:
+        _note_once("nokey", logging.WARNING, "%s is not set — Pollinations skipped, using stock photos", POLLINATIONS_API_KEY_ENV)
+        return None
+    if _pollinations_off_reason:
+        return None
+    _log_pollinations_balance(key)
+    url = f"{POLLINATIONS_BASE}{quote(prompt[:MAX_PROMPT_CHARS], safe='')}"
+    headers = {"Authorization": f"Bearer {key}"}
+    statuses = []
+    for model in POLLINATIONS_MODELS:
+        for attempt in (1, 2):                     # a 429 gets exactly one retry of the SAME model
+            time.sleep(POLLINATIONS_SLEEP_SEC)
+            params = {"width": width, "height": height, "model": model, "nologo": "true", "seed": random.randint(1, 10_000_000)}
+            try:
+                resp = requests.get(url, params=params, headers=headers, timeout=POLLINATIONS_TIMEOUT_SEC)
+            except requests.RequestException as e:
+                log.warning("Pollinations (%s) request error: %s", model, e)
+                break
+            if resp.status_code == 200:
+                img = _decode(resp.content)
+                if img is not None:
+                    return img
+                log.warning("Pollinations (%s) returned a non-image / tiny response", model)
+                break
+            if resp.status_code == 429 and attempt == 1:
+                retry_after = str((getattr(resp, "headers", None) or {}).get("Retry-After", "10"))
+                wait = min(int(retry_after) if retry_after.isdigit() else 10, 30)
+                log.warning("Pollinations (%s) rate-limited (429) — pausing %ds, then one retry", model, wait)
+                time.sleep(wait)
+                continue
+            statuses.append(resp.status_code)
+            log.warning("Pollinations (%s) HTTP %s", model, resp.status_code)
+            break
+        if 401 in statuses:
+            break                                  # a bad key fails for every model
+    if statuses and all(c in (401, 402) for c in statuses):
+        _pollinations_off_reason = "HTTP 401 (key rejected)" if 401 in statuses else "HTTP 402 (no pollen balance)"
+        log.error("Pollinations unavailable: %s — using Pexels/Pixabay stock photos for the rest of this run. "
+                  "Top up / check the balance at enter.pollinations.ai to get AI-generated scenes.", _pollinations_off_reason)
     return None
 
 

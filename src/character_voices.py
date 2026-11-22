@@ -17,36 +17,29 @@ from src.config import STORY_FEMALE_VOICES, STORY_MALE_VOICES, STORY_NARRATOR_VO
 log = logging.getLogger(__name__)
 
 
-def assign_voices(characters: list[dict]) -> dict[str, str]:
-    """Returns {character_name: edge_tts_voice}. Cycles through each
-    gender's voice pool by order of appearance, so e.g. the 1st and 3rd
-    male characters in a story get different voices from the pool rather
-    than colliding on the same one (collision is only possible once a
-    single story has more same-gender characters than that gender's pool
-    size — 5 voices per gender, and STORY_MAX_CHARACTERS is 5 total, so
-    this cannot happen in practice)."""
-    voice_map: dict[str, str] = {}
-    male_idx = 0
-    female_idx = 0
+def assign_voices(characters: list[dict], existing: dict[str, str] | None = None) -> dict[str, str]:
+    """{character name: Edge TTS voice}. `existing` is the series' voice map: characters already in it
+    KEEP their voice forever (a character must never change voice between parts); new characters get
+    the first voice of their gender's pool that nobody is using yet, so two same-gender characters never
+    share a voice (the pools hold 5 each and STORY_MAX_CHARACTERS keeps casts small)."""
+    voice_map: dict[str, str] = dict(existing or {})
+    used = set(voice_map.values())
     for char in characters:
         name = char.get("name")
-        gender = str(char.get("gender", "")).lower()
-        if not name:
+        if not name or name in voice_map:
             continue
-        if gender == "female":
-            voice_map[name] = STORY_FEMALE_VOICES[female_idx % len(STORY_FEMALE_VOICES)]
-            female_idx += 1
-        else:
-            # Default to the male pool for "male" or any unrecognized value
-            # rather than silently dropping the character's voice assignment.
-            if gender != "male":
-                log.warning(
-                    "Character %r has unrecognized gender %r — defaulting to "
-                    "a male voice. Fix the story's character gender field if "
-                    "this is wrong.", name, char.get("gender"),
-                )
-            voice_map[name] = STORY_MALE_VOICES[male_idx % len(STORY_MALE_VOICES)]
-            male_idx += 1
+        gender = str(char.get("gender", "")).lower()
+        if gender not in ("male", "female"):
+            log.warning(
+                "Character %r has unrecognized gender %r — defaulting to a male voice. Fix the story's "
+                "character gender field if this is wrong.", name, char.get("gender"),
+            )
+            gender = "male"
+        pool = STORY_FEMALE_VOICES if gender == "female" else STORY_MALE_VOICES
+        free = [v for v in pool if v not in used]
+        pick = free[0] if free else pool[len([v for v in used if v in pool]) % len(pool)]
+        voice_map[name] = pick
+        used.add(pick)
     return voice_map
 
 

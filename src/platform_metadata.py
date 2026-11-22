@@ -1,19 +1,22 @@
 """
-Per-platform titles, descriptions, captions and hashtags for one story.
-Each platform gets text written for ITS format and limits — never one blob
-pasted everywhere:
+Per-platform titles, descriptions, captions and hashtags for one EPISODE of a series. Each platform gets
+text written for ITS format and limits — never one blob pasted everywhere:
 
-  YouTube long   Reddit-style title (<=100), description with disclosure +
-                 up to 5 hashtags, tags.
-  YouTube Short  hook-line title + #Shorts, description that links the full story.
-  Facebook long  title + description, <=5 hashtags, NO external link (Facebook
-                 de-ranks posts that send people off-platform).
-  Facebook Reel  hook + soft pointer to the YouTube story, <=5 hashtags.
-  Instagram Reel caption: hook + teaser + "link in bio" pointer + <=8 hashtags
-                 (Instagram captions cannot hold clickable links).
+  YouTube long   "<hook> (Part N) | Scary Story": the hook gets the click, "Part N" tells a browsing viewer
+                 this is an episode, the trailing English search phrase tells YouTube what the video is
+                 (a new channel has no watch history — its TEXT is how it gets matched to searches). The
+                 description's FIRST LINE carries the series, the part and two search phrases (that is
+                 what shows in results), then links to the previous part, the series playlist and a
+                 note on when the next part drops. Tags start with the genre's search phrases.
+  YouTube Short  hook-line title + #Shorts; description links the full episode and the series.
+  Facebook long  title + description, <=5 hashtags, NO external link (Facebook de-ranks posts that send
+                 people off-platform).
+  Facebook Reel  hook + soft pointer to the YouTube episode, <=5 hashtags.
+  Instagram Reel caption: hook + teaser + "link in bio" pointer + <=8 hashtags (captions cannot hold
+                 clickable links).
 
-Everything is English-only: non-ASCII research tags are dropped, and every
-title is stripped of characters YouTube rejects.
+Everything is English-only and every claim is accurate: non-ASCII or off-niche research tags are dropped,
+titles are stripped of characters YouTube rejects, and no phrase calls the videos "animated" or "true".
 """
 import re
 
@@ -24,6 +27,8 @@ from src.config import (
     IG_MAX_HASHTAGS,
     STORY_CHANNEL_HASHTAGS,
     STORY_GENRE_HASHTAGS,
+    STORY_SEARCH_KEYWORDS,
+    STORY_TITLE_KEYWORD,
     YT_MAX_DESC_HASHTAGS,
     YT_TITLE_LIMIT,
 )
@@ -34,13 +39,28 @@ def _ascii(text: str) -> bool:
 
 
 def clean_title(text: str, limit: int = YT_TITLE_LIMIT) -> str:
-    """No angle brackets (YouTube rejects them), single spaces, cut at a word
-    boundary — never mid-word — to fit `limit`."""
+    """No angle brackets (YouTube rejects them), single spaces, cut at a word boundary — never mid-word —
+    to fit `limit`."""
     text = re.sub(r"[<>]", "", re.sub(r"\s+", " ", str(text or ""))).strip()
     if len(text) <= limit:
         return text
     cut = text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-–—")
     return cut or text[:limit]
+
+
+# A research tag is only reused if it is about THIS niche (a real run's research surfaced "movie explained
+# in tamil"; it must never reach the channel's hashtags).
+_NICHE_WORDS = (
+    "horror", "scary", "creepy", "ghost", "haunted", "paranormal", "crime", "murder", "killer",
+    "detective", "thriller", "suspense", "mystery", "story", "stories", "narration", "fiction",
+    "nightmare", "unsolved", "investigation", "darky", "spooky", "twist",
+)
+_OTHER_LANGUAGES = ("tamil", "hindi", "telugu", "malayalam", "kannada", "urdu", "bangla", "dubbed", "movie", "explained", "review", "trailer")
+
+
+def _relevant(tag: str) -> bool:
+    t = str(tag).lower()
+    return any(w in t for w in _NICHE_WORDS) and not any(w in t for w in _OTHER_LANGUAGES)
 
 
 def _tagify(phrase: str) -> str | None:
@@ -52,11 +72,13 @@ def _tagify(phrase: str) -> str | None:
 
 
 def build_hashtags(story: dict, research: dict | None, limit: int, lead: tuple = ()) -> list[str]:
-    """Priority: caller's lead tags, channel tag, genre tags, then real research
-    tags, then the remaining channel tags. Case-insensitive de-dupe, capped."""
+    """Priority: caller's lead tags, channel tag, genre tags, then real research tags, then the remaining
+    channel tags. Case-insensitive de-dupe, capped."""
     candidates = list(lead) + [STORY_CHANNEL_HASHTAGS[0]]
     candidates += list(STORY_GENRE_HASHTAGS.get(story.get("genre", ""), ()))
-    for t in ((research or {}).get("suggested_tags") or [])[:10]:
+    for t in ((research or {}).get("suggested_tags") or [])[:20]:
+        if not _relevant(t):
+            continue
         tag = _tagify(t)
         if tag:
             candidates.append(tag)
@@ -73,12 +95,12 @@ def build_hashtags(story: dict, research: dict | None, limit: int, lead: tuple =
 
 
 def build_tags(story: dict, research: dict | None, budget: int = 450) -> list[str]:
-    """YouTube search tags (separate from hashtags): the story's own tags +
-    search keywords + real research tags, ASCII only, within YouTube's ~500
-    character total."""
-    raw = [CHANNEL_NAME.lower(), f"{story.get('genre', '')} story", "story narration", "scary stories"]
+    """YouTube search tags: the genre's SEARCH PHRASES first (highest weight), then the story's own tags,
+    then niche-relevant research tags — ASCII only, within YouTube's ~500 character total."""
+    genre = story.get("genre", "")
+    raw = [CHANNEL_NAME.lower()] + list(STORY_SEARCH_KEYWORDS.get(genre, ())) + [f"{genre} story", "story narration"]
     raw += list(story.get("tags") or []) + list(story.get("search_keywords") or [])
-    raw += list(((research or {}).get("suggested_tags") or [])[:10])
+    raw += [t for t in ((research or {}).get("suggested_tags") or [])[:20] if _relevant(t)]
     tags, seen, used = [], set(), 0
     for t in raw:
         t = re.sub(r"[<>#]", "", str(t)).strip().lower()
@@ -105,26 +127,65 @@ def _first_para(text: str, limit: int = 600) -> str:
     return re.sub(r"[<>]", "", str(text or "").strip())[:limit].strip()
 
 
-def build_long_posts(story: dict, research: dict | None) -> dict:
-    title = clean_title(story.get("title_long") or story.get("title") or "A story from Blackwood Pines")
+def _part_tag(part_no: int | None, mode: str | None) -> str:
+    if not part_no:
+        return ""
+    return "(Final Part)" if mode == "finale" else f"(Part {part_no})"
+
+
+def episode_title(story: dict, part_no: int | None = None, mode: str | None = None) -> str:
+    """"<hook> (Part N) | Scary Story" within 100 characters. When it does not fit, the search phrase is
+    dropped first, then the hook is trimmed at a word boundary — the part tag is never cut."""
+    hook = clean_title(story.get("title_long") or story.get("title") or "A story from Blackwood Pines", 90)
+    tag = _part_tag(part_no, mode)
+    kw = STORY_TITLE_KEYWORD.get(story.get("genre", ""), "")
+    for suffix in (f" | {kw}" if kw else "", ""):
+        title = " ".join(x for x in (hook, tag) if x) + suffix
+        if len(title) <= YT_TITLE_LIMIT:
+            return title
+    room = YT_TITLE_LIMIT - len(tag) - 1
+    return " ".join(x for x in (clean_title(hook, max(room, 10)), tag) if x)
+
+
+def _keyword_line(story: dict, n: int = 2) -> str:
+    return " | ".join(k.title() for k in STORY_SEARCH_KEYWORDS.get(story.get("genre", ""), ())[:n])
+
+
+def build_long_posts(story: dict, research: dict | None, *, series: dict | None = None,
+                     part_no: int | None = None, mode: str | None = None, prev_url: str | None = None,
+                     playlist_url: str | None = None, next_label: str = "") -> dict:
+    title = episode_title(story, part_no if series else None, mode)
     body = _first_para(story.get("description") or story.get("premise") or story.get("hook"))
-    cta = f"Subscribe to {CHANNEL_NAME} for a new story every 2 days."
+    cta = f"Subscribe to {CHANNEL_NAME} — new parts every week."
     yt_tags = build_hashtags(story, research, YT_MAX_DESC_HASHTAGS)
     fb_tags = build_hashtags(story, research, FB_MAX_HASHTAGS)
+
+    lines = []
+    if series:
+        label = "Final Part" if mode == "finale" else f"Part {part_no}"
+        lines.append(f"{series['title']} — {label} | {_keyword_line(story)}")
+    elif _keyword_line(story):
+        lines.append(_keyword_line(story))
+    lines += ["", body, ""]
+    if series:
+        if prev_url:
+            lines.append(f"▶ Previous part: {prev_url}")
+        if playlist_url:
+            lines.append(f"▶ The whole series, in order: {playlist_url}")
+        if mode != "finale" and next_label:
+            lines.append(f"▶ Next: Part {part_no + 1} {next_label}")
+        lines.append("")
+    lines += [cta, "", _disclosure(story), "", " ".join(yt_tags)]
     return {
-        "youtube": {
-            "title": title,
-            "description": f"{body}\n\n{cta}\n\n{_disclosure(story)}\n\n{' '.join(yt_tags)}",
-            "tags": build_tags(story, research),
-        },
-        "facebook": {
-            "title": title,
-            "description": f"{body}\n\n{cta}\n\n{' '.join(fb_tags)}",
-        },
+        "youtube": {"title": title, "description": "\n".join(lines).replace("\n\n\n", "\n\n").strip(),
+                    "tags": build_tags(story, research)},
+        "facebook": {"title": title, "description": f"{body}\n\n{cta}\n\n{' '.join(fb_tags)}"},
     }
 
 
-def build_short_posts(story: dict, research: dict | None, short: dict, long_video_id: str | None) -> dict:
+def build_short_posts(story: dict, research: dict | None, short: dict, long_video_id: str | None, *,
+                      series: dict | None = None, part_no: int | None = None, mode: str | None = None,
+                      playlist_url: str | None = None) -> dict:
     hook = re.sub(r"[<>]", "", str(short.get("hook") or story.get("hook") or story.get("title") or "")).strip()
     hook = hook or "A story from Blackwood Pines"
     link = f"https://youtu.be/{long_video_id}" if long_video_id else None
@@ -132,10 +193,13 @@ def build_short_posts(story: dict, research: dict | None, short: dict, long_vide
     fb_tags = build_hashtags(story, research, FB_MAX_HASHTAGS)
     ig_tags = build_hashtags(story, research, IG_MAX_HASHTAGS)
     title = clean_title(hook, YT_TITLE_LIMIT - len(" #Shorts")) + " #Shorts"
-    full = f"Full story: {link}\n\n" if link else ""
+    which = (f"{series['title']} — " if series else "") + ("Final Part" if mode == "finale" else f"Part {part_no}" if part_no else "")
+    which = which.rstrip(" —")
+    full = f"▶ Full story{f' ({which})' if which else ''}: {link}\n" if link else ""
+    pl = f"▶ The whole series, in order: {playlist_url}\n" if playlist_url else ""
     yt_tag_list = build_tags(story, research)
     caption = (
-        f"{hook}\n\nThe full story is on YouTube — search \"{CHANNEL_NAME}\" (link in bio).\n\n"
+        f"{hook}\n\nThe full story{f' — {which}' if which else ''} is on YouTube: search \"{CHANNEL_NAME}\" (link in bio).\n\n"
         f"{_disclosure(story, short=True)}\n\n{' '.join(ig_tags)}"
     )
     if len(caption) > IG_CAPTION_LIMIT:
@@ -143,12 +207,13 @@ def build_short_posts(story: dict, research: dict | None, short: dict, long_vide
     return {
         "youtube": {
             "title": title,
-            "description": f"{hook}\n\n{full}Subscribe to {CHANNEL_NAME} for a new story every 2 days.\n\n"
+            "description": f"{hook}\n\n{full}{pl}Tap the related video below to watch the full story.\n"
+                           f"Subscribe to {CHANNEL_NAME} — new parts every week.\n\n"
                            f"{_disclosure(story, short=True)}\n\n{' '.join(yt_tags)}",
             "tags": yt_tag_list + ["shorts"] if "shorts" not in yt_tag_list else yt_tag_list,
         },
         "facebook": {
-            "description": f"{hook}\n\nFull story on YouTube: {CHANNEL_NAME}\n\n{' '.join(fb_tags)}",
+            "description": f"{hook}\n\nFull story on YouTube: {CHANNEL_NAME}{f' — {which}' if which else ''}\n\n{' '.join(fb_tags)}",
         },
         "instagram": {"caption": caption},
     }

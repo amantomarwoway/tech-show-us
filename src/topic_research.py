@@ -43,6 +43,28 @@ _TITLE_STOPWORDS = {
 }
 
 
+_NON_ENGLISH_WORDS = (
+    "tamil", "hindi", "telugu", "malayalam", "kannada", "urdu", "bangla", "bengali", "punjabi",
+    "marathi", "gujarati", "bhojpuri", "dubbed", "dubbing", "subtitles", "espanol", "español",
+    "portugues", "português", "russian", "arabic", "indonesia", "turkce", "türkçe",
+)
+
+
+def _is_english(snippet: dict) -> bool:
+    """A real run's research returned Tamil movie-explainer videos for a
+    'suspense story' query. Keep only videos that are plausibly English: declared
+    language (when present) must be English, the title/tags must not name another
+    language, and the title must be mostly ASCII letters."""
+    lang = str(snippet.get("defaultAudioLanguage") or snippet.get("defaultLanguage") or "").lower()
+    if lang and not lang.startswith("en"):
+        return False
+    text = " ".join([snippet.get("title", "")] + list(snippet.get("tags") or [])).lower()
+    if any(w in text for w in _NON_ENGLISH_WORDS):
+        return False
+    letters = [c for c in snippet.get("title", "") if c.isalpha()]
+    return not letters or sum(1 for c in letters if ord(c) < 128) / len(letters) >= 0.85
+
+
 def search_niche_videos(niche: str, max_results: int = 25, days_back: int = 30) -> list[dict]:
     """Real, recent videos matching `niche`, ordered by view count (the
     closest `search.list` gets to "what's doing well"). Returns
@@ -62,6 +84,8 @@ def search_niche_videos(niche: str, max_results: int = 25, days_back: int = 30) 
         type="video",
         order="viewCount",
         publishedAfter=published_after,
+        relevanceLanguage="en",           # prefer English results
+        regionCode="US",
         maxResults=min(max_results, 50),  # YouTube API's own per-call cap
     ).execute()
 
@@ -82,6 +106,8 @@ def search_niche_videos(niche: str, max_results: int = 25, days_back: int = 30) 
     for item in videos_resp.get("items", []):
         snippet = item.get("snippet", {})
         stats = item.get("statistics", {})
+        if not _is_english(snippet):
+            continue
         results.append({
             "video_id": item.get("id", ""),
             "title": snippet.get("title", ""),

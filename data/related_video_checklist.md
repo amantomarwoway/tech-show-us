@@ -6,3 +6,5 @@ YouTube Studio -> Content -> Shorts -> open the Short -> Edit -> Related video -
 - [ ] https://youtu.be/yJGW2pL7irI -> https://youtu.be/ChsZV7AIy3Q (The Blackwood Tapes, Part 1)
 - [ ] https://youtu.be/1B9HF7Vuhzo -> https://youtu.be/ChsZV7AIy3Q (The Blackwood Tapes, Part 1)
 - [ ] https://youtu.be/05P-DFCuYQU -> https://youtu.be/ChsZV7AIy3Q (The Blackwood Tapes, Part 1)
+- [ ] https://youtu.be/E7Ncs46vYM8 -> https://youtu.be/85jqXziIqY0 (The Echo Tapes, Part 1)
+- [ ] https://youtu.be/jK-OUAUJVEg -> https://youtu.be/85jqXziIqY0 (The Echo Tapes, Part 1)
